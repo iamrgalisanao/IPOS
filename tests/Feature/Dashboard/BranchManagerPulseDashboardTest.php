@@ -12,6 +12,7 @@ use App\Models\PaymentMethod;
 use App\Services\RbacSeeder;
 use App\Services\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -29,6 +30,8 @@ class BranchManagerPulseDashboardTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        Carbon::setTestNow(Carbon::parse('2026-05-12 14:00:00', 'Asia/Manila'));
 
         app(TenantContext::class)->clear();
         $this->tenant = Tenant::factory()->create(['status' => 'active']);
@@ -50,6 +53,13 @@ class BranchManagerPulseDashboardTest extends TestCase
         $this->multiManager->assignRole(Role::where('name', 'Branch Manager')->firstOrFail());
         $this->multiManager->assignToBranch($this->branchA);
         $this->multiManager->assignToBranch($this->branchB);
+    }
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+
+        parent::tearDown();
     }
 
     public function test_branch_manager_defaults_to_assigned_branch_dashboard(): void

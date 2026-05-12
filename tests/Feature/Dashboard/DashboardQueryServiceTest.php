@@ -40,6 +40,8 @@ class DashboardQueryServiceTest extends TestCase
     {
         parent::setUp();
 
+        Carbon::setTestNow(Carbon::parse('2026-05-12 14:00:00', 'Asia/Manila'));
+
         app(TenantContext::class)->clear();
         $this->tenant = Tenant::factory()->create(['status' => 'active']);
         app(RbacSeeder::class)->seedForTenant($this->tenant);
@@ -66,6 +68,13 @@ class DashboardQueryServiceTest extends TestCase
         $this->cash = PaymentMethod::factory()->create(['tenant_id' => $this->tenant->id, 'code' => 'CASH', 'name' => 'Cash', 'status' => 'active']);
 
         $this->dashboardService = app(DashboardQueryService::class);
+    }
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+
+        parent::tearDown();
     }
 
     public function test_owner_can_view_tenant_wide_pulse(): void
