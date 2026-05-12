@@ -3,8 +3,10 @@
 namespace Tests\Feature\Observability;
 
 use App\Models\Branch;
+use App\Models\SupportAuditEvent;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Services\Support\SupportPayloadMasker;
 use App\Services\SupportAccessSessionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -34,6 +36,8 @@ class SupportObservabilityTest extends TestCase
 
         $this->actingAs($supportUser)
             ->withHeader('X-Correlation-ID', 'support-correlation-123')
+            ->withSession(['support_secret_session' => 'support-session-secret'])
+            ->withCookie('support_sensitive_cookie', 'support-cookie-secret')
             ->getJson(route('support.assisted.probe', $session))
             ->assertOk();
 
@@ -50,6 +54,11 @@ class SupportObservabilityTest extends TestCase
                     || array_key_exists('Authorization', $context)
                     || array_key_exists('authorization', $context)
                     || array_key_exists('headers', $context)
+                    || array_key_exists('cookies', $context)
+                    || array_key_exists('session', $context)
+                    || array_key_exists('query', $context)
+                    || array_key_exists('request', $context)
+                    || array_key_exists('raw_request_body', $context)
                     || array_key_exists('provider_payload', $context)
                     || array_key_exists('provider_token', $context)) {
                     return false;
@@ -64,6 +73,19 @@ class SupportObservabilityTest extends TestCase
                 return true;
             })
         );
+
+        $routeEvent = SupportAuditEvent::where('event_type', 'support.route.accessed')->latest()->firstOrFail();
+
+        $this->assertSame('support.assisted.probe', $routeEvent->route_name);
+        $this->assertSame($session->id, $routeEvent->support_session_id);
+        $this->assertSame(SupportPayloadMasker::REDACTED, $routeEvent->metadata['response']['access_token']);
+        $this->assertSame(SupportPayloadMasker::REDACTED_PAYLOAD, $routeEvent->metadata['response']['metadata']['provider_payload']);
+        $this->assertSame($tenant->id, $routeEvent->metadata['response']['tenant_id']);
+
+        $auditSerialized = json_encode($routeEvent->metadata, JSON_THROW_ON_ERROR);
+
+        $this->assertStringNotContainsString('support-session-secret', $auditSerialized);
+        $this->assertStringNotContainsString('support-cookie-secret', $auditSerialized);
 
         $this->assertSame(0, \DB::table('accounting_outbox')->count());
         Http::assertNothingSent();
@@ -103,6 +125,11 @@ class SupportObservabilityTest extends TestCase
                     || array_key_exists('Authorization', $context)
                     || array_key_exists('authorization', $context)
                     || array_key_exists('headers', $context)
+                    || array_key_exists('cookies', $context)
+                    || array_key_exists('session', $context)
+                    || array_key_exists('query', $context)
+                    || array_key_exists('request', $context)
+                    || array_key_exists('raw_request_body', $context)
                     || array_key_exists('provider_payload', $context)) {
                     return false;
                 }

@@ -3,9 +3,11 @@
 namespace App\Services\Accounting;
 
 use App\Models\AccountingOutbox;
+use App\Services\Observability\RequestCorrelation;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 class QuickBooksSyncService
@@ -17,14 +19,35 @@ class QuickBooksSyncService
 
     public function sync(AccountingOutbox $record): array
     {
-        $connection = $this->connectionService->assertConnectedForTenant();
         $command = $this->payloadBuilder->build($record);
 
-        return match ($command['operation']) {
-            'create' => $this->createEntity($connection->realm_id, $command),
-            'void' => $this->voidEntity($connection->realm_id, $command),
-            default => throw new RuntimeException("Unsupported QuickBooks operation: {$command['operation']}"),
-        };
+        try {
+            $connection = $this->connectionService->assertConnectedForTenant();
+        } catch (RuntimeException $exception) {
+            Log::warning('accounting.quickbooks.connection.failed', $this->failureContext($record, $command, [
+                'error_category' => 'auth',
+                'error_detail' => $this->connectionService->sanitizeCallbackError($exception->getMessage()),
+            ]));
+
+            throw $exception;
+        }
+
+        try {
+            return match ($command['operation']) {
+                'create' => $this->createEntity($connection->realm_id, $command),
+                'void' => $this->voidEntity($connection->realm_id, $command),
+                default => throw new RuntimeException("Unsupported QuickBooks operation: {$command['operation']}"),
+            };
+        } catch (RuntimeException $exception) {
+            if ($this->shouldLogSyncFailure($exception->getMessage())) {
+                Log::warning('accounting.quickbooks.sync.failed', $this->failureContext($record, $command, [
+                    'error_category' => $this->classifyProviderFailure($exception->getMessage()),
+                    'error_detail' => $this->sanitizeErrorDetail($exception->getMessage()),
+                ]));
+            }
+
+            throw $exception;
+        }
     }
 
     protected function createEntity(string $realmId, array $command): array
@@ -178,9 +201,56 @@ class QuickBooksSyncService
             return 'No provider error detail returned.';
         }
 
+        $text = preg_replace('/Authorization\s*:\s*Bearer\s+[^\s"]+/i', 'Authorization: [redacted]', $text) ?? $text;
+        $text = preg_replace('/Bearer\s+[A-Za-z0-9\-\._~\+\/]+=*/i', '[redacted token]', $text) ?? $text;
         $text = preg_replace('/(access_token|refresh_token|client_secret)\s*=\s*[^\s,;]+/i', '$1=[redacted]', $text) ?? $text;
         $text = preg_replace('/("(?:access_token|refresh_token|client_secret)"\s*:\s*")[^"]+(")/i', '$1[redacted]$2', $text) ?? $text;
+        $text = preg_replace('/provider payload[^\n\r]*/i', '[redacted provider detail]', $text) ?? $text;
 
         return mb_substr($text, 0, 900);
+    }
+
+    protected function failureContext(AccountingOutbox $record, array $command, array $extra = []): array
+    {
+        return array_merge([
+            'correlation_id' => app(RequestCorrelation::class)->current(),
+            'outbox_id' => $record->id,
+            'tenant_id' => $record->tenant_id,
+            'branch_id' => $record->branch_id,
+            'provider' => 'quickbooks',
+            'operation' => $command['operation'] ?? null,
+            'entity' => $command['entity'] ?? null,
+        ], $extra);
+    }
+
+    protected function shouldLogSyncFailure(string $message): bool
+    {
+        return str_contains($message, 'QuickBooks ');
+    }
+
+    protected function classifyProviderFailure(string $message): string
+    {
+        $normalized = strtolower($message);
+
+        return match (true) {
+            str_contains($normalized, '401'),
+            str_contains($normalized, '403'),
+            str_contains($normalized, 'unauthorized'),
+            str_contains($normalized, 'forbidden') => 'auth',
+
+            str_contains($normalized, '429'),
+            str_contains($normalized, 'rate limit') => 'rate_limit',
+
+            str_contains($normalized, '400'),
+            str_contains($normalized, 'validation error') => 'validation',
+
+            str_contains($normalized, '500'),
+            str_contains($normalized, '502'),
+            str_contains($normalized, '503'),
+            str_contains($normalized, '504'),
+            str_contains($normalized, 'provider error') => 'provider',
+
+            default => 'system',
+        };
     }
 }

@@ -116,4 +116,30 @@ class RequestCorrelationTest extends TestCase
                     && ($context['route_name'] ?? null) === 'test.observability.correlation';
             }));
     }
+
+    public function test_log_context_excludes_cookie_session_and_query_values(): void
+    {
+        $response = $this->withSession([
+            'secret_session_key' => 'session-secret-value',
+        ])->withCookie('sensitive_cookie', 'cookie-secret-value')
+            ->withHeader('X-Correlation-ID', 'correlation-without-request-leaks')
+            ->getJson('/test/observability/correlation?debug=raw-secret-query');
+
+        $context = $response->json('log_context');
+
+        $response->assertOk()
+            ->assertJsonPath('log_context.correlation_id', 'correlation-without-request-leaks');
+
+        $this->assertArrayNotHasKey('cookies', $context);
+        $this->assertArrayNotHasKey('session', $context);
+        $this->assertArrayNotHasKey('query', $context);
+        $this->assertArrayNotHasKey('request', $context);
+        $this->assertArrayNotHasKey('raw_request_body', $context);
+
+        $serialized = json_encode($response->json(), JSON_THROW_ON_ERROR);
+
+        $this->assertStringNotContainsString('session-secret-value', $serialized);
+        $this->assertStringNotContainsString('cookie-secret-value', $serialized);
+        $this->assertStringNotContainsString('raw-secret-query', $serialized);
+    }
 }

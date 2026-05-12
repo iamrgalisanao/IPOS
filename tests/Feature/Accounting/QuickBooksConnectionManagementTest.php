@@ -246,7 +246,7 @@ class QuickBooksConnectionManagementTest extends TestCase
         $this->assertStringNotContainsString('super-secret', session('error'));
         $this->assertStringNotContainsString('top-secret', session('error'));
         $this->assertStringNotContainsString('abc123', session('error'));
-        $this->assertStringContainsString('Authorization: Bearer [redacted]', session('error'));
+        $this->assertStringContainsString('Authorization: [redacted]', session('error'));
     }
 
     public function test_oauth_callback_stores_tokens_encrypted_and_without_side_effects(): void

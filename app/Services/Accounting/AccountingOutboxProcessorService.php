@@ -6,7 +6,9 @@ use App\Models\AccountingOutbox;
 use App\Models\AccountingSyncAttempt;
 use App\Models\Branch;
 use App\Services\BranchContext;
+use App\Services\Observability\RequestCorrelation;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 
 class AccountingOutboxProcessorService
 {
@@ -53,6 +55,16 @@ class AccountingOutboxProcessorService
             $this->stateService->markAsFailed($record, $e->getMessage(), $category, $nextAttemptAt);
             $record->refresh();
             $this->recordAttempt($record, 'failed', $startedAt, $category, $e->getMessage());
+
+            Log::warning('accounting.outbox.retry_scheduled', [
+                'correlation_id' => app(RequestCorrelation::class)->current(),
+                'outbox_id' => $record->id,
+                'tenant_id' => $record->tenant_id,
+                'branch_id' => $record->branch_id,
+                'attempt_count' => $record->attempt_count,
+                'error_category' => $category,
+                'next_attempt_at' => $nextAttemptAt->toISOString(),
+            ]);
         } finally {
             $previousBranch
                 ? $this->branchContext->setBranch($previousBranch)

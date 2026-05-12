@@ -1,5 +1,26 @@
 # Story 13.2: Observability and Centralized Logging
 
+Status: Implemented 2026-05-12
+
+Implementation status summary:
+
+- Slice A: Implemented 2026-05-12
+- Slice B: Implemented 2026-05-12
+- Slice C: Implemented 2026-05-12
+- Slice D: Implemented 2026-05-12
+- Slice E: Implemented 2026-05-12
+
+Validated baseline as of 2026-05-13:
+
+- `tests/Feature/Observability/RequestCorrelationTest.php`
+- `tests/Feature/Observability/AccountingOutboxObservabilityTest.php`
+- `tests/Feature/Observability/CheckoutObservabilityTest.php`
+- `tests/Feature/Observability/SupportObservabilityTest.php`
+- `tests/Feature/Observability/AccountingIntegrationFailureObservabilityTest.php`
+- `php artisan test tests/Feature/Observability`
+- full `php artisan test` (`703 passed`, `1 risky` baseline in `Tests\Feature\Shift\ShiftClosingTest`)
+- `npm run build`
+
 ## 1. Goal
 
 Provide enough production telemetry to diagnose checkout uncertainty, accounting sync failures, queue behavior, support-assisted access, and exception paths without relying on ad hoc log tailing.

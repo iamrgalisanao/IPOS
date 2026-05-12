@@ -199,8 +199,8 @@ class QuickBooksConnectionService
 
     public function sanitizeCallbackError(string $message): string
     {
-        $sanitized = preg_replace('/Authorization\s*:\s*Bearer\s+[^\s"]+/i', 'Authorization: Bearer [redacted]', $message);
-        $sanitized = preg_replace('/Bearer\s+[A-Za-z0-9\-\._~\+\/]+=*/i', 'Bearer [redacted]', $sanitized ?? $message);
+        $sanitized = preg_replace('/Authorization\s*:\s*Bearer\s+[^\s"]+/i', 'Authorization: [redacted]', $message);
+        $sanitized = preg_replace('/Bearer\s+[A-Za-z0-9\-\._~\+\/]+=*/i', '[redacted token]', $sanitized ?? $message);
         $sanitized = preg_replace('/(access_token|refresh_token|client_secret|client_id|api[_-]?key|private[_-]?key)\s*[=:]\s*[^\s,;]+/i', '$1=[redacted]', $sanitized ?? $message);
 
         return $sanitized ?? $message;

@@ -69,7 +69,10 @@ class ProcessAccountingOutboxJob implements ShouldQueue
 
             Log::info('accounting.outbox_job.completed', $queueContext);
         } catch (Throwable $exception) {
-            Log::error('accounting.outbox_job.failed', $queueContext);
+            Log::error('accounting.outbox_job.exception', array_merge($queueContext, [
+                'error_category' => 'system',
+                'exception_class' => $exception::class,
+            ]));
 
             throw $exception;
         } finally {
