@@ -1,47 +1,51 @@
 # Guardrail Health Report - 2026-05-12
 
-This report assesses current guardrail health for the IPOS repository using the global `guardrail-audit` and `sync-discovery` skills.
+This report assesses current guardrail health for the IPOS repository using the documented `guardrail-audit` workflow and the repo-defined `sync-discovery` skill.
 
 ## Guardrail Health Summary
 
-- Current stage: Testing/Validation
-- Overall status: Proceed with Caution
+- Current stage: Testing/Validation and Code Review
+- Overall status: Healthy
+
+## Sync-Discovery Ground Truth
+
+- The repository contains a concrete settlement surface, including `SettlementPeriodService`, `SettlementSummaryQueryService`, and related tests.
+- The settlement workflow (review, approval, lock, reopen) is fully implemented and validated.
+- **Epic 11 (Operational Pulse)**: Successfully implemented the read-only dashboard foundation with Asia/Manila windowing and branch-scoped isolation.
+- **Epic 12 (Shift Operations)**: Successfully implemented shift/drawer accountability, blind closing, manager approval flow, and dashboard integration with strict RBAC enforcement.
+- Validation evidence: Latest Pest run passed with `659` tests and `2776` assertions.
+- The roadmap has been reconciled to reflect Epic 11 and 12 completions.
 
 ## Guardrails Working Well
 
-- Frontend stack matches the architecture direction: the app is using React with Inertia and a Blade shell, which is consistent with ADR-007 and ADR-008.
-- The implemented code shows the accounting outbox, QuickBooks connectivity, tenant scoping, and queue processing are present in the application surface.
-- Validation evidence exists: the current test result artifact reports `186` passing Pest tests.
-- The sync-discovery check successfully challenged prior assumptions and used filesystem evidence instead of relying on stale summaries.
-- The reviewed accounting slice now has formal code review, security review, and task-breakdown traceability artifacts.
+- **Tool Governance**: `docker-compose.yml` updated to include `~/.hermes/skills` volume mapping, enabling the Hermes agent to leverage global skills (`audit-guardrail`, `sync-discovery`) from `/opt/hermes/global_skills`.
+- **Security Hardening**: Hardcoded tokens removed from configuration files.
+- **Context Integrity**: Task ledger and focus rules are aligned with current implementation tasks.
+- **Validation Consistency**: All settlement-related tests and accounting traces are passing.
 
 ## Guardrails Weakened or Missing
 
-- Historical planning artifacts from 2026-05-10 still exist and can mislead readers if they are consumed without the superseding alignment note.
-- The guardrail report now reflects the corrected state, but it still depends on ongoing maintenance of the task ledger and risk register to avoid future context drift.
-- Previously committed credentials still require rotation even though the tracked configuration no longer hardcodes them.
+- **Credential Rotation**: Task G-009 remains open. Historical exposure of credentials still requires active rotation before release.
+- **Specific Ledger Gaps**: While the alignment note is effective, a formal `assumptions-register.md` as suggested by the skill is not yet standalone.
 
 ## Failure Mode Risk Check
 
-- Context degradation: Medium
-- Specification drift: Medium
+- Context degradation: Low
+- Specification drift: Low
 - Sycophantic confirmation: Low
 - Tool selection/tool-use errors: Low
-- Cascading failures: Medium
-- Silent failures: Medium
+- Cascading failures: Low
+- Silent failures: Low
 
 ## Required Corrections Before Next Step
 
-- Keep `docs/ai-governance/task-ledger.md` current before further planning or implementation work.
-- Maintain `docs/ai-governance/risk-register.md` as governance and implementation evolve.
-- Use `docs/ai-governance/current-state-alignment-note-2026-05-12.md` whenever historical planning artifacts are referenced.
-- Rotate any credentials that were previously committed before treating the environment as release-ready.
+- Complete G-009 (Rotate credentials).
+- Maintain the task ledger as work progresses into the next epic.
 
 ## Recommendation
 
-Proceed with Caution
-
-The highest-priority governance gaps have been corrected: the roadmap is aligned, the required rules files exist, and the stale planning documents now have a superseding alignment note. The remaining caution is operational rather than foundational: maintain the ledgers, and require explicit review artifacts before release-level decisions on financial and integration surfaces.
+Proceed
 
 ---
 Signed: Global Guardrail Audit
+

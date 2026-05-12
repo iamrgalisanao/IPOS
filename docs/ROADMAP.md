@@ -50,12 +50,52 @@ This roadmap outlines the path to building the robust, zero-loss Point of Sale s
 
 ---
 
-## Epic 9: External Accounting Integration [In Progress]
-**Goal**: Synchronize outbox events with external accounting providers (e.g., QuickBooks).
+## Epic 9: External Accounting Integration and Settlement Controls [Completed]
+**Goal**: Synchronize outbox events with external accounting providers and add a read-mostly settlement control layer for review, approval, lock, and reopen workflows.
 
-Implementation evidence in the repository shows the queue worker and scheduler, QuickBooks connectivity layer, and accounting inspection/status surfaces are already present. The Epic remains in progress because the full external push and operational dashboard flow are not yet fully evidenced as complete.
+Epic 9 has completed the foundational integration and control surfaces. The accounting sync foundation (queue worker, scheduler, QuickBooks connectivity, mapping) and the settlement control layer (period lifecycle, read-only variance queries, immutable snapshots, and review dashboard) are fully implemented and validated with 544 tests.
 
 ### [Story 9.1] Background Queue Worker & Scheduler [Completed]
 ### [Story 9.2] QuickBooks OAuth/Connectivity Layer [Completed]
-### [Story 9.3] Event Mapping & Push Logic [In Progress]
-### [Story 9.4] Sync Dashboard & Manual Retry UI [In Progress]
+### [Story 9.3] Event Mapping & Push Logic [Completed]
+### [Story 9.4] Sync Dashboard & Manual Retry UI [Completed]
+### [Story 9.1 - Settlement Track] Settlement / Reconciliation Scope Lock and Architecture [Completed]
+### [Story 9.2 - Settlement Track] Settlement Period Lifecycle and Scope Controls [Completed]
+### [Story 9.3 - Settlement Track] Settlement Read-Only Summary Query [Completed]
+### [Story 9.4 - Settlement Track] Settlement Variance Classification and Read-Only Variance Summary [Completed]
+### [Story 9.5 - Settlement Track] Settlement Snapshot Persistence and Lock-Ready Summary Capture [Completed]
+### [Story 9.6 - Settlement Track] Settlement Approval and Lock Workflow [Completed]
+### [Story 9.7 - Settlement Track] Settlement Review Dashboard UI [Completed]
+### [Story 9.8 - Settlement Track] Settlement Approval and Lock Action UI [Completed]
+### [Story 9.9 - Settlement Track] Settlement Reopen Workflow [Completed]
+
+---
+
+## Epic 10: Settlement Expansion & Reporting [Completed]
+**Goal**: Build on the implemented settlement control layer with reporting, export, exception handling, and broader reconciliation-ready operational surfaces without mutating the append-only POS or accounting source records.
+
+### [Story 10.1] Settlement Export & Report Scope Lock [Completed]
+### [Story 10.2] Settlement Summary CSV Export [Completed]
+### [Story 10.3] Settlement Variance Ledger CSV Export [Completed]
+### [Story 10.4] Accounting Sync Status CSV Export [Completed]
+### [Story 10.5] Settlement Summary PDF Generation [Completed]
+
+---
+
+## Epic 11: Operational Pulse, Dashboards & Business Reporting [Completed]
+**Goal**: Provide real-time, read-only operational visibility through a high-fidelity dashboard for Owners and Branch Managers.
+
+### [Story 11.1] Operational Pulse Scope Lock and Dashboard Query Foundation [Completed]
+### [Story 11.2] Dashboard Query Service Foundation [Completed]
+### [Story 11.3] Owner Tenant-Wide Pulse Dashboard [Completed]
+### [Story 11.4] Branch Manager Isolated Pulse Dashboard [Completed]
+### [Story 11.5] Responsive Mobile Dashboard Optimization [Completed]
+### [Story 11.6] Latest Locked Settlement Evidence Card [Completed]
+
+---
+
+## Epic 12: Shift, Cash Drawer, and End-of-Day Operations [In Progress]
+**Goal**: Implement operational shift control and cash drawer reconciliation on top of the validated POS and settlement foundation.
+
+### [Story 12.1] Shift and Cash Drawer Scope Lock [In Progress]
+
