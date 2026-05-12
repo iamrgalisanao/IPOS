@@ -39,7 +39,28 @@ export function useTransactionStore() {
         };
     };
 
-    const buildDraftEnvelope = ({ tenantId, branchId, userId, items, totals, cartState, clientRequestUuid }) => {
+    const sanitizePaymentRow = (row) => {
+        return {
+            id: row.id,
+            payment_method_id: row.payment_method_id || '',
+            amount: row.amount || '',
+            amount_tendered: row.amount_tendered || '',
+            reference_number: row.reference_number || ''
+        };
+    };
+
+    const buildDraftEnvelope = ({
+        tenantId,
+        branchId,
+        userId,
+        items,
+        totals,
+        cartState,
+        clientRequestUuid,
+        activeSale,
+        paymentRows,
+        paymentWizardOpen,
+    }) => {
         return {
             schema_version: 1,
             tenant_id: tenantId,
@@ -49,6 +70,14 @@ export function useTransactionStore() {
             cart_state: cartState,
             items: items.map(sanitizeCartItem),
             estimated_totals: totals,
+            active_sale: activeSale
+                ? {
+                    id: activeSale.id,
+                    total: activeSale.total,
+                }
+                : null,
+            payment_rows: (paymentRows || []).map(sanitizePaymentRow),
+            payment_wizard_open: !!paymentWizardOpen,
             updated_at: new Date().toISOString()
         };
     };
@@ -61,7 +90,10 @@ export function useTransactionStore() {
                 items: draft.items || [],
                 totals: draft.totals || {},
                 cartState: draft.cartState || 'draft',
-                clientRequestUuid: draft.clientRequestUuid
+                clientRequestUuid: draft.clientRequestUuid,
+                activeSale: draft.activeSale || null,
+                paymentRows: draft.paymentRows || [],
+                paymentWizardOpen: draft.paymentWizardOpen || false,
             });
             window.localStorage.setItem(key, JSON.stringify(envelope));
         } catch (e) {
@@ -122,6 +154,7 @@ export function useTransactionStore() {
         generateUUID,
         getDraftKey,
         sanitizeCartItem,
+        sanitizePaymentRow,
         buildDraftEnvelope,
         saveDraft,
         loadDraft,

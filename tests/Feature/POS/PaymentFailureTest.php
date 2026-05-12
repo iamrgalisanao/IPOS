@@ -18,7 +18,7 @@ use Tests\TestCase;
 
 class PaymentFailureTest extends TestCase
 {
-    use RefreshDatabase;
+    use RefreshDatabase, \Tests\Traits\InteractsWithShifts;
 
     protected Tenant $tenant;
     protected Branch $branch;
@@ -51,6 +51,11 @@ class PaymentFailureTest extends TestCase
         $permission = Permission::where('name', 'create_sale')->first() 
             ?? Permission::create(['tenant_id' => $this->tenant->id, 'name' => 'create_sale']);
         $role->permissions()->attach($permission);
+
+        $openShiftPermission = Permission::where('name', 'open_shift')->first() 
+            ?? Permission::create(['tenant_id' => $this->tenant->id, 'name' => 'open_shift']);
+        $role->permissions()->attach($openShiftPermission);
+
         $this->user->assignRole($role);
         $this->user->assignToBranch($this->branch);
 
@@ -78,6 +83,8 @@ class PaymentFailureTest extends TestCase
             'reference_required' => true,
             'status' => 'active',
         ]);
+
+        $this->openShiftFor($this->user, $this->branch);
     }
 
     private function postSplit(array $payload): \Illuminate\Testing\TestResponse

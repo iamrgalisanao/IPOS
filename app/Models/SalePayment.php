@@ -17,6 +17,7 @@ class SalePayment extends Model
         'branch_id',
         'sale_id',
         'payment_method_id',
+        'shift_id',
         'payment_type',
         'provider',
         'amount',
@@ -50,6 +51,11 @@ class SalePayment extends Model
     public function paymentMethod()
     {
         return $this->belongsTo(PaymentMethod::class);
+    }
+
+    public function shift()
+    {
+        return $this->belongsTo(Shift::class);
     }
 
     public function creator()

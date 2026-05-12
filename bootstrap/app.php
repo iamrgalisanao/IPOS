@@ -12,14 +12,23 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->web(prepend: [
+            \App\Http\Middleware\AttachRequestCorrelation::class,
+        ]);
+
         $middleware->web(append: [
             \App\Http\Middleware\HandleInertiaRequests::class,
             \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
         ]);
 
+        $middleware->api(prepend: [
+            \App\Http\Middleware\AttachRequestCorrelation::class,
+        ]);
+
         $middleware->alias([
             'tenant' => \App\Http\Middleware\IdentifyTenantContext::class,
             'branch' => \App\Http\Middleware\IdentifyBranchContext::class,
+            'support.assisted' => \App\Http\Middleware\IdentifySupportAssistedContext::class,
             'permission' => \App\Http\Middleware\CheckPermission::class,
         ]);
     })

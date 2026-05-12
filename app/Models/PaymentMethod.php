@@ -37,4 +37,12 @@ class PaymentMethod extends Model
     {
         return $query->where('status', 'active');
     }
+
+    /**
+     * Check if this payment method is Cash.
+     */
+    public function isCash(): bool
+    {
+        return strtolower($this->code) === 'cash';
+    }
 }

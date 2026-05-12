@@ -14,6 +14,8 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->singleton(\App\Services\TenantContext::class);
         $this->app->singleton(\App\Services\BranchContext::class);
+        $this->app->singleton(\App\Services\SupportContext::class);
+        $this->app->singleton(\App\Services\Observability\RequestCorrelation::class);
         $this->app->bind(
             \App\Services\Accounting\Contracts\AccountingMapperInterface::class,
             \App\Services\Accounting\AccountingMappingService::class

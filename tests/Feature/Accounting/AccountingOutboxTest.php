@@ -27,7 +27,7 @@ use Tests\TestCase;
 
 class AccountingOutboxTest extends TestCase
 {
-    use RefreshDatabase;
+    use RefreshDatabase, \Tests\Traits\InteractsWithShifts;
 
     protected Tenant $tenant;
     protected Branch $branch;
@@ -53,7 +53,16 @@ class AccountingOutboxTest extends TestCase
             'tenant_id' => $this->tenant->id,
             'status' => 'active'
         ]);
+        $this->user->assignToBranch($this->branch);
+        
+        (new \App\Services\RbacSeeder())->seedForTenant($this->tenant);
+        app(TenantContext::class)->setTenant($this->tenant);
+        
+        $this->user->assignRole(\App\Models\Role::where('name', 'Cashier')->first());
+
         $this->actingAs($this->user);
+        
+        $this->openShiftFor($this->user, $this->branch);
     }
 
     protected function createPaidSale(float $total = 200): Sale

@@ -5,10 +5,11 @@ import ProductGrid from './Components/ProductGrid';
 import Cart from './Components/Cart';
 import Receipt from './Components/Receipt';
 import SplitPayWizard from './Components/SplitPayWizard';
+import FailureGuardianBanner from './Components/FailureGuardianBanner';
 import { isCashPayment, calculateCashChange } from './helpers/splitPaymentHelper';
-import { ShoppingCart, Search, LayoutGrid, Package, Info, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { ShoppingCart, Package, AlertTriangle } from 'lucide-react';
 import { useTransactionStore } from './hooks/useTransactionStore';
-import { getCheckoutErrorMessage } from './helpers/checkoutFailureHelper';
+import { createUncertainCheckoutError, getCheckoutErrorMessage, getGuardianPresentation, isUncertainCheckoutError } from './helpers/checkoutFailureHelper';
 
 export default function Index({ categories, payment_methods, tenant_id, branch_id, user_id }) {
     const [products, setProducts] = useState([]);
@@ -23,10 +24,11 @@ export default function Index({ categories, payment_methods, tenant_id, branch_i
     const [submissionFailed, setSubmissionFailed] = useState(false);
     const [activeSale, setActiveSale] = useState(null);
     const [showSplitPay, setShowSplitPay] = useState(false);
+    const [paymentRows, setPaymentRows] = useState([]);
     const [lastCashChange, setLastCashChange] = useState(null);
-    
-    // Toast states
-    const [restoredMessage, setRestoredMessage] = useState(null);
+    const [checkoutState, setCheckoutState] = useState('draft');
+    const [guardianBanner, setGuardianBanner] = useState(null);
+    const [isCheckingStatus, setIsCheckingStatus] = useState(false);
     const [errorMessage, setErrorMessage] = useState(null);
 
     const { generateUUID, saveDraft, restoreDraftIfSafe, clearDraft } = useTransactionStore();
@@ -40,6 +42,128 @@ export default function Index({ categories, payment_methods, tenant_id, branch_i
         userId: user_id
     }), [tenant_id, branch_id, user_id]);
 
+    const cartSubtotal = useMemo(() => {
+        return cart.reduce((sum, item) => sum + (Number(item.selling_price || item.unit_price || 0) * item.quantity), 0);
+    }, [cart]);
+
+    const persistDraftState = (cartState, overrides = {}) => {
+        saveDraft(context, {
+            items: overrides.items ?? cart,
+            totals: overrides.totals ?? { subtotal: cartSubtotal },
+            cartState,
+            clientRequestUuid: overrides.clientRequestUuid ?? clientRequestUuid,
+            activeSale: overrides.activeSale ?? activeSale,
+            paymentRows: overrides.paymentRows ?? paymentRows,
+            paymentWizardOpen: overrides.paymentWizardOpen ?? showSplitPay,
+        });
+    };
+
+    const showGuardianBanner = (kind, message, options = {}) => {
+        const presentation = getGuardianPresentation(kind);
+        const banner = {
+            kind,
+            tone: presentation.tone,
+            title: presentation.title,
+            announcement: presentation.announcement,
+            message,
+        };
+
+        setGuardianBanner(banner);
+
+        if (options.timeoutMs) {
+            window.setTimeout(() => {
+                setGuardianBanner((current) => current === banner ? null : current);
+                if (kind === 'restored') {
+                    setCheckoutState((current) => current === 'restored' ? 'draft' : current);
+                }
+            }, options.timeoutMs);
+        }
+    };
+
+    const fetchWithTimeout = async (url, options, timeoutMs = 4000) => {
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+
+        try {
+            return await fetch(url, {
+                ...options,
+                signal: controller.signal,
+            });
+        } catch (error) {
+            if (error?.name === 'AbortError' || error instanceof TypeError) {
+                throw createUncertainCheckoutError('The connection dropped before sale confirmation returned.');
+            }
+
+            throw error;
+        } finally {
+            window.clearTimeout(timer);
+        }
+    };
+
+    const activateConfirmedSale = (saleId, total, message = 'Sale confirmed. Continue to payment.') => {
+        setActiveSale({
+            id: saleId,
+            total: total ?? cartSubtotal.toFixed(4),
+        });
+        setCheckoutState('confirmed');
+        setShowSplitPay(true);
+        setSubmissionFailed(false);
+        setCheckoutError(null);
+        showGuardianBanner('confirmed', message, { timeoutMs: 4000 });
+    };
+
+    const checkCheckoutStatus = async (uuid = clientRequestUuid) => {
+        if (!uuid) return;
+
+        setIsCheckingStatus(true);
+        setCheckoutState('checking');
+        showGuardianBanner('checking', 'We are verifying whether the sale was confirmed by the backend.');
+
+        try {
+            const response = await fetch('/pos/checkout/status', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-Tenant-ID': tenant_id,
+                    'X-Branch-ID': branch_id,
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+                },
+                body: JSON.stringify({ client_request_uuid: uuid })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || 'Checkout status could not be verified.');
+            }
+
+            if (data.status === 'confirmed') {
+                activateConfirmedSale(data.sale_id, data.server_totals?.total, 'Sale confirmed. Continue to payment.');
+                return;
+            }
+
+            if (data.status === 'retry_available' || data.status === 'not_found') {
+                setCheckoutState('retry_available');
+                showGuardianBanner('retry_available', 'No confirmed sale was found. Your cart is safe to retry with the same request ID.');
+                persistDraftState('retry_available', {
+                    clientRequestUuid: uuid,
+                    activeSale: null,
+                    paymentWizardOpen: false,
+                });
+                return;
+            }
+
+            setCheckoutState('uncertain');
+            showGuardianBanner('uncertain', 'The sale status is still uncertain. Please check again before retrying.');
+        } catch (error) {
+            setCheckoutState('uncertain');
+            showGuardianBanner('uncertain', 'We could not verify the sale yet. Keep the cart open and try checking again.');
+        } finally {
+            setIsCheckingStatus(false);
+        }
+    };
+
     // Initial load and draft restoration
     useEffect(() => {
         const result = restoreDraftIfSafe(context);
@@ -51,8 +175,35 @@ export default function Index({ categories, payment_methods, tenant_id, branch_i
             }));
             setCart(patchedItems);
             setClientRequestUuid(result.draft.client_request_uuid);
-            setRestoredMessage('Cart Restored - Your draft cart was restored.');
-            setTimeout(() => setRestoredMessage(null), 4000);
+            setPaymentRows(result.draft.payment_rows || []);
+
+            const restoredState = result.draft.cart_state || 'draft';
+            const restoredActiveSale = result.draft.active_sale || null;
+            const paymentWizardOpen = !!result.draft.payment_wizard_open && !!restoredActiveSale;
+
+            if (paymentWizardOpen) {
+                setActiveSale(restoredActiveSale);
+                setShowSplitPay(true);
+                setCheckoutState('confirmed');
+                showGuardianBanner('restored', 'Payment draft restored. Continue where you left off.', { timeoutMs: 4000 });
+                return;
+            }
+
+            if (restoredState === 'checking') {
+                setCheckoutState('uncertain');
+                showGuardianBanner('restored', 'Previous checkout restored. Verifying backend truth now.', { timeoutMs: 4000 });
+                checkCheckoutStatus(result.draft.client_request_uuid);
+                return;
+            }
+
+            if (restoredState === 'retry_available') {
+                setCheckoutState('retry_available');
+                showGuardianBanner('restored', 'Cart restored. This sale is safe to retry.', { timeoutMs: 4000 });
+                return;
+            }
+
+            setCheckoutState('restored');
+            showGuardianBanner('restored', 'Your draft cart was restored.', { timeoutMs: 4000 });
         } else {
             // New draft gets a new UUID
             setClientRequestUuid(generateUUID());
@@ -70,18 +221,23 @@ export default function Index({ categories, payment_methods, tenant_id, branch_i
         }
     }, [context]); // Run once when context is stable
 
-    // Save cart state whenever it changes (only when UUID is initialized and NOT submitting)
+    // Persist draft, recovery, and payment-wizard metadata whenever local state changes.
     useEffect(() => {
-        if (!clientRequestUuid || isSubmitting) return;
-        
-        const subtotal = cart.reduce((sum, item) => sum + (Number(item.selling_price || item.unit_price || 0) * item.quantity), 0);
-        saveDraft(context, {
-            items: cart,
-            totals: { subtotal },
-            cartState: 'draft',
-            clientRequestUuid: clientRequestUuid
-        });
-    }, [cart, context, clientRequestUuid, isSubmitting]);
+        if (!clientRequestUuid) return;
+
+        if (cart.length === 0 && !showSplitPay && !activeSale) {
+            clearDraft(context);
+            return;
+        }
+
+        const persistedCartState = showSplitPay && activeSale
+            ? 'payment_pending'
+            : checkoutState === 'restored' || checkoutState === 'confirmed' || checkoutState === 'failed'
+                ? 'draft'
+                : checkoutState;
+
+        persistDraftState(persistedCartState);
+    }, [cart, cartSubtotal, context, clientRequestUuid, showSplitPay, activeSale, paymentRows, checkoutState]);
 
     // Fetch products based on search and category
     const fetchProducts = async (q = '', catId = null) => {
@@ -137,16 +293,29 @@ export default function Index({ categories, payment_methods, tenant_id, branch_i
 
     const clearCartState = () => {
         setCart([]);
+        setCheckoutState('draft');
+        setGuardianBanner(null);
+        setCheckoutError(null);
+        setSubmissionFailed(false);
+        setActiveSale(null);
+        setShowSplitPay(false);
+        setPaymentRows([]);
         clearDraft(context);
         setClientRequestUuid(generateUUID());
     };
 
+    const handleRetryCheckout = async () => {
+        setGuardianBanner(null);
+        await handleFinalTap();
+    };
+
     const handleFinalTap = async () => {
-        if (cart.length === 0 || isSubmitting) return;
+        if (cart.length === 0 || isSubmitting || isCheckingStatus) return;
 
         setIsSubmitting(true);
         setCheckoutError(null);
         setSubmissionFailed(false);
+        setGuardianBanner(null);
 
         try {
             const payload = {
@@ -172,58 +341,63 @@ export default function Index({ categories, payment_methods, tenant_id, branch_i
 
             if (!validateRes.ok) {
                 const errData = await validateRes.json();
-                throw new Error(getCheckoutErrorMessage(validateRes.status, errData));
-            }
-
-            // 2. Create Sale
-            const createSaleRes = await fetch('/pos/checkout/create-sale', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-Tenant-ID': tenant_id,
-                    'X-Branch-ID': branch_id,
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
-                },
-                body: JSON.stringify(payload)
-            });
-
-            const saleData = await createSaleRes.json();
-            if (!createSaleRes.ok || !(saleData.status === 'created' || saleData.status === 'duplicate_seen')) {
-                throw new Error(getCheckoutErrorMessage(createSaleRes.status, saleData));
-            }
-
-            // 3. Fetch Receipt
-            const receiptRes = await fetch(`/pos/sales/${saleData.sale_id}/receipt`, {
-                headers: {
-                    'Accept': 'application/json',
-                    'X-Tenant-ID': tenant_id,
-                    'X-Branch-ID': branch_id
-                }
-            });
-            if (!receiptRes.ok) {
-                // If sale was created but receipt fetch fails, we still consider it a success for the sale
-                // but we should warn the user.
-                console.error('Sale created but receipt could not be loaded.');
-                clearCartState();
-                setIsSubmitting(false);
-                setErrorMessage('Sale created but receipt could not be loaded.');
-                setTimeout(() => setErrorMessage(null), 5000);
+                const message = getCheckoutErrorMessage(validateRes.status, errData);
+                setCheckoutState('failed');
+                setSubmissionFailed(true);
+                setCheckoutError(message);
+                showGuardianBanner('failed', message);
                 return;
             }
 
-            const receiptJson = await receiptRes.json();
-            
-            // Success Flow
-            setActiveSale({
-                id: saleData.sale_id,
-                total: saleData.server_totals.total
+            persistDraftState('checking', {
+                activeSale: null,
+                paymentWizardOpen: false,
             });
-            setShowSplitPay(true);
-            // clearCartState() will happen after payment or when closing the flow
+            setCheckoutState('checking');
+            showGuardianBanner('checking', 'Completing sale and waiting for backend confirmation.');
+
+            // 2. Create Sale
+            let createSaleRes;
+
+            try {
+                createSaleRes = await fetchWithTimeout('/pos/checkout/create-sale', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-Tenant-ID': tenant_id,
+                        'X-Branch-ID': branch_id,
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+                    },
+                    body: JSON.stringify(payload)
+                });
+            } catch (error) {
+                if (isUncertainCheckoutError(error)) {
+                    setCheckoutState('uncertain');
+                    showGuardianBanner('uncertain', 'Connection was interrupted before sale confirmation returned. Check status before retrying.');
+                    return;
+                }
+
+                throw error;
+            }
+
+            const saleData = await createSaleRes.json();
+            if (!createSaleRes.ok || !(saleData.status === 'created' || saleData.status === 'duplicate_seen')) {
+                const message = getCheckoutErrorMessage(createSaleRes.status, saleData);
+                setCheckoutState('failed');
+                setSubmissionFailed(true);
+                setCheckoutError(message);
+                showGuardianBanner('failed', message);
+                return;
+            }
+
+            activateConfirmedSale(saleData.sale_id, saleData.server_totals?.total);
         } catch (err) {
+            setCheckoutState('failed');
             setSubmissionFailed(true);
-            setCheckoutError(err.message || 'Checkout failed. Please try again.');
+            const message = err.message || 'Checkout failed. Please try again.';
+            setCheckoutError(message);
+            showGuardianBanner('failed', message);
         } finally {
             setIsSubmitting(false);
         }
@@ -233,7 +407,9 @@ export default function Index({ categories, payment_methods, tenant_id, branch_i
         setReceiptData(null);
         setActiveSale(null);
         setShowSplitPay(false);
+        setPaymentRows([]);
         setLastCashChange(null);
+        setGuardianBanner(null);
     };
 
     const handlePaymentRecorded = async (paymentResponse) => {
@@ -271,10 +447,12 @@ export default function Index({ categories, payment_methods, tenant_id, branch_i
                 setReceiptData(receiptJson);
             }
             setShowSplitPay(false);
+            setPaymentRows([]);
             clearCartState();
         } catch (err) {
             console.error('Failed to load final receipt:', err);
             setShowSplitPay(false);
+            setPaymentRows([]);
             clearCartState();
         }
     };
@@ -282,12 +460,15 @@ export default function Index({ categories, payment_methods, tenant_id, branch_i
     return (
         <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col md:flex-row overflow-hidden relative">
             {/* Non-blocking Toasts */}
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 pointer-events-none">
-                {restoredMessage && (
-                    <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 backdrop-blur-md animate-in fade-in slide-in-from-top-4">
-                        <Info className="w-5 h-5" />
-                        <span className="font-medium text-sm">{restoredMessage}</span>
-                    </div>
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex w-[min(90vw,34rem)] flex-col gap-2 pointer-events-none">
+                {guardianBanner && (
+                    <FailureGuardianBanner
+                        kind={guardianBanner.kind}
+                        tone={guardianBanner.tone}
+                        title={guardianBanner.title}
+                        message={guardianBanner.message}
+                        announcement={guardianBanner.announcement}
+                    />
                 )}
                 {errorMessage && (
                     <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 backdrop-blur-md animate-in fade-in slide-in-from-top-4">
@@ -394,6 +575,10 @@ export default function Index({ categories, payment_methods, tenant_id, branch_i
                     isSubmitting={isSubmitting}
                     checkoutError={checkoutError}
                     submissionFailed={submissionFailed}
+                    checkoutState={checkoutState}
+                    isCheckingStatus={isCheckingStatus}
+                    onCheckStatus={checkCheckoutStatus}
+                    onRetryCheckout={handleRetryCheckout}
                     onClose={() => setMobileCartOpen(false)}
                 />
             </aside>
@@ -413,8 +598,11 @@ export default function Index({ categories, payment_methods, tenant_id, branch_i
                     paymentMethods={payment_methods}
                     tenantId={tenant_id}
                     branchId={branch_id}
+                    initialRows={paymentRows}
+                    onRowsChange={setPaymentRows}
                     onClose={() => {
                         setShowSplitPay(false);
+                        setPaymentRows([]);
                         // Optional: Clear cart anyway since sale was created? 
                         // Story 4.8 says draft clearing happens after backend sale creation.
                         clearCartState();

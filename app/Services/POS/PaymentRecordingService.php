@@ -17,7 +17,8 @@ class PaymentRecordingService
     public function __construct(
         protected AuditLogger $auditLogger,
         protected InventoryService $inventoryService,
-        protected \App\Services\Accounting\AccountingOutboxService $outboxService
+        protected \App\Services\Accounting\AccountingOutboxService $outboxService,
+        protected \App\Services\Shift\ShiftService $shiftService
     ) {}
 
     /**
@@ -59,6 +60,10 @@ class PaymentRecordingService
                         'sale' => ['The specified sale does not exist or you do not have access to it.'],
                     ]);
                 }
+
+                // NEW: Active Shift Guard
+                // This ensures the cashier has an open shift in the branch where the sale is being processed.
+                $shift = $this->shiftService->requireActiveShift($user, $sale->branch);
 
                 // 2. State Guard: Reject if already paid
                 if ($sale->status === 'paid') {
@@ -114,6 +119,7 @@ class PaymentRecordingService
                         'tenant_id' => $sale->tenant_id,
                         'branch_id' => $sale->branch_id,
                         'sale_id' => $sale->id,
+                        'shift_id' => $shift->id, // ATTACH SHIFT ID
                         'payment_method_id' => $paymentMethod->id,
                         'payment_type' => $paymentMethod->type,
                         'amount' => $amount,

@@ -6,11 +6,15 @@ use App\Http\Requests\ValidateCheckoutRequest;
 use App\Models\BranchInventory;
 use App\Models\CheckoutRequest;
 use App\Models\Product;
+use App\Models\Sale;
 use App\Services\BranchContext;
+use App\Services\Observability\RequestCorrelation;
 use App\Services\POS\SaleCreationService;
 use App\Services\TenantContext;
+use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class CheckoutController extends Controller
@@ -28,13 +32,17 @@ class CheckoutController extends Controller
     public function validateDraft(
         ValidateCheckoutRequest $request,
         TenantContext $tenantContext,
-        BranchContext $branchContext
+        BranchContext $branchContext,
+        RequestCorrelation $requestCorrelation
     ): JsonResponse {
         $tenantId  = $tenantContext->getTenantId();
         $branchId  = $branchContext->getBranchId();
         $userId    = Auth::id();
         $clientUuid = $request->input('client_request_uuid');
         $rawItems   = $request->input('items');
+        $baseContext = $this->checkoutLogContext($requestCorrelation, $request, $clientUuid, [
+            'item_count' => count($rawItems),
+        ]);
 
         // --- 1. Compute canonical SHA-256 payload hash ---
         $hash = $this->computePayloadHash(
@@ -58,6 +66,8 @@ class CheckoutController extends Controller
                 $existing->last_seen_at = now();
                 $existing->save();
 
+                Log::info('checkout.validation.duplicate_seen', $baseContext);
+
                 return response()->json([
                     'status'              => 'duplicate_seen',
                     'client_request_uuid' => $clientUuid,
@@ -65,6 +75,8 @@ class CheckoutController extends Controller
             }
 
             // Same UUID but different payload — conflict, do NOT modify original record
+            Log::warning('checkout.validation.conflict', $baseContext);
+
             return response()->json([
                 'status'  => 'conflict',
                 'message' => 'This checkout request was already used with a different cart payload.',
@@ -84,6 +96,11 @@ class CheckoutController extends Controller
         // Validate all products are found, active, and tenant-scoped
         $missingProducts = array_diff($productIds, $products->keys()->all());
         if (!empty($missingProducts)) {
+            Log::info('checkout.validation.invalid_products', $this->checkoutLogContext($requestCorrelation, $request, $clientUuid, [
+                'item_count' => count($rawItems),
+                'invalid_product_count' => count($missingProducts),
+            ]));
+
             return response()->json([
                 'message' => 'One or more products are invalid, inactive, or do not belong to this tenant.',
                 'invalid_product_ids' => array_values($missingProducts),
@@ -134,7 +151,16 @@ class CheckoutController extends Controller
             ];
         }
 
+        if (empty($validatedItems)) {
+            Log::info('checkout.validation.empty_valid_items', $baseContext);
+        }
+
         if (!empty($inventoryErrors)) {
+            Log::info('checkout.validation.inventory_unavailable', $this->checkoutLogContext($requestCorrelation, $request, $clientUuid, [
+                'item_count' => count($rawItems),
+                'inventory_error_count' => count($inventoryErrors),
+            ]));
+
             return response()->json([
                 'message'          => 'One or more inventory-tracked products are unavailable at this branch.',
                 'inventory_errors' => $inventoryErrors,
@@ -161,6 +187,8 @@ class CheckoutController extends Controller
             'validated_at'        => now(),
             'last_seen_at'        => now(),
         ]);
+
+        Log::info('checkout.validation.validated', $baseContext);
 
         // --- 6. Return validated response contract ---
         return response()->json([
@@ -253,6 +281,86 @@ class CheckoutController extends Controller
     }
 
     /**
+     * Check whether a checkout request already created a sale or is safe to retry.
+     */
+    public function checkStatus(
+        Request $request,
+        TenantContext $tenantContext,
+        BranchContext $branchContext,
+        RequestCorrelation $requestCorrelation
+    ): JsonResponse {
+        $payload = $request->validate([
+            'client_request_uuid' => ['required', 'uuid'],
+        ]);
+
+        $tenantId = $tenantContext->getTenantId();
+        $branchId = $branchContext->getBranchId();
+        $userId = Auth::id();
+        $clientUuid = $payload['client_request_uuid'];
+
+        $checkoutRequest = CheckoutRequest::where('tenant_id', $tenantId)
+            ->where('branch_id', $branchId)
+            ->where('user_id', $userId)
+            ->where('client_request_uuid', $clientUuid)
+            ->first();
+
+        $sale = null;
+
+        if ($checkoutRequest?->sale_id) {
+            $sale = Sale::where('tenant_id', $tenantId)
+                ->where('branch_id', $branchId)
+                ->where('user_id', $userId)
+                ->where('id', $checkoutRequest->sale_id)
+                ->first();
+        }
+
+        if (!$sale) {
+            $sale = Sale::where('tenant_id', $tenantId)
+                ->where('branch_id', $branchId)
+                ->where('user_id', $userId)
+                ->where('client_request_uuid', $clientUuid)
+                ->first();
+        }
+
+        if ($sale) {
+            Log::info('checkout.status.confirmed', $this->checkoutLogContext($requestCorrelation, $request, $clientUuid, [
+                'sale_id' => $sale->id,
+            ]));
+
+            return response()->json([
+                'status' => 'confirmed',
+                'client_request_uuid' => $clientUuid,
+                'sale_id' => $sale->id,
+                'sale_status' => $sale->status,
+                'server_totals' => [
+                    'subtotal' => number_format((float) $sale->subtotal, 4, '.', ''),
+                    'tax_total' => number_format((float) $sale->tax_total, 4, '.', ''),
+                    'discount_total' => number_format((float) $sale->discount_total, 4, '.', ''),
+                    'total' => number_format((float) $sale->total, 4, '.', ''),
+                ],
+            ]);
+        }
+
+        if ($checkoutRequest) {
+            $checkoutRequest->update(['last_seen_at' => now()]);
+
+            Log::info('checkout.status.retry_available', $this->checkoutLogContext($requestCorrelation, $request, $clientUuid));
+
+            return response()->json([
+                'status' => 'retry_available',
+                'client_request_uuid' => $clientUuid,
+            ]);
+        }
+
+        Log::info('checkout.status.not_found', $this->checkoutLogContext($requestCorrelation, $request, $clientUuid));
+
+        return response()->json([
+            'status' => 'not_found',
+            'client_request_uuid' => $clientUuid,
+        ]);
+    }
+
+    /**
      * Build the exact response contract for a sale creation result.
      */
     private function buildSaleResponse($sale, string $clientUuid, string $status): JsonResponse
@@ -281,5 +389,18 @@ class CheckoutController extends Controller
             ],
             'items' => $items,
         ]);
+    }
+
+    private function checkoutLogContext(
+        RequestCorrelation $requestCorrelation,
+        Request $request,
+        string $clientUuid,
+        array $extra = []
+    ): array {
+        return array_merge(
+            $requestCorrelation->operationalContext($request),
+            ['client_request_uuid' => $clientUuid],
+            $extra
+        );
     }
 }

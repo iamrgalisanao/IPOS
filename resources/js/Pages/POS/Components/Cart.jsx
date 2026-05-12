@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
 import { ShoppingCart, Trash2, Plus, Minus, CreditCard, ChevronRight, Calculator, X, Loader2, AlertTriangle } from 'lucide-react';
+import StatusUncertainPanel from './StatusUncertainPanel';
 
-export default function Cart({ items, onUpdateQuantity, onClear, onCheckout, isSubmitting, checkoutError, submissionFailed, onClose }) {
+export default function Cart({ items, onUpdateQuantity, onClear, onCheckout, isSubmitting, checkoutError, submissionFailed, onClose, checkoutState = 'draft', isCheckingStatus = false, onCheckStatus, onRetryCheckout }) {
     const totals = useMemo(() => {
         const subtotal = items.reduce((sum, item) => sum + (Number(item.selling_price || item.unit_price || 0) * item.quantity), 0);
         // VAT included in price for now
@@ -32,6 +33,13 @@ export default function Cart({ items, onUpdateQuantity, onClear, onCheckout, isS
                     )}
                 </div>
             </div>
+
+            <StatusUncertainPanel
+                mode={checkoutState}
+                isCheckingStatus={isCheckingStatus}
+                onCheckStatus={onCheckStatus}
+                onRetry={onRetryCheckout}
+            />
 
             {/* Error Message */}
             {checkoutError && (
@@ -137,7 +145,7 @@ export default function Cart({ items, onUpdateQuantity, onClear, onCheckout, isS
                     </button>
                     <button
                         onClick={onCheckout}
-                        disabled={items.length === 0 || isSubmitting}
+                        disabled={items.length === 0 || isSubmitting || isCheckingStatus || checkoutState === 'checking'}
                         className="flex-[2] flex items-center justify-center gap-1.5 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold shadow-lg shadow-indigo-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                     >
                         {isSubmitting ? (

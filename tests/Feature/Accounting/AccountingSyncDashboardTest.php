@@ -92,6 +92,13 @@ class AccountingSyncDashboardTest extends TestCase
             ->withHeader('X-Tenant-ID', $this->tenant->id)
             ->get(route('accounting.outbox.index'))
             ->assertForbidden();
+
+        $record = $this->createOutbox($this->tenant, $this->branchA, ['sync_status' => 'failed']);
+
+        $this->actingAs($cashier)
+            ->withHeader('X-Tenant-ID', $this->tenant->id)
+            ->get(route('accounting.outbox.show', $record->id))
+            ->assertForbidden();
     }
 
     public function test_tenant_cannot_view_another_tenant_outbox_record(): void
@@ -252,6 +259,7 @@ class AccountingSyncDashboardTest extends TestCase
                 ->where('record.payload.nested.safe', 'visible')
                 ->missing('record.payload.access_token')
                 ->missing('record.payload.private_key')
+                ->has('syncReadiness.checks', 2)
             );
     }
 

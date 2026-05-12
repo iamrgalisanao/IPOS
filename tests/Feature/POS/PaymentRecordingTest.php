@@ -18,7 +18,7 @@ use Tests\TestCase;
 
 class PaymentRecordingTest extends TestCase
 {
-    use RefreshDatabase;
+    use RefreshDatabase, \Tests\Traits\InteractsWithShifts;
 
     protected Tenant $tenant;
     protected Branch $branch;
@@ -51,6 +51,11 @@ class PaymentRecordingTest extends TestCase
         $permission = Permission::where('name', 'create_sale')->first() 
             ?? Permission::create(['tenant_id' => $this->tenant->id, 'name' => 'create_sale']);
         $role->permissions()->attach($permission);
+        
+        $openShiftPermission = Permission::where('name', 'open_shift')->first() 
+            ?? Permission::create(['tenant_id' => $this->tenant->id, 'name' => 'open_shift']);
+        $role->permissions()->attach($openShiftPermission);
+
         $this->user->assignRole($role);
         $this->user->assignToBranch($this->branch);
 
@@ -80,6 +85,8 @@ class PaymentRecordingTest extends TestCase
             'strict_reference_mode' => true,
             'status' => 'active',
         ]);
+
+        $this->openShiftFor($this->user, $this->branch);
     }
 
     private function postPayment(string $saleId, array $payload, ?User $user = null, array $headers = []): \Illuminate\Testing\TestResponse

@@ -188,11 +188,22 @@ class QuickBooksConnectionService
             'status' => $connection->status,
             'realm_id' => $connection->realm_id,
             'company_name' => $connection->company_name,
+            'connected_at' => $connection->connected_at?->toISOString(),
+            'disconnected_at' => $connection->disconnected_at?->toISOString(),
             'access_token_expires_at' => $connection->access_token_expires_at?->toISOString(),
             'refresh_token_expires_at' => $connection->refresh_token_expires_at?->toISOString(),
             'environment' => $connection->metadata['environment'] ?? config('services.quickbooks.environment'),
-            'last_error' => $connection->last_error,
+            'last_error' => $connection->last_error ? $this->sanitizeCallbackError($connection->last_error) : null,
         ];
+    }
+
+    public function sanitizeCallbackError(string $message): string
+    {
+        $sanitized = preg_replace('/Authorization\s*:\s*Bearer\s+[^\s"]+/i', 'Authorization: Bearer [redacted]', $message);
+        $sanitized = preg_replace('/Bearer\s+[A-Za-z0-9\-\._~\+\/]+=*/i', 'Bearer [redacted]', $sanitized ?? $message);
+        $sanitized = preg_replace('/(access_token|refresh_token|client_secret|client_id|api[_-]?key|private[_-]?key)\s*[=:]\s*[^\s,;]+/i', '$1=[redacted]', $sanitized ?? $message);
+
+        return $sanitized ?? $message;
     }
 
     protected function assertConfigured(): void
@@ -217,11 +228,16 @@ class QuickBooksConnectionService
 
     protected function markError(string $message): QuickBooksConnection
     {
+        $sanitizedMessage = $this->sanitizeCallbackError($message);
+
         return QuickBooksConnection::withoutGlobalScope('tenant')->updateOrCreate(
             ['tenant_id' => $this->tenantContext->getTenantId()],
             [
                 'status' => QuickBooksConnection::STATUS_ERROR,
-                'last_error' => $message,
+                'last_error' => $sanitizedMessage,
+                'metadata' => [
+                    'environment' => config('services.quickbooks.environment'),
+                ],
             ]
         );
     }

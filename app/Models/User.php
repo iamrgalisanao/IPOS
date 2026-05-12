@@ -107,6 +107,36 @@ class User extends Authenticatable
         return $this->status === 'active';
     }
 
+    public function shifts(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(\App\Models\Shift::class, 'cashier_id');
+    }
+
+    public function openedShifts(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(\App\Models\Shift::class, 'opened_by');
+    }
+
+    public function approvedShifts(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(\App\Models\Shift::class, 'approved_by');
+    }
+
+    public function closedShifts(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(\App\Models\Shift::class, 'closed_by');
+    }
+
+    public function cashDrawerEvents(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(\App\Models\CashDrawerEvent::class, 'cashier_id');
+    }
+
+    public function createdCashDrawerEvents(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(\App\Models\CashDrawerEvent::class, 'created_by');
+    }
+
     /**
      * Determine if the model is an identity-carrying entity.
      * Identity models can be resolved without an active tenant context

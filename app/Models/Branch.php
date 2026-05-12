@@ -38,6 +38,16 @@ class Branch extends Model
         return $this->belongsTo(Tenant::class);
     }
 
+    public function shifts(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(Shift::class);
+    }
+
+    public function cashDrawerEvents(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(CashDrawerEvent::class);
+    }
+
     /**
      * Scope a query to only include active branches.
      */

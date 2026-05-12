@@ -38,4 +38,14 @@ class Tenant extends Model
     {
         return $this->hasMany(Branch::class);
     }
+
+    public function shifts(): HasMany
+    {
+        return $this->hasMany(Shift::class);
+    }
+
+    public function cashDrawerEvents(): HasMany
+    {
+        return $this->hasMany(CashDrawerEvent::class);
+    }
 }

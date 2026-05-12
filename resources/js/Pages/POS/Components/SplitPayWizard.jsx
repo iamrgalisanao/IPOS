@@ -1,18 +1,28 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { X, Plus, Trash2, CreditCard, Banknote, AlertCircle, CheckCircle2, Loader2, Wallet } from 'lucide-react';
 import { calculatePaymentTotals, calculatePaymentProgress, validatePaymentRows, buildSplitPaymentPayload, requiresReference, isCashPayment, calculateCashChange } from '../helpers/splitPaymentHelper';
 
-export default function SplitPayWizard({ sale, paymentMethods = [], onClose, onPaymentRecorded, tenantId, branchId }) {
+export default function SplitPayWizard({ sale, paymentMethods = [], onClose, onPaymentRecorded, tenantId, branchId, initialRows = null, onRowsChange = null }) {
     const hasPaymentMethods = paymentMethods.length > 0;
-    const [rows, setRows] = useState([
-        { id: crypto.randomUUID(), payment_method_id: '', amount: sale.total, amount_tendered: '', reference_number: '' }
-    ]);
+    const [rows, setRows] = useState(() => initialRows && initialRows.length > 0
+        ? initialRows
+        : [{ id: crypto.randomUUID(), payment_method_id: '', amount: sale.total, amount_tendered: '', reference_number: '' }]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState(null);
 
     const totals = useMemo(() => calculatePaymentTotals(rows, sale.total), [rows, sale.total]);
     const progress = useMemo(() => calculatePaymentProgress(rows, paymentMethods, sale.total), [rows, paymentMethods, sale.total]);
     const validation = useMemo(() => validatePaymentRows(rows, paymentMethods, sale.total), [rows, paymentMethods, sale.total]);
+
+    useEffect(() => {
+        if (initialRows && initialRows.length > 0) {
+            setRows(initialRows);
+        }
+    }, [initialRows]);
+
+    useEffect(() => {
+        onRowsChange?.(rows);
+    }, [rows, onRowsChange]);
 
     const addRow = () => {
         const remaining = progress.remainingBalance;

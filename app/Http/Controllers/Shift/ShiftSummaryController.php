@@ -1,0 +1,106 @@
+<?php
+
+namespace App\Http\Controllers\Shift;
+
+use App\Http\Controllers\Controller;
+use App\Models\Shift;
+use App\Services\BranchContext;
+use App\Services\TenantContext;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Inertia\Response;
+
+class ShiftSummaryController extends Controller
+{
+    public function __construct(
+        protected TenantContext $tenantContext,
+        protected BranchContext $branchContext
+    ) {}
+
+    /**
+     * Display a listing of shifts.
+     */
+    public function index(Request $request): Response
+    {
+        $user = $request->user();
+        $query = Shift::with(['cashier:id,name', 'branch:id,name']);
+
+        // 1. RBAC & Isolation
+        if ($user->hasPermission('view_all_shifts')) {
+            // Admin can see everything, but respect branch context if active
+            if ($this->branchContext->hasBranch()) {
+                $query->where('branch_id', $this->branchContext->getBranchId());
+            }
+        } elseif ($user->hasPermission('view_branch_shifts')) {
+            // Manager can see assigned branches
+            $branchIds = $user->branches()->pluck('branch_id');
+            $query->whereIn('branch_id', $branchIds);
+            
+            if ($this->branchContext->hasBranch()) {
+                $query->where('branch_id', $this->branchContext->getBranchId());
+            }
+        } else {
+            // Regular cashier only own
+            $query->where('cashier_id', $user->id);
+        }
+
+        // 2. Filters
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('date')) {
+            $query->whereDate('opened_at', $request->date);
+        }
+
+        $shifts = $query->latest('opened_at')
+            ->paginate(15)
+            ->withQueryString();
+
+        return Inertia::render('Shift/Index', [
+            'shifts' => $shifts,
+            'filters' => $request->only(['status', 'date']),
+        ]);
+    }
+
+    /**
+     * Display the specified shift summary.
+     */
+    public function show(Shift $shift, Request $request): Response
+    {
+        $user = $request->user();
+
+        // 1. Tenant Isolation (already handled by global scope, but let's be explicit for safety)
+        if ($shift->tenant_id !== $this->tenantContext->getTenantId()) {
+            abort(403, 'Cross-tenant access blocked.');
+        }
+
+        // 2. Authorization
+        $canView = $user->hasPermission('view_all_shifts') || 
+                   $shift->cashier_id === $user->id ||
+                   ($user->hasPermission('view_branch_shifts') && $user->canAccessBranch($shift->branch));
+
+        if (!$canView) {
+            abort(403, 'Unauthorized to view this shift.');
+        }
+
+        // 3. Branch Context enforcement
+        if ($this->branchContext->hasBranch() && $shift->branch_id !== $this->branchContext->getBranchId()) {
+            abort(403, 'Shift branch mismatch.');
+        }
+
+        // 3. Load Details
+        $shift->load([
+            'cashier:id,name',
+            'branch:id,name',
+            'openedByUser:id,name',
+            'approvedByUser:id,name',
+            'cashDrawerEvents' => fn($q) => $q->with('cashier:id,name')->latest('occurred_at'),
+            'salePayments' => fn($q) => $q->whereHas('paymentMethod', fn($pq) => $pq->whereRaw('LOWER(code) = ?', ['cash']))->with('sale:id,order_number'),
+        ]);
+
+        return Inertia::render('Shift/Show', [
+            'shift' => $shift,
+        ]);
+    }
+}

@@ -21,6 +21,53 @@ export const getCheckoutErrorMessage = (status, data) => {
     return 'The sale could not be completed. Your cart is safe. Please try again.';
 };
 
+export const createUncertainCheckoutError = (message = 'The sale status is uncertain. Please check status before retrying.') => {
+    const error = new Error(message);
+    error.kind = 'status_uncertain';
+    return error;
+};
+
+export const isUncertainCheckoutError = (error) => {
+    return error?.kind === 'status_uncertain' || error?.name === 'AbortError';
+};
+
+export const getGuardianPresentation = (kind) => {
+    const variants = {
+        restored: {
+            tone: 'blue',
+            title: 'Cart Restored',
+            announcement: 'Cart Restored',
+        },
+        checking: {
+            tone: 'blue',
+            title: 'Checking Status',
+            announcement: 'Checking Status',
+        },
+        uncertain: {
+            tone: 'amber',
+            title: 'Status Uncertain',
+            announcement: 'Status Uncertain',
+        },
+        retry_available: {
+            tone: 'amber',
+            title: 'Retry Available',
+            announcement: 'Retry Available',
+        },
+        confirmed: {
+            tone: 'emerald',
+            title: 'Sale Confirmed',
+            announcement: 'Sale Confirmed',
+        },
+        failed: {
+            tone: 'red',
+            title: 'Submission Failed',
+            announcement: 'Submission Failed',
+        },
+    };
+
+    return variants[kind] || variants.failed;
+};
+
 /**
  * Validates if the checkout state should be cleared.
  * In Story 4.8, it should only be cleared on explicit success.

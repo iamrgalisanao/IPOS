@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\TenantContext;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -29,11 +30,41 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        $user = $request->user();
+
         return [
             ...parent::share($request),
             'auth' => [
-                'user' => $request->user(),
+                'user' => $user,
+                'permissions' => $this->resolvePermissions($request),
             ],
         ];
+    }
+
+    protected function resolvePermissions(Request $request): array
+    {
+        $user = $request->user();
+
+        if (!$user) {
+            return [];
+        }
+
+        $tenantContext = app(TenantContext::class);
+
+        if (!$tenantContext->hasTenant() && $user->tenant_id) {
+            $tenantContext->setTenant($user->tenant);
+        }
+
+        if (!$tenantContext->hasTenant()) {
+            return [];
+        }
+
+        return $user->roles()
+            ->with('permissions:id,name')
+            ->get()
+            ->flatMap(fn ($role) => $role->permissions->pluck('name'))
+            ->unique()
+            ->values()
+            ->all();
     }
 }

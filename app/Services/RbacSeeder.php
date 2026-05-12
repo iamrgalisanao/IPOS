@@ -19,25 +19,37 @@ class RbacSeeder
         $seededPermissions = [];
 
         foreach ($permissions as $name => $description) {
-            $seededPermissions[$name] = Permission::create([
-                'name' => $name,
-                'description' => $description,
-            ]);
+            $permission = Permission::firstOrCreate(
+                ['name' => $name],
+                ['description' => $description]
+            );
+
+            if ($permission->description !== $description) {
+                $permission->forceFill(['description' => $description])->save();
+            }
+
+            $seededPermissions[$name] = $permission;
         }
 
         $roles = $this->getRoles();
 
         foreach ($roles as $roleName => $roleData) {
-            $role = Role::create([
-                'name' => $roleName,
-                'description' => $roleData['description'],
-            ]);
+            $role = Role::firstOrCreate(
+                ['name' => $roleName],
+                ['description' => $roleData['description']]
+            );
 
-            foreach ($roleData['permissions'] as $permName) {
-                if (isset($seededPermissions[$permName])) {
-                    $role->permissions()->attach($seededPermissions[$permName]->id);
-                }
+            if ($role->description !== $roleData['description']) {
+                $role->forceFill(['description' => $roleData['description']])->save();
             }
+
+            $permissionIds = collect($roleData['permissions'])
+                ->map(fn ($permName) => $seededPermissions[$permName]->id ?? null)
+                ->filter()
+                ->values()
+                ->all();
+
+            $role->permissions()->sync($permissionIds);
         }
         
         app(TenantContext::class)->clear();
@@ -55,7 +67,9 @@ class RbacSeeder
             'apply_discount' => 'Can apply discounts to sales',
             'open_shift' => 'Can open a new POS shift',
             'close_shift' => 'Can close an active POS shift',
+            'approve_shift' => 'Can review and approve submitted POS shifts',
             'view_own_shift_summary' => 'Can view own shift performance',
+            'manage_cash_drawer' => 'Can record cash drawer operational events',
 
             // Branch Operations
             'view_branch_dashboard' => 'Can view branch level dashboard',
@@ -74,12 +88,16 @@ class RbacSeeder
             'manage_tax_categories' => 'Can manage tax settings',
             'manage_receipt_settings' => 'Can manage receipt templates',
             'view_multi_branch_dashboard' => 'Can view cross-branch data',
+            'view_reports' => 'Can view general reports and pulse dashboard',
             'export_reports' => 'Can export financial reports',
 
             // Accounting
             'connect_quickbooks' => 'Can configure QuickBooks integration',
+            'manage_quickbooks_connection' => 'Can manage QuickBooks onboarding and connection state',
             'configure_accounting_mapping' => 'Can manage accounting mappings',
             'manage_accounting_mappings' => 'Can manage accounting mapping UI and status',
+            'manage_settlement_periods' => 'Can manage settlement period lifecycle',
+            'view_settlement_periods' => 'Can view settlement period review data',
             'view_sync_dashboard' => 'Can view integration status',
             'retry_failed_sync' => 'Can retry failed sync tasks',
             'manually_resolve_sync' => 'Can manually resolve sync issues',
@@ -99,17 +117,19 @@ class RbacSeeder
                 'description' => 'Standard POS operator',
                 'permissions' => [
                     'access_pos', 'create_sale', 'apply_discount', 
-                    'open_shift', 'close_shift', 'view_own_shift_summary'
+                    'open_shift', 'close_shift', 'view_own_shift_summary',
+                    'manage_cash_drawer'
                 ],
             ],
             'Branch Manager' => [
                 'description' => 'Branch operations supervisor',
                 'permissions' => [
                     'access_pos', 'create_sale', 'apply_discount', 
-                    'open_shift', 'close_shift', 'view_own_shift_summary',
+                    'open_shift', 'close_shift', 'approve_shift', 'view_own_shift_summary',
+                    'manage_cash_drawer',
                     'view_branch_dashboard', 'manage_branch_inventory',
                     'approve_void', 'approve_refund', 'view_branch_reports',
-                    'close_branch_day'
+                    'close_branch_day', 'view_reports'
                 ],
             ],
             'Owner/Admin' => [
@@ -119,11 +139,13 @@ class RbacSeeder
             'Accountant' => [
                 'description' => 'Financial and accounting management',
                 'permissions' => [
-                    'connect_quickbooks', 'configure_accounting_mapping', 'manage_accounting_mappings',
+                    'connect_quickbooks', 'manage_quickbooks_connection', 'configure_accounting_mapping', 'manage_accounting_mappings',
+                    'manage_settlement_periods',
+                    'view_settlement_periods',
                     'view_sync_dashboard', 'retry_failed_sync',
                     'manually_resolve_sync', 'ignore_sync_exception',
                     'view_reconciliation_reports', 'export_accounting_reports',
-                    'view_branch_reports', 'export_reports', 'view_multi_branch_dashboard'
+                    'view_branch_reports', 'export_reports', 'view_multi_branch_dashboard', 'view_reports'
                 ],
             ],
         ];

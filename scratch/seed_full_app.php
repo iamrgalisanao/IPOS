@@ -4,8 +4,10 @@ use App\Models\Tenant;
 use App\Models\Branch;
 use App\Models\Product;
 use App\Models\ProductCategory;
+use App\Models\Role;
 use App\Models\User;
 use App\Models\BranchInventory;
+use App\Services\RbacSeeder;
 use App\Services\TenantContext;
 use Illuminate\Support\Facades\Hash;
 
@@ -18,6 +20,10 @@ $kernel->bootstrap();
 $tenant = Tenant::updateOrCreate(['name' => 'BMad Coffee'], ['status' => 'active']);
 app(TenantContext::class)->setTenant($tenant);
 
+if (!Role::where('tenant_id', $tenant->id)->exists()) {
+    app(RbacSeeder::class)->seedForTenant($tenant);
+}
+
 $branch = Branch::updateOrCreate(['name' => 'Main Branch', 'tenant_id' => $tenant->id], [
     'status' => 'active', 
     'branch_code' => 'MAIN'
@@ -26,9 +32,23 @@ $branch = Branch::updateOrCreate(['name' => 'Main Branch', 'tenant_id' => $tenan
 $user = User::updateOrCreate(['email' => 'admin@bmad.coffee'], [
     'name' => 'BMad Admin',
     'password' => Hash::make('password'),
+    'actor_type' => 'tenant_user',
     'tenant_id' => $tenant->id,
     'status' => 'active'
 ]);
+
+$ownerRole = Role::where('tenant_id', $tenant->id)
+    ->where('name', 'Owner/Admin')
+    ->first();
+
+if (!$ownerRole) {
+    app(RbacSeeder::class)->seedForTenant($tenant);
+    $ownerRole = Role::where('tenant_id', $tenant->id)
+        ->where('name', 'Owner/Admin')
+        ->firstOrFail();
+}
+
+$user->roles()->sync([$ownerRole->id]);
 
 // Assign user to branch
 if (!$user->branches()->where('branches.id', $branch->id)->exists()) {

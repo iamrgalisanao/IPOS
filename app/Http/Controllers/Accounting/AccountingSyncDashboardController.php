@@ -7,6 +7,7 @@ use App\Models\AccountingOutbox;
 use App\Models\Branch;
 use App\Services\Accounting\AccountingOutboxProcessorService;
 use App\Services\Accounting\AccountingOutboxQueryService;
+use App\Services\Accounting\QuickBooksSyncReadinessService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -16,7 +17,8 @@ class AccountingSyncDashboardController extends Controller
 {
     public function __construct(
         protected AccountingOutboxQueryService $queryService,
-        protected AccountingOutboxProcessorService $processor
+        protected AccountingOutboxProcessorService $processor,
+        protected QuickBooksSyncReadinessService $readinessService
     ) {}
 
     public function index(Request $request): Response
@@ -56,6 +58,7 @@ class AccountingSyncDashboardController extends Controller
         return Inertia::render('Accounting/Outbox/Show', [
             'record' => $this->detail($record->load(['attempts' => fn ($query) => $query->latest('started_at')]), true),
             'canRetry' => $request->user()->hasPermission('retry_failed_sync') && $record->sync_status === 'failed',
+            'syncReadiness' => $this->readinessService->analyze($record),
             'flash' => [
                 'status' => session('status'),
                 'error' => session('error'),
