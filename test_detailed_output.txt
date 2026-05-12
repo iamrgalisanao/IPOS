@@ -1,0 +1,21 @@
+
+In WorkerCrashedException.php line 41:
+                                                                               
+  The test "PARATEST='1' TEST_TOKEN='1' UNIQUE_TEST_TOKEN='1_6a01e1607d200' /  
+  Users/teamsolo/Documents/Dev/IPOS/tests/Feature/POS/PaymentAuditTest.php" f  
+  ailed.                                                                       
+                                                                               
+  Exit Code: 2(Misuse of shell builtins)                                       
+                                                                               
+  Working directory: /Users/teamsolo/Documents/Dev/IPOS                        
+                                                                               
+  Output:                                                                      
+  ================                                                             
+                                                                               
+                                                                               
+  Error Output:                                                                
+  ================                                                             
+                                                                               
+
+paratest [--functional] [-m|--max-batch-size MAX-BATCH-SIZE] [--no-test-tokens] [--passthru-php PASSTHRU-PHP] [-p|--processes PROCESSES] [--max-processes MAX-PROCESSES] [--runner RUNNER] [--tmp-dir TMP-DIR] [-v|--verbose] [--shard [SHARD]] [--shard-test-distribution SHARD-TEST-DISTRIBUTION] [--bootstrap BOOTSTRAP] [-c|--configuration CONFIGURATION] [--no-configuration] [--cache-directory CACHE-DIRECTORY] [--testsuite TESTSUITE] [--exclude-testsuite EXCLUDE-TESTSUITE] [--group GROUP] [--exclude-group EXCLUDE-GROUP] [--filter FILTER] [--process-isolation] [--strict-coverage] [--strict-global-state] [--disallow-test-output] [--enforce-time-limit] [--default-time-limit DEFAULT-TIME-LIMIT] [--do-not-report-useless-tests] [--stop-on-defect] [--stop-on-error] [--stop-on-failure] [--stop-on-warning] [--stop-on-risky] [--stop-on-deprecation] [--stop-on-notice] [--stop-on-skipped] [--stop-on-incomplete] [--fail-on-empty-test-suite] [--fail-on-warning] [--fail-on-risky] [--fail-on-deprecation] [--fail-on-phpunit-deprecation] [--fail-on-phpunit-notice] [--fail-on-phpunit-warning] [--fail-on-notice] [--fail-on-skipped] [--fail-on-incomplete] [--fail-on-all-issues] [--do-not-fail-on-empty-test-suite] [--do-not-fail-on-warning] [--do-not-fail-on-risky] [--do-not-fail-on-deprecation] [--do-not-fail-on-phpunit-deprecation] [--do-not-fail-on-phpunit-notice] [--do-not-fail-on-phpunit-warning] [--do-not-fail-on-notice] [--do-not-fail-on-skipped] [--do-not-fail-on-incomplete] [--order-by ORDER-BY] [--random-order-seed RANDOM-ORDER-SEED] [--colors [COLORS]] [--no-progress] [--display-incomplete] [--display-skipped] [--display-deprecations] [--display-phpunit-deprecations] [--display-phpunit-notices] [--display-errors] [--display-notices] [--display-warnings] [--display-all-issues] [--reverse-list] [--teamcity] [--testdox] [--testdox-summary] [--log-junit LOG-JUNIT] [--log-teamcity LOG-TEAMCITY] [--testdox-text TESTDOX-TEXT] [--testdox-html TESTDOX-HTML] [--coverage-clover COVERAGE-CLOVER] [--coverage-openclover COVERAGE-OPENCLOVER] [--coverage-cobertura COVERAGE-COBERTURA] [--coverage-crap4j COVERAGE-CRAP4J] [--coverage-html COVERAGE-HTML] [--coverage-php COVERAGE-PHP] [--coverage-text [COVERAGE-TEXT]] [--only-summary-for-coverage-text] [--coverage-xml COVERAGE-XML] [--exclude-source-from-xml-coverage] [--coverage-filter COVERAGE-FILTER] [--no-coverage] [--] [<path>]
+

@@ -1,0 +1,12 @@
+curator:
+  enabled: true
+  interval_hours: 24
+  min_idle_hours: 1
+  stale_after_days: 14
+  archive_after_days: 30
+
+auxiliary:
+  curator:
+    provider: openrouter
+    model: google/gemini-3-flash
+    timeout: 600

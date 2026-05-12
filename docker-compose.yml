@@ -1,0 +1,28 @@
+services:
+  hermes-agent:
+    image: nousresearch/hermes-agent:latest
+    container_name: hermes_ipos
+    user: root
+    # Use the array format to ensure signals are passed correctly
+    entrypoint: ["/opt/hermes/.venv/bin/hermes", "mcp", "serve"]
+    
+    # CRITICAL: This keeps the input stream open so the process doesn't exit
+    stdin_open: true
+    # Keep this false to avoid terminal formatting breaking the MCP JSON-RPC
+    tty: false
+    
+    environment:
+      - API_AUTH_TOKEN=${API_AUTH_TOKEN:?Set API_AUTH_TOKEN in your shell or compose .env}
+      - APPROVALS_MODE=warning
+      - MCP_ENABLED=true
+      - PYTHONUNBUFFERED=1
+    
+    volumes:
+      - ~/Documents/Dev/IPOS:/app/workspace
+      - ~/Documents/Dev/IPOS/memory:/opt/data
+      - ~/.hermes/skills:/opt/hermes/global_skills:ro
+      
+    ports:
+      - "8083:8080"
+    
+    restart: unless-stopped

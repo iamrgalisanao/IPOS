@@ -1,0 +1,58 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Services\CatalogService;
+use App\Services\ConfigurationService;
+use App\Models\PaymentMethod;
+use App\Models\ProductCategory;
+use App\Services\TenantContext;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
+
+class POSController extends Controller
+{
+    public function __construct(
+        protected CatalogService $catalogService,
+        protected TenantContext $tenantContext,
+        protected ConfigurationService $configurationService,
+        protected \App\Services\BranchContext $branchContext
+    ) {}
+
+    /**
+     * Display the POS interface.
+     */
+    public function index(Request $request)
+    {
+        $tenant = $this->tenantContext->getTenant();
+
+        if ($tenant) {
+            $this->configurationService->ensureDefaultPaymentMethods($tenant);
+        }
+
+        return Inertia::render('POS/Index', [
+            'tenant' => $tenant,
+            'tenant_id' => $this->tenantContext->getTenantId(),
+            'branch_id' => $this->branchContext->getBranchId() ?: $request->user()?->branches()->first()?->id,
+            'user_id' => $request->user()?->id,
+            'categories' => ProductCategory::active()->get(),
+            'payment_methods' => PaymentMethod::active()
+                ->orderByDesc('is_default')
+                ->orderBy('name')
+                ->get(),
+        ]);
+    }
+
+    /**
+     * API: Search products for POS.
+     */
+    public function search(Request $request)
+    {
+        $searchTerm = $request->query('q', '');
+        $categoryId = $request->query('category_id');
+
+        return response()->json(
+            $this->catalogService->search($searchTerm, $categoryId)
+        );
+    }
+}

@@ -1,0 +1,43 @@
+
+In WorkerCrashedException.php line 41:
+                                                                               
+  [ParaTest\WrapperRunner\WorkerCrashedException]                              
+  The test "PARATEST='1' TEST_TOKEN='1' UNIQUE_TEST_TOKEN='1_6a01e178a31d3' /  
+  Users/teamsolo/Documents/Dev/IPOS/tests/Feature/POS/PaymentAuditTest.php" f  
+  ailed.                                                                       
+                                                                               
+  Exit Code: 2(Misuse of shell builtins)                                       
+                                                                               
+  Working directory: /Users/teamsolo/Documents/Dev/IPOS                        
+                                                                               
+  Output:                                                                      
+  ================                                                             
+                                                                               
+                                                                               
+  Error Output:                                                                
+  ================                                                             
+                                                                               
+
+Exception trace:
+  at /Users/teamsolo/Documents/Dev/IPOS/vendor/brianium/paratest/src/WrapperRunner/WorkerCrashedException.php:41
+ ParaTest\WrapperRunner\WorkerCrashedException::fromProcess() at /Users/teamsolo/Documents/Dev/IPOS/vendor/brianium/paratest/src/WrapperRunner/WrapperWorker.php:178
+ ParaTest\WrapperRunner\WrapperWorker->getWorkerCrashedException() at /Users/teamsolo/Documents/Dev/IPOS/vendor/pestphp/pest/src/Plugins/Parallel/Paratest/WrapperRunner.php:255
+ Pest\Plugins\Parallel\Paratest\WrapperRunner->waitForAllToFinish() at /Users/teamsolo/Documents/Dev/IPOS/vendor/pestphp/pest/src/Plugins/Parallel/Paratest/WrapperRunner.php:166
+ Pest\Plugins\Parallel\Paratest\WrapperRunner->run() at /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Testing/Concerns/RunsInParallel.php:117
+ Illuminate\Testing\ParallelRunner->execute() at /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Testing/ParallelRunner.php:19
+ Illuminate\Testing\ParallelRunner->run() at /Users/teamsolo/Documents/Dev/IPOS/vendor/brianium/paratest/src/ParaTestCommand.php:97
+ ParaTest\ParaTestCommand->execute() at /Users/teamsolo/Documents/Dev/IPOS/vendor/symfony/console/Command/Command.php:291
+ Symfony\Component\Console\Command\Command->run() at /Users/teamsolo/Documents/Dev/IPOS/vendor/symfony/console/Application.php:1084
+ Symfony\Component\Console\Application->doRunCommand() at /Users/teamsolo/Documents/Dev/IPOS/vendor/symfony/console/Application.php:356
+ Symfony\Component\Console\Application->doRun() at /Users/teamsolo/Documents/Dev/IPOS/vendor/symfony/console/Application.php:195
+ Symfony\Component\Console\Application->run() at /Users/teamsolo/Documents/Dev/IPOS/vendor/pestphp/pest/src/Plugins/Parallel.php:132
+ Pest\Plugins\Parallel->runTestSuiteInParallel() at /Users/teamsolo/Documents/Dev/IPOS/vendor/pestphp/pest/src/Plugins/Parallel.php:102
+ Pest\Plugins\Parallel->handleArguments() at /Users/teamsolo/Documents/Dev/IPOS/vendor/pestphp/pest/src/Plugins/Actions/CallsHandleArguments.php:29
+ Pest\Plugins\Actions\CallsHandleArguments::execute() at /Users/teamsolo/Documents/Dev/IPOS/vendor/pestphp/pest/src/Kernel.php:114
+ Pest\Kernel->handle() at /Users/teamsolo/Documents/Dev/IPOS/vendor/pestphp/pest/bin/pest:207
+ {closure:/Users/teamsolo/Documents/Dev/IPOS/vendor/pestphp/pest/bin/pest:21}() at /Users/teamsolo/Documents/Dev/IPOS/vendor/pestphp/pest/bin/pest:215
+ include() at /Users/teamsolo/Documents/Dev/IPOS/vendor/bin/pest:119
+
+paratest [--functional] [-m|--max-batch-size MAX-BATCH-SIZE] [--no-test-tokens] [--passthru-php PASSTHRU-PHP] [-p|--processes PROCESSES] [--max-processes MAX-PROCESSES] [--runner RUNNER] [--tmp-dir TMP-DIR] [-v|--verbose] [--shard [SHARD]] [--shard-test-distribution SHARD-TEST-DISTRIBUTION] [--bootstrap BOOTSTRAP] [-c|--configuration CONFIGURATION] [--no-configuration] [--cache-directory CACHE-DIRECTORY] [--testsuite TESTSUITE] [--exclude-testsuite EXCLUDE-TESTSUITE] [--group GROUP] [--exclude-group EXCLUDE-GROUP] [--filter FILTER] [--process-isolation] [--strict-coverage] [--strict-global-state] [--disallow-test-output] [--enforce-time-limit] [--default-time-limit DEFAULT-TIME-LIMIT] [--do-not-report-useless-tests] [--stop-on-defect] [--stop-on-error] [--stop-on-failure] [--stop-on-warning] [--stop-on-risky] [--stop-on-deprecation] [--stop-on-notice] [--stop-on-skipped] [--stop-on-incomplete] [--fail-on-empty-test-suite] [--fail-on-warning] [--fail-on-risky] [--fail-on-deprecation] [--fail-on-phpunit-deprecation] [--fail-on-phpunit-notice] [--fail-on-phpunit-warning] [--fail-on-notice] [--fail-on-skipped] [--fail-on-incomplete] [--fail-on-all-issues] [--do-not-fail-on-empty-test-suite] [--do-not-fail-on-warning] [--do-not-fail-on-risky] [--do-not-fail-on-deprecation] [--do-not-fail-on-phpunit-deprecation] [--do-not-fail-on-phpunit-notice] [--do-not-fail-on-phpunit-warning] [--do-not-fail-on-notice] [--do-not-fail-on-skipped] [--do-not-fail-on-incomplete] [--order-by ORDER-BY] [--random-order-seed RANDOM-ORDER-SEED] [--colors [COLORS]] [--no-progress] [--display-incomplete] [--display-skipped] [--display-deprecations] [--display-phpunit-deprecations] [--display-phpunit-notices] [--display-errors] [--display-notices] [--display-warnings] [--display-all-issues] [--reverse-list] [--teamcity] [--testdox] [--testdox-summary] [--log-junit LOG-JUNIT] [--log-teamcity LOG-TEAMCITY] [--testdox-text TESTDOX-TEXT] [--testdox-html TESTDOX-HTML] [--coverage-clover COVERAGE-CLOVER] [--coverage-openclover COVERAGE-OPENCLOVER] [--coverage-cobertura COVERAGE-COBERTURA] [--coverage-crap4j COVERAGE-CRAP4J] [--coverage-html COVERAGE-HTML] [--coverage-php COVERAGE-PHP] [--coverage-text [COVERAGE-TEXT]] [--only-summary-for-coverage-text] [--coverage-xml COVERAGE-XML] [--exclude-source-from-xml-coverage] [--coverage-filter COVERAGE-FILTER] [--no-coverage] [--] [<path>]
+
+{"tool":"pest","raw":["Starting process 1: '/Users/teamsolo/Library/Application Support/Herd/bin/php84' '/Users/teamsolo/Documents/Dev/IPOS/vendor/pestphp/pest/bin/worker.php' '--test-directory=tests' '--status-file' '/var/folders/7p/6kvypdl13mbb27rk11fvct640000gn/T/worker_01_stdout_6a01e178a2a45_status' '--progress-file' '/var/folders/7p/6kvypdl13mbb27rk11fvct640000gn/T/worker_01_stdout_6a01e178a2a45_progress' '--unexpected-output-file' '/var/folders/7p/6kvypdl13mbb27rk11fvct640000gn/T/worker_01_stdout_6a01e178a2a45_unexpected_output' '--test-result-file' '/var/folders/7p/6kvypdl13mbb27rk11fvct640000gn/T/worker_01_stdout_6a01e178a2a45_test_result' '--result-cache-file' '/var/folders/7p/6kvypdl13mbb27rk11fvct640000gn/T/worker_01_stdout_6a01e178a2a45_result_cache' '--phpunit-argv' 'a:7:{i:0;s:18:\"vendor/bin/phpunit\";i:1;s:17:\"--cache-directory\";i:2;s:60:\"/Users/teamsolo/Documents/Dev/IPOS/vendor/pestphp/pest/.temp\";i:3;s:21:\"--do-not-cache-result\";i:4;s:12:\"--no-logging\";i:5;s:13:\"--no-coverage\";i:6;s:11:\"--no-output\";}'","Process 1 executing: /Users/teamsolo/Documents/Dev/IPOS/tests/Feature/POS/PaymentAuditTest.php"]}

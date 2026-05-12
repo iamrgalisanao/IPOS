@@ -1,0 +1,9 @@
+{
+  "last_report_path": "/opt/data/logs/curator/20260510-024809",
+  "last_run_at": null,
+  "last_run_duration_seconds": 0.005752,
+  "last_run_summary": "dry-run auto: no changes; llm: skipped (no candidates)",
+  "last_run_summary_shown_at": null,
+  "paused": false,
+  "run_count": 0
+}
