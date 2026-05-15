@@ -115,6 +115,18 @@ Route::middleware(['auth', 'tenant'])->group(function () {
             ->name('export.csv');
     });
 
+    Route::prefix('sales/history')->name('sales.history.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Sales\SalesHistoryController::class, 'index'])
+            ->middleware('permission:view_sales_history')
+            ->name('index');
+        Route::get('/export', [\App\Http\Controllers\Sales\SalesHistoryController::class, 'export'])
+            ->middleware('permission:export_sales_history')
+            ->name('export');
+        Route::get('/{sale}', [\App\Http\Controllers\Sales\SalesHistoryController::class, 'show'])
+            ->middleware('permission:view_sale_details')
+            ->name('show');
+    });
+
     // Shift Summary Routes
     Route::prefix('shifts')->name('shifts.')->group(function () {
         Route::get('/', [\App\Http\Controllers\Shift\ShiftSummaryController::class, 'index'])

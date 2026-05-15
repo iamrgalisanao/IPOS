@@ -104,6 +104,11 @@ class RbacSeeder
             'ignore_sync_exception' => 'Can ignore sync warnings',
             'view_reconciliation_reports' => 'Can view reconciliation data',
             'export_accounting_reports' => 'Can export accounting data',
+
+            // Sales History
+            'view_sales_history' => 'Can view transactional history index',
+            'view_sale_details' => 'Can view individual transaction details and reversals',
+            'export_sales_history' => 'Can export transactional history as CSV for audit purposes',
         ];
     }
 
@@ -129,7 +134,8 @@ class RbacSeeder
                     'manage_cash_drawer',
                     'view_branch_dashboard', 'manage_branch_inventory',
                     'approve_void', 'approve_refund', 'view_branch_reports',
-                    'close_branch_day', 'view_reports'
+                    'close_branch_day', 'view_reports',
+                    'view_sales_history', 'view_sale_details'
                 ],
             ],
             'Owner/Admin' => [
@@ -145,7 +151,8 @@ class RbacSeeder
                     'view_sync_dashboard', 'retry_failed_sync',
                     'manually_resolve_sync', 'ignore_sync_exception',
                     'view_reconciliation_reports', 'export_accounting_reports',
-                    'view_branch_reports', 'export_reports', 'view_multi_branch_dashboard', 'view_reports'
+                    'view_branch_reports', 'export_reports', 'view_multi_branch_dashboard', 'view_reports',
+                    'view_sales_history', 'view_sale_details', 'export_sales_history'
                 ],
             ],
         ];
