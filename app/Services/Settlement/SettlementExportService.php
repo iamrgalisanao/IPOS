@@ -229,6 +229,10 @@ class SettlementExportService
             throw new AuthorizationException("Unauthorized. Permission required: {$permission}");
         }
 
+        if ($period->tenant_id !== $actor->tenant_id) {
+            throw new AuthorizationException('Tenant scope access denied for this settlement export.');
+        }
+
         // Branch isolation check
         if (!$actor->hasPermission('view_multi_branch_dashboard')) {
             if ($period->branch_id === null) {

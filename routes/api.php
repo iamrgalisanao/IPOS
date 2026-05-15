@@ -37,8 +37,10 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
 
     // Accounting Outbox Inspection
     Route::prefix('accounting')->group(function () {
-        Route::get('/outbox', [\App\Http\Controllers\Accounting\AccountingOutboxController::class, 'index']);
-        Route::get('/outbox/{id}', [\App\Http\Controllers\Accounting\AccountingOutboxController::class, 'show']);
+        Route::get('/outbox', [\App\Http\Controllers\Accounting\AccountingOutboxController::class, 'index'])
+            ->middleware('permission:view_sync_dashboard');
+        Route::get('/outbox/{id}', [\App\Http\Controllers\Accounting\AccountingOutboxController::class, 'show'])
+            ->middleware('permission:view_sync_dashboard');
     });
 });
 

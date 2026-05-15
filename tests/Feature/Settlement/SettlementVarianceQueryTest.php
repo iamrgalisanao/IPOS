@@ -145,7 +145,8 @@ class SettlementVarianceQueryTest extends TestCase
     {
         app(TenantContext::class)->setTenant($this->tenant);
         $period = $this->createPeriod();
-        QuickBooksConnection::create([
+        DB::table('quickbooks_connections')->insert([
+            'id' => (string) Str::uuid(),
             'tenant_id' => $this->tenant->id,
             'realm_id' => '12345',
             'company_name' => 'Tenant QB',

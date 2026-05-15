@@ -7,6 +7,8 @@ This document defines the implementable stories for IPOS, reconciled with the **
 
 Implementation status in this file should follow the validated roadmap when planning-era assumptions conflict with current repository evidence.
 
+Planning note: Epic 14 remains the next feature-delivery candidate in the backlog, but the next approved execution work is still the bounded release-readiness checklist until `G-009` and `R-008` are closed.
+
 ---
 
 ## Epic List
@@ -23,8 +25,8 @@ Implementation status in this file should follow the validated roadmap when plan
 ### Epic 10: Settlement Export and Reporting [Closed]
 ### Epic 11: Operational Pulse, Dashboards & Business Reporting [Closed]
 ### Epic 12: Shift, Cash Drawer & End-of-Day Operations [Closed]
-### Epic 13: Support Assisted Mode & Production Hardening [Planned]
-### Epic 14: BIR Compliance & PH Tax Reporting Scope Lock [Planned]
+### Epic 13: Support Assisted Mode & Production Hardening [Closed]
+### Epic 14: BIR Compliance & PH Tax Reporting Scope Lock [In Progress]
 ### Epic 15: Sales & Transaction History Back Office [Planned]
 ### Epic 16: Inventory Stocktake & Stock Adjustment UI [Planned]
 ### Epic 17: Cashier Accountability & Shift Report Export [Planned]
@@ -91,20 +93,24 @@ Implementation status in this file should follow the validated roadmap when plan
 
 ---
 
-## Epic 13: Support Assisted Mode & Production Hardening [Planned]
+## Epic 13: Support Assisted Mode & Production Hardening [Closed]
 
-### Story 13.1: Support Assisted Mode Scope Lock and Identity Model
+*Validated: 2026-05-13*
+
+### Story 13.1: Support Assisted Mode Scope Lock and Identity Model [Completed]
 **Goal**: Define and implement the controlled support-assisted session foundation, allowing authorized platform support users to enter a tenant-scoped, read-only, masked, audited support mode without bypassing normal tenant isolation.
 
-### Story 13.2: Observability & Centralized Error Tracking
-**Goal**: Integrated monitoring for queue health and API errors.
+### Story 13.2: Observability & Centralized Logging [Completed]
+**Goal**: Add request correlation, structured operational logs, queue traceability, and provider-failure diagnostics without widening write-side behavior.
 
-### Story 13.3: Production Security Hardening
+### Story 13.3: Production Security Hardening [Completed]
 **Goal**: Close remaining production-readiness gaps across security posture, secret handling, deployment safety, and operational guardrails.
 
 ---
 
 ## Back-Office Functionalities Priority Queue
+
+This queue represents the next planned feature epics after the current release-readiness blocker is cleared.
 
 1. Epic 14: BIR Compliance & PH Tax Reporting Scope Lock
 2. Epic 15: Sales & Transaction History Back Office
@@ -119,17 +125,25 @@ Implementation status in this file should follow the validated roadmap when plan
 
 ## Epic 14: BIR Compliance & PH Tax Reporting Scope Lock [Planned]
 
-### Story 14.1: BIR Compliance Scope Lock and PH Tax Matrix
+Scope review status: Epic 14 is still the logical next feature-delivery epic because the repository already has generic tax categories, persisted sale tax snapshots, settlement/export evidence, and role-gated reporting surfaces, but it does not yet have runtime PH compliance data hardening.
+
+Planning status: Story 14.1 scope lock completed on 2026-05-13. Story 14.2 repository groundwork is complete through schema activation, model preparation, and non-persistent tax snapshot service preparation. Story 14.3 is complete as the read-only tax reporting query foundation. Story 14.4 is now in progress with a read-only back-office UI foundation, while export behavior remains unstarted. Execution should still remain bounded by the approved readiness gates.
+
+### Story 14.1: BIR Compliance Scope Lock and PH Tax Matrix [Completed]
 **Goal**: Freeze Phase 1 compliance scope for VAT, non-VAT, exempt, zero-rated, senior/PWD, discount treatment, and reporting boundaries so implementation does not drift into unsupported BIR certification claims.
 
-### Story 14.2: Tax Breakdown Source-of-Truth Hardening
+### Story 14.2: Tax Breakdown Source-of-Truth Hardening [Completed]
 **Goal**: Define and persist line-level and transaction-level tax components required for compliant back-office reporting, refund treatment, and immutable historical reconstruction.
 
-### Story 14.3: Sales Tax Reporting Query Service
+### Story 14.3: Sales Tax Reporting Query Service [Completed]
 **Goal**: Build read-only tax summary queries for daily, branch, and tenant views covering gross sales, VAT sales, exempt sales, zero-rated sales, discounts, and adjustments.
 
-### Story 14.4: BIR Tax Reporting Back-Office UI
+Execution note: Slice A read-only query foundation, Slice B adjustment/reversal/reviewed-period coverage, and Slice C contract hardening/closure completed on 2026-05-13. Story 14.3 is complete and remains bounded to the read-only query-service layer.
+
+### Story 14.4: BIR Tax Reporting Back-Office UI [Completed]
 **Goal**: Provide accountants and owners a filterable reporting surface for PH tax summaries, breakdown cards, and drill-down totals by branch and date range.
+
+Execution note: Slice A read-only UI foundation, Slice B grouped breakdown presentation, and Slice C closure/access hardening checkpoint completed on 2026-05-13 using `view_reports` plus `view_multi_branch_dashboard` scope rules and `SalesTaxReportingQueryService` as the sole summary source of truth.
 
 ### Story 14.5: Compliance Export Package
 **Goal**: Generate CSV/PDF exports for tax summaries and supporting schedules with explicit audit metadata, filter criteria, and redaction-safe headers.

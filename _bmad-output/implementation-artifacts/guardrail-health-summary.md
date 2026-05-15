@@ -1,22 +1,23 @@
-# Guardrail Health Summary - 2026-05-12 (Post-Epic 11)
+# Guardrail Health Summary - 2026-05-15 (Post-Epic 14)
 
 ## Status: HEALTHY
-The IPOS project maintains a robust read-only boundary between operational activity and financial settlement.
+The IPOS project maintains a robust read-only boundary for BIR tax reporting and compliance exports.
 
 ### Ground Truth (Sync-Discovery)
-- **Settlement Layer**: Fully implemented (Review, Approve, Lock, Reopen).
-- **Expansion Layer (Epic 10)**: Completed (CSV/PDF Exports, Reporting Rollups).
-- **Operational Pulse (Epic 11)**: Completed (Read-only Dashboards, Asia/Manila windowing).
-- **Regression Profile**: 587 tests / 2489 assertions (**100% PASS**).
+- **Tax Reporting (Epic 14)**: Completed (Breakdown Source, Query Service, Back-Office UI, CSV Export Baseline).
+- **Export Package**: Implemented and hardened with redaction and formula protection.
+- **Permission Gating**: Verified (`view_reports` required, branch-scope enforced).
+- **Regression Profile**: 764 tests / 3688 assertions (**100% PASS**).
+- **Risky Baseline**: Unchanged at 1 risky.
 
 ### Governance Alignment
-- **Roadmap**: UPDATED (Epics 10/11 closed, Epic 12 initialized).
-- **Task Ledger**: UPDATED (G-012/G-014 completed, G-015 in progress).
-- **Isolation**: Verified (Branch Manager strictly isolated from unauthorized branch data).
+- **Roadmap**: UPDATED (Epic 14 stories 14.1-14.4 closed, 14.5 CSV baseline closed).
+- **Task Ledger**: UPDATED (Epic 14 status synchronized).
+- **Isolation**: Verified (CSV downloads strictly scoped to authorized branches).
 
 ### Active Risks
 - **Credential Rotation (G-009)**: Remains OPEN. Critical path before production deployment.
-- **Credential Exposure**: Historically committed tokens still require active rotation.
+- **PDF Deferral**: Story 14.5 is "In Progress" pending future PDF rendering work.
 
 ---
 **Verified by Antigravity Guardrail Audit**

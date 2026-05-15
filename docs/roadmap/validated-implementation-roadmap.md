@@ -21,7 +21,8 @@ This document represents the **Actual Execution Truth** of the IPOS project. It 
 | **Epic 10** | Settlement Export and Reporting | **[Closed]** |
 | **Epic 11** | Operational Pulse, Dashboards & Business Reporting | **[Closed]** |
 | **Epic 12** | Shift, Cash Drawer & End-of-Day Operations | **[Closed]** |
-| **Epic 13** | Support Assisted Mode & Production Hardening | [Planned] |
+| **Epic 13** | Support Assisted Mode & Production Hardening | **[Closed]** |
+| **Epic 14** | BIR Tax Reporting & Compliance Exports | **[In Progress]** |
 
 *\*Epic 3 catalog core is closed; advanced stock UX/CDN are pending enhancements.*
 
@@ -139,11 +140,25 @@ This document represents the **Actual Execution Truth** of the IPOS project. It 
 - 12.7 Manager Review & Approval Flow
 - 12.8 Shift Summary UI & Dashboard Integration
 
-### Epic 13: Support Assisted Mode & Production Hardening [Planned]
-- 13.1 Support Assisted Mode Scope Lock and Identity Model
-- 13.2 Observability & Centralized Logging
-- 13.3 Production Security Hardening
+### Epic 13: Support Assisted Mode & Production Hardening [Closed]
+- 13.1 Support Assisted Mode Scope Lock and Identity Model [Implemented]
+- 13.2 Observability & Centralized Logging [Implemented]
+- 13.3 Production Security Hardening [Implemented]
 
 Implementation note: Story 13.1 is still defined as a six-slice contract. A support-safe audit review endpoint was accepted later as a narrow extension and does not create a mandatory Slice 7 unless the roadmap is explicitly revised.
 
-Implementation plan: [epic-13-implementation-plan.md](./epic-13-implementation-plan.md)
+Current execution note: Story 13.3 completed on 2026-05-13 after the full Story 13.3 security suite passed and the full backend regression remained green. Epic 13 is now closed.
+
+- Story 14.4 BIR Tax Reporting Back-Office UI [Implemented]
+- Story 14.5 Compliance Export Package [In Progress]
+
+Implementation note: Story 14.1 through 14.4 are complete. Story 14.5 CSV export baseline is complete (Slice D closure). Deferring PDF generation for now.
+
+## Epic 14: BIR Tax Reporting & Compliance Exports [In Progress]
+- 14.1 BIR Compliance Scope Lock and PH Tax Matrix [Implemented]
+- 14.2 Tax Breakdown Source-of-Truth Hardening [Implemented]
+- 14.3 Sales Tax Reporting Query Service [Implemented]
+- 14.4 BIR Tax Reporting Back-Office UI [Implemented]
+- 14.5 Compliance Export Package [In Progress]
+
+Implementation plan: [epic-14-implementation-plan.md](./epic-14-implementation-plan.md)

@@ -201,7 +201,8 @@ class QuickBooksConnectionService
     {
         $sanitized = preg_replace('/Authorization\s*:\s*Bearer\s+[^\s"]+/i', 'Authorization: [redacted]', $message);
         $sanitized = preg_replace('/Bearer\s+[A-Za-z0-9\-\._~\+\/]+=*/i', '[redacted token]', $sanitized ?? $message);
-        $sanitized = preg_replace('/(access_token|refresh_token|client_secret|client_id|api[_-]?key|private[_-]?key)\s*[=:]\s*[^\s,;]+/i', '$1=[redacted]', $sanitized ?? $message);
+        $sanitized = preg_replace('/(access_token|refresh_token|client_secret|client_id|api[_-]?key|app[_-]?key|private[_-]?key|db[_-]?password|mail[_-]?password|queue[_-]?password|cache[_-]?password|password)\s*[=:]\s*[^\s,;]+/i', '$1=[redacted]', $sanitized ?? $message);
+        $sanitized = preg_replace('/("(?:access_token|refresh_token|client_secret|client_id|api[_-]?key|app[_-]?key|private[_-]?key|db[_-]?password|mail[_-]?password|queue[_-]?password|cache[_-]?password|password)"\s*:\s*")[^"]+(")/i', '$1[redacted]$2', $sanitized ?? $message);
 
         return $sanitized ?? $message;
     }

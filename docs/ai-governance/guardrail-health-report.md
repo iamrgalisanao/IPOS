@@ -1,32 +1,36 @@
-# Guardrail Health Report - 2026-05-12
+# Guardrail Health Report - 2026-05-15 (Post-Epic 14 CSV Baseline)
 
 This report assesses current guardrail health for the IPOS repository using the documented `guardrail-audit` workflow and the repo-defined `sync-discovery` skill.
 
 ## Guardrail Health Summary
 
-- Current stage: Testing/Validation and Code Review
-- Overall status: Healthy
+- Current stage: Epic 14 Closure Review (CSV Baseline Complete)
+- Overall status: HEALTHY
+- Compliance: Full adherence to read-only tax reporting boundaries.
 
 ## Sync-Discovery Ground Truth
 
-- The repository contains a concrete settlement surface, including `SettlementPeriodService`, `SettlementSummaryQueryService`, and related tests.
-- The settlement workflow (review, approval, lock, reopen) is fully implemented and validated.
-- **Epic 11 (Operational Pulse)**: Successfully implemented the read-only dashboard foundation with Asia/Manila windowing and branch-scoped isolation.
-- **Epic 12 (Shift Operations)**: Successfully implemented shift/drawer accountability, blind closing, manager approval flow, and dashboard integration with strict RBAC enforcement.
-- Validation evidence: Latest Pest run passed with `659` tests and `2776` assertions.
-- The roadmap has been reconciled to reflect Epic 11 and 12 completions.
+- **Epic 14 (Tax Reporting)**: Slices 14.1 through 14.5 (CSV Baseline) are fully implemented and validated.
+- **Reporting Layer**: `SalesTaxReportingQueryService` established as the immutable source of truth for PH/BIR tax summaries.
+- **Export Layer**: `ComplianceCsvExportService` provides safe, permission-gated CSV downloads with formula injection protection and secret redaction.
+- **Validation Evidence**: 
+    - Focused Export Suite: 15 passed / 76 assertions.
+    - Epic 14 Focused Suite: 44 passed / 431 assertions.
+    - Full Backend Regression: 764 passed / 3688 assertions.
+    - Frontend Build: Passed.
+- **Risky Baseline**: Unchanged at 1 risky.
 
 ## Guardrails Working Well
 
-- **Tool Governance**: `docker-compose.yml` updated to include `~/.hermes/skills` volume mapping, enabling the Hermes agent to leverage global skills (`audit-guardrail`, `sync-discovery`) from `/opt/hermes/global_skills`.
-- **Security Hardening**: Hardcoded tokens removed from configuration files.
-- **Context Integrity**: Task ledger and focus rules are aligned with current implementation tasks.
-- **Validation Consistency**: All settlement-related tests and accounting traces are passing.
+- **Source of Truth Integrity**: Tax reports strictly consume existing settlement/sale data; no recomputation or overrides allowed in the reporting layer.
+- **Tenant/Branch Isolation**: Export routes and UI actions strictly respect user branch assignments and tenant boundaries.
+- **Data Safety**: Sensitive internal tokens and provider payloads are redacted from all exports.
+- **Regression Discipline**: System integrity maintained throughout the Epic 14 implementation.
 
 ## Guardrails Weakened or Missing
 
-- **Credential Rotation**: Task G-009 remains open. Historical exposure of credentials still requires active rotation before release.
-- **Specific Ledger Gaps**: While the alignment note is effective, a formal `assumptions-register.md` as suggested by the skill is not yet standalone.
+- **Credential Rotation (G-009)**: Remains OPEN. Historical exposure of credentials still requires active rotation before final release.
+- **PDF Export Deferral**: Story 14.5 remains "In Progress" as the PDF generation slice is deferred. This must be tracked to prevent scope drift.
 
 ## Failure Mode Risk Check
 
@@ -40,12 +44,11 @@ This report assesses current guardrail health for the IPOS repository using the 
 ## Required Corrections Before Next Step
 
 - Complete G-009 (Rotate credentials).
-- Maintain the task ledger as work progresses into the next epic.
+- Perform a formal "Release Readiness" audit if the project proceeds to production deployment before PDF work.
 
 ## Recommendation
 
-Proceed
+Proceed to Epic 14 final closure review or next planned governance cycle.
 
 ---
-Signed: Global Guardrail Audit
-
+Signed: Sync-Discovery + Antigravity Guardrail Audit

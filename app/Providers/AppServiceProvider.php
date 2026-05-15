@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Services\Security\ProductionConfigurationGuard;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
 
@@ -27,6 +28,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        app(ProductionConfigurationGuard::class)->assertSafeConfiguration();
+
         Vite::prefetch(concurrency: 3);
     }
 }

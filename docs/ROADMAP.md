@@ -1,5 +1,8 @@
 # Development Roadmap: IPOS (Zero-Loss Cart & Checkout)
 
+> Status note: This document is a legacy planning roadmap and is no longer the execution source of truth.
+> Use [docs/roadmap/validated-implementation-roadmap.md](./roadmap/validated-implementation-roadmap.md) for current approved project state.
+
 This roadmap outlines the path to building the robust, zero-loss Point of Sale system for the IPOS project.
 
 ---
@@ -94,8 +97,25 @@ Epic 9 has completed the foundational integration and control surfaces. The acco
 
 ---
 
-## Epic 12: Shift, Cash Drawer, and End-of-Day Operations [In Progress]
+## Epic 12: Shift, Cash Drawer, and End-of-Day Operations [Completed]
 **Goal**: Implement operational shift control and cash drawer reconciliation on top of the validated POS and settlement foundation.
 
-### [Story 12.1] Shift and Cash Drawer Scope Lock [In Progress]
+### [Story 12.1] Shift and Cash Drawer Scope Lock [Completed]
+
+---
+
+## Epic 13: Support Assisted Mode, Observability, and Production Hardening [Completed]
+**Goal**: Add support-safe diagnostics, production observability, and hardened runtime/security defaults before release-readiness decisions.
+
+### [Story 13.1] Support Assisted Mode Scope Lock and Identity Model [Completed]
+### [Story 13.2] Observability and Centralized Logging [Completed]
+### [Story 13.3] Production Security Hardening [Completed]
+
+---
+
+## Post-Epic 13 State
+
+No Epic 14+ implementation story is approved in this legacy roadmap.
+
+The next approved work is release-readiness and governance closure, centered on credential rotation and go-live validation. See [docs/ai-governance/release-readiness-checklist.md](./ai-governance/release-readiness-checklist.md).
 

@@ -1,20 +1,22 @@
 # Task Ledger
 
-Last updated: 2026-05-12
+Last updated: 2026-05-13
 
 ## Active Governance Tasks
  
  | ID | Task | Status | Evidence | Next Action |
  | :--- | :--- | :--- | :--- | :--- |
- | G-002 | Maintain formal guardrail audit outputs | In Progress | `docs/ai-governance/guardrail-health-report.md`, `_bmad-output/implementation-artifacts/guardrail-health-summary.md` | Refresh after major planning, implementation, or review events |
- | G-009 | Rotate previously committed MCP and Hermes credentials | Open | `_bmad-output/implementation-artifacts/security-validation-summary.md`, `.vscode/mcp.json`, `docker-compose.yml` | Replace any values that were historically committed and re-enter them through secure prompts or environment |
- | G-014 | Initialize Epic 11: Operational Pulse Dashboard planning | Completed | `story_11.1_operational_pulse_scope_lock.md` | |
- | G-015 | Initialize Epic 12: Shift Operations planning | In Progress | `story_12.1_shift_and_cash_drawer_scope_lock.md` | Obtain user approval for Story 12.1 scope lock |
+ | G-002 | Maintain formal guardrail audit outputs | In Progress | `docs/ai-governance/guardrail-health-report.md`, `_bmad-output/implementation-artifacts/guardrail-health-summary.md` | Refresh after Epic 14 closure |
+ | G-009 | Rotate previously committed MCP and Hermes credentials | Open | `_bmad-output/implementation-artifacts/security-validation-summary.md`, `.vscode/mcp.json`, `docker-compose.yml`, `docs/ai-governance/release-readiness-checklist.md` | Replace any historically committed values, verify new injection path, and record rotation completion before release |
+ | G-017 | Close release-readiness blockers after Epic 13/14 | In Progress | `docs/roadmap/validated-implementation-roadmap.md`, `docs/ai-governance/release-readiness-checklist.md`, `docs/ai-governance/risk-register.md` | Complete G-009, confirm go-live checklist, and prepare release decision artifact |
 
  ## Completed Governance Tasks
 
  | ID | Task | Completed On | Evidence |
  | :--- | :--- | :--- | :--- |
+ | G-018 | Epic 14 Closure Review and Roadmap Reconciliation | 2026-05-15 | `walkthrough.md`, `docs/roadmap/validated-implementation-roadmap.md` |
+ | G-015 | Initialize Epic 12: Shift Operations planning | 2026-05-13 | `story_12.1_shift_and_cash_drawer_scope_lock.md`, `docs/roadmap/validated-implementation-roadmap.md` |
+ | G-014 | Initialize Epic 11: Operational Pulse Dashboard planning | 2026-05-13 | `story_11.1_operational_pulse_scope_lock.md`, `docs/roadmap/validated-implementation-roadmap.md` |
  | G-012 | Initialize Epic 10: Settlement Expansion planning | 2026-05-12 | `story_10.1_settlement_export_and_report_scope_lock.md` |
  | G-013 | Epic 9 Closure Review and Roadmap Reconciliation | 2026-05-12 | `epic_9_closure_report.md`, `docs/ROADMAP.md` |
  | G-016 | Epic 11 Closure Review and Roadmap Reconciliation | 2026-05-12 | `walkthrough.md`, `docs/ROADMAP.md` |

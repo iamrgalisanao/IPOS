@@ -106,6 +106,15 @@ Route::middleware(['auth', 'tenant'])->group(function () {
             ->name('export.sync-status.csv');
     });
 
+    Route::prefix('reports/tax')->name('reports.tax.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\TaxReportingController::class, 'index'])
+            ->middleware('permission:view_reports')
+            ->name('index');
+        Route::get('/export/csv', [\App\Http\Controllers\TaxReportingController::class, 'exportCsv'])
+            ->middleware('permission:view_reports')
+            ->name('export.csv');
+    });
+
     // Shift Summary Routes
     Route::prefix('shifts')->name('shifts.')->group(function () {
         Route::get('/', [\App\Http\Controllers\Shift\ShiftSummaryController::class, 'index'])

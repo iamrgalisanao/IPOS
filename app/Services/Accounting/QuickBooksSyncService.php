@@ -203,8 +203,8 @@ class QuickBooksSyncService
 
         $text = preg_replace('/Authorization\s*:\s*Bearer\s+[^\s"]+/i', 'Authorization: [redacted]', $text) ?? $text;
         $text = preg_replace('/Bearer\s+[A-Za-z0-9\-\._~\+\/]+=*/i', '[redacted token]', $text) ?? $text;
-        $text = preg_replace('/(access_token|refresh_token|client_secret)\s*=\s*[^\s,;]+/i', '$1=[redacted]', $text) ?? $text;
-        $text = preg_replace('/("(?:access_token|refresh_token|client_secret)"\s*:\s*")[^"]+(")/i', '$1[redacted]$2', $text) ?? $text;
+        $text = preg_replace('/(access_token|refresh_token|client_secret|client_id|api[_-]?key|app[_-]?key|private[_-]?key|db[_-]?password|mail[_-]?password|queue[_-]?password|cache[_-]?password|password)\s*[=:]\s*[^\s,;]+/i', '$1=[redacted]', $text) ?? $text;
+        $text = preg_replace('/("(?:access_token|refresh_token|client_secret|client_id|api[_-]?key|app[_-]?key|private[_-]?key|db[_-]?password|mail[_-]?password|queue[_-]?password|cache[_-]?password|password)"\s*:\s*")[^"]+(")/i', '$1[redacted]$2', $text) ?? $text;
         $text = preg_replace('/provider payload[^\n\r]*/i', '[redacted provider detail]', $text) ?? $text;
 
         return mb_substr($text, 0, 900);
