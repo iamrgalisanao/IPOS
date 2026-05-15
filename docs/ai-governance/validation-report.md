@@ -1,0 +1,38 @@
+# Validation Report: Epic 15 — Sales & Transaction History (Slice D)
+
+## 1. Objective
+Validate the secure implementation of the Sales & Transaction History CSV export, ensuring isolation, auditability, and data safety.
+
+## 2. Validation Evidence
+
+### 2.1 Focused Sales History Tests
+- **Suite**: `tests/Feature/Sales/SalesHistoryExportTest.php`, `SalesHistoryControllerTest.php`, `SalesHistoryQueryTest.php`
+- **Results**: 15 tests / 57 assertions PASSED.
+- **Coverage**:
+    - [x] Authorized user can export CSV.
+    - [x] Unauthorized user (no permission) is blocked (403).
+    - [x] Unauthenticated user is blocked (Middleware).
+    - [x] Tenant A cannot export Tenant B transactions.
+    - [x] Branch Manager can only export assigned branch records.
+    - [x] CSV totals match UI Index for same filters.
+    - [x] Formula injection values (=, +, -, @) are escaped with '.
+    - [x] Internal secrets/payloads are redacted/excluded.
+    - [x] Audit event `transaction_history_exported` recorded with metadata.
+
+### 2.2 Security Regression Suite
+- **Suite**: `tests/Feature/Security`
+- **Results**: 21 tests / 112 assertions PASSED.
+
+## 3. Findings
+
+### 3.1 Code Review Findings
+- **Source of Truth**: `SalesHistoryQueryService::getBuilder()` centralizes all filtering and isolation logic.
+- **Mutation Check**: Verified that no mutation operations exist in the export path.
+- **Audit Integrity**: Audit logs contain filter metadata but do NOT store raw CSV content or secrets.
+
+### 3.2 Security Review Findings
+- **Least Privilege**: `export_sales_history` permission is separate from `view_sales_history`, allowing granular control.
+- **Injection Safety**: CSV sanitization follows repo-standard patterns from Epic 14.
+
+## 4. Conclusion
+Slice D is technically validated and safe for closure.

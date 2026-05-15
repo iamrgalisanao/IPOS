@@ -7,8 +7,9 @@ Last updated: 2026-05-13
  | ID | Task | Status | Evidence | Next Action |
  | :--- | :--- | :--- | :--- | :--- |
  | G-002 | Maintain formal guardrail audit outputs | In Progress | `docs/ai-governance/guardrail-health-report.md`, `_bmad-output/implementation-artifacts/guardrail-health-summary.md` | Refresh after Epic 14 closure |
- | G-009 | Rotate previously committed MCP and Hermes credentials | Open | `_bmad-output/implementation-artifacts/security-validation-summary.md`, `.vscode/mcp.json`, `docker-compose.yml`, `docs/ai-governance/release-readiness-checklist.md` | Replace any historically committed values, verify new injection path, and record rotation completion before release |
- | G-017 | Close release-readiness blockers after Epic 13/14 | In Progress | `docs/roadmap/validated-implementation-roadmap.md`, `docs/ai-governance/release-readiness-checklist.md`, `docs/ai-governance/risk-register.md` | Complete G-009, confirm go-live checklist, and prepare release decision artifact |
+ | G-009 | Rotate previously committed MCP and Hermes credentials | Partially Resolved | `docs/ai-governance/g-009-credential-reinjection-plan.md`, `app/Console/Commands/Security/InjectCredentialsCommand.php`, `app/Services/Security/CredentialManagementService.php` | Phase B CLI Tool implemented. Local operational workflow verified via mail_provider trial. Perform actual reinjection/validation for target environment before final release |
+ | G-017 | Close release-readiness blockers after Epic 13/14 | Resolved | `docs/roadmap/validated-implementation-roadmap.md`, `docs/ai-governance/release-readiness-checklist.md`, `docs/ai-governance/release-decision.md` | Hand off to human owner for production reinjection and deployment sign-off |
+ | G-019 | Execute Epic 15: Sales & Transaction History | In Progress | `epic-15-implementation-plan.md`, `SalesHistoryQueryService.php`, `SalesHistoryController.php`, `SalesHistoryQueryTest.php` | Slice A: Completed — Validated; Slice B: Completed Early — Accepted as Baseline; Slice C: Completed Early — Accepted as Baseline; Slice D: Completed — Validated. **Governance Note**: Scope drift and Slice D closure review successfully completed. |
 
  ## Completed Governance Tasks
 

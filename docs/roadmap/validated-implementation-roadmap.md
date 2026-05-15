@@ -22,7 +22,8 @@ This document represents the **Actual Execution Truth** of the IPOS project. It 
 | **Epic 11** | Operational Pulse, Dashboards & Business Reporting | **[Closed]** |
 | **Epic 12** | Shift, Cash Drawer & End-of-Day Operations | **[Closed]** |
 | **Epic 13** | Support Assisted Mode & Production Hardening | **[Closed]** |
-| **Epic 14** | BIR Tax Reporting & Compliance Exports | **[In Progress]** |
+| **Epic 14** | BIR Tax Reporting & Compliance Exports | **[Closed]** |
+| **Epic 15** | Sales & Transaction History Back Office | **In Progress** |
 
 *\*Epic 3 catalog core is closed; advanced stock UX/CDN are pending enhancements.*
 
@@ -149,16 +150,22 @@ Implementation note: Story 13.1 is still defined as a six-slice contract. A supp
 
 Current execution note: Story 13.3 completed on 2026-05-13 after the full Story 13.3 security suite passed and the full backend regression remained green. Epic 13 is now closed.
 
-- Story 14.4 BIR Tax Reporting Back-Office UI [Implemented]
-- Story 14.5 Compliance Export Package [In Progress]
-
-Implementation note: Story 14.1 through 14.4 are complete. Story 14.5 CSV export baseline is complete (Slice D closure). Deferring PDF generation for now.
-
-## Epic 14: BIR Tax Reporting & Compliance Exports [In Progress]
+## Epic 14: BIR Tax Reporting & Compliance Exports [Closed]
+*Validated: May 2026*
 - 14.1 BIR Compliance Scope Lock and PH Tax Matrix [Implemented]
 - 14.2 Tax Breakdown Source-of-Truth Hardening [Implemented]
 - 14.3 Sales Tax Reporting Query Service [Implemented]
 - 14.4 BIR Tax Reporting Back-Office UI [Implemented]
-- 14.5 Compliance Export Package [In Progress]
+- 14.5 Compliance Export Package [Implemented]
+
+Implementation note: Story 14.5 CSV export baseline is complete. PDF generation and print-ready templates are deferred per user instruction.
 
 Implementation plan: [epic-14-implementation-plan.md](./epic-14-implementation-plan.md)
+
+## Epic 15: Sales & Transaction History Back Office [In Progress]
+- 15.1 Sales History Scope Lock and Access Rules [Implemented]
+- 15.2 Transaction History Query Foundation [Implemented]
+- 15.3 Sales & Transaction History Index UI [Implemented - Accepted Early]
+- 15.4 Transaction Detail Timeline and Financial Breakdown [Implemented - Accepted Early]
+- 15.5 Transaction Export and Audit Trail [Implemented - Validated]
+- 15.6 Receipt Reprint and Evidence Linking [Implemented - Accepted Early]

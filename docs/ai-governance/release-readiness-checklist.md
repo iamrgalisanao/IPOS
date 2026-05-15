@@ -69,9 +69,30 @@ Exit condition:
 
 - no open high-severity release blocker remains in governance records.
 
-## Release Decision Rule
+## G-009 Credential Reinjection Status
 
-Do not approve release while `G-009` or `R-008` remains open.
+The credential rotation blocker has been reduced from a technical blocker to an environment deployment activity.
+
+Status: **Partially Resolved — Technical readiness complete; local operational workflow verified**
+
+**Completed:**
+- Secret hygiene audit completed (Phase 1).
+- No tracked live secret files found.
+- CLI credential reinjection tool implemented (`php artisan credentials:inject`).
+- Elevated permission model implemented (`security.credentials.manage`).
+- Metadata-only audit logging implemented.
+- Local `mail_provider` reinjection trial completed.
+- Security regression passed after reinjection: 21/21 tests.
+- `.env` remained git-ignored and untracked.
+
+**Deferred:**
+- `APP_KEY` rotation due to high encrypted-data/session impact.
+- Admin UI credential management (Phase C).
+- Staging/Production reinjection, to be performed by the human owner during deployment.
+
+**Release Impact:**
+- G-009 is technically ready.
+- **Release Condition:** Final production release still requires HITL reinjection and validation for the target environment by the human owner.
 
 ## Recommended Next Action
 
