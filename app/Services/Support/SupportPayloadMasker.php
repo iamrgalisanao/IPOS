@@ -17,7 +17,9 @@ class SupportPayloadMasker
         'accesstoken',
         'refreshtoken',
         'clientsecret',
+        'clientid',
         'apikey',
+        'appkey',
         'privatekey',
         'authorization',
         'bearer',
@@ -25,6 +27,8 @@ class SupportPayloadMasker
         'password',
         'secret',
     ];
+
+    protected const STRING_SECRET_PATTERN = '/authorization\s*:\s*bearer\s+\S+|\bbearer\s+[A-Za-z0-9\-\._~\+\/]+=*|(?:access_token|refresh_token|client_secret|client_id|api[_-]?key|app[_-]?key|private[_-]?key|db[_-]?password|mail[_-]?password|queue[_-]?password|cache[_-]?password|password)\s*[:=]\s*[^\s,;\n\r]+|"(?:access_token|refresh_token|client_secret|client_id|api[_-]?key|app[_-]?key|private[_-]?key|db[_-]?password|mail[_-]?password|queue[_-]?password|cache[_-]?password|password)"\s*:\s*"[^"]+"/i';
 
     protected const PAYLOAD_KEYS = [
         'rawoauthresponse',
@@ -86,7 +90,7 @@ class SupportPayloadMasker
             return $masked;
         }
 
-        if (is_string($value) && $this->containsAuthorizationLikeSecret($value)) {
+        if (is_string($value) && $this->containsSensitiveString($value)) {
             return self::REDACTED;
         }
 
@@ -141,8 +145,8 @@ class SupportPayloadMasker
         return false;
     }
 
-    protected function containsAuthorizationLikeSecret(string $value): bool
+    protected function containsSensitiveString(string $value): bool
     {
-        return (bool) preg_match('/authorization\s*:\s*bearer\s+\S+|\bbearer\s+[A-Za-z0-9\-\._~\+\/]+=*/i', $value);
+        return (bool) preg_match(self::STRING_SECRET_PATTERN, $value);
     }
 }
