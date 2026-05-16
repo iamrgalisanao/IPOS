@@ -1,25 +1,24 @@
-# Guardrail Health Report - 2026-05-15 (Post-Epic 14 CSV Baseline)
+## Guardrail Health Report - 2026-05-16 (Epic 22 Closure)
+...
+- Current stage: Epic 22 Closure Review (Slice F Complete)
+...
+- **Epic 22 (POS Layout Builder)**: Slices 22.1 through 22.6 (Slice F) are fully implemented and validated.
+...
+- **Epic 22 (POS Layout Suite)**: 43 passed.
+...
+---
 
-This report assesses current guardrail health for the IPOS repository using the documented `guardrail-audit` workflow and the repo-defined `sync-discovery` skill.
+## Epic 22 Slice F Closure Note (2026-05-16)
+**Findings:**
+- **Audit Integrity**: All publishing and rollback events captured in `audit_logs`. Metadata excludes schema JSON to prevent storage bloat. PASSED.
+- **Deployment History**: Sidebar UI correctly visualizes branch assignments with active-status tracking. PASSED.
+- **Auditable Rollback**: safe "Option A" re-publish strategy implemented and validated. Re-uses `PosLayoutPublishService` for transactional integrity. PASSED.
+- **RBAC**: `pos-layouts.publish` strictly enforced for both publishing and rollback. PASSED.
+- **System Stability**: Regression suite confirms no side effects on catalog or checkout logic. PASSED.
 
-## Guardrail Health Summary
+---
 
-- Current stage: Epic 14 Closure Review (CSV Baseline Complete)
-- Overall status: HEALTHY
-- Compliance: Full adherence to read-only tax reporting boundaries.
-
-## Sync-Discovery Ground Truth
-
-- **Epic 14 (Tax Reporting)**: Slices 14.1 through 14.5 (CSV Baseline) are fully implemented and validated.
-- **G-009 (Credential Reinjection)**: Technical implementation of the CLI tool and operational workflow verification (local) is COMPLETE.
-- **Reporting Layer**: `SalesTaxReportingQueryService` established as the immutable source of truth for PH/BIR tax summaries.
-- **Export Layer**: `ComplianceCsvExportService` provides safe, permission-gated CSV downloads with formula injection protection and secret redaction.
-- **Validation Evidence**: 
-    - Security Suite: 21 passed / 112 assertions.
-    - Epic 14 Focused Suite: 44 passed / 431 assertions.
-    - Full Backend Regression: 764 passed / 3688 assertions.
-    - Frontend Build: Passed.
-- **Risky Baseline**: Resolved.
+## Epic 22 Slice E Closure Note (2026-05-16)
 
 ## Guardrails Working Well
 

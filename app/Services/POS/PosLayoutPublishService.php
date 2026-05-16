@@ -26,8 +26,8 @@ class PosLayoutPublishService
         $activeFrom = $activeFrom ?? now();
 
         // 1. Validation
-        if ($layout->status !== PosLayout::STATUS_DRAFT) {
-            throw new \Exception("Only draft layouts can be published.");
+        if (!in_array($layout->status, [PosLayout::STATUS_DRAFT, PosLayout::STATUS_PUBLISHED])) {
+            throw new \Exception("Only draft or published layouts can be deployed.");
         }
 
         if (!PosLayoutSchemaValidator::validate($layout->schema)) {
@@ -51,23 +51,62 @@ class PosLayoutPublishService
         DB::transaction(function () use ($layout, $branches, $publisher, $activeFrom) {
             foreach ($branches as $branch) {
                 // Deactivate current active layouts for this branch
-                DB::table('branch_pos_layout')
+                $deactivatedLayouts = DB::table('branch_pos_layout')
                     ->where('branch_id', $branch->id)
                     ->where('is_active', true)
-                    ->update([
-                        'is_active' => false,
-                        'active_until' => $activeFrom,
-                        'updated_at' => now(),
+                    ->get();
+
+                foreach ($deactivatedLayouts as $deactivated) {
+                    DB::table('branch_pos_layout')
+                        ->where('id', $deactivated->id)
+                        ->update([
+                            'is_active' => false,
+                            'active_until' => $activeFrom,
+                            'updated_at' => now(),
+                        ]);
+
+                    // Log branch layout replacement
+                    \App\Models\AuditLog::create([
+                        'tenant_id' => $layout->tenant_id,
+                        'branch_id' => $branch->id,
+                        'actor_user_id' => $publisher->id,
+                        'actor_type' => 'user',
+                        'action' => 'pos_layout_branch_replaced',
+                        'auditable_type' => PosLayout::class,
+                        'auditable_id' => $layout->id,
+                        'metadata' => [
+                            'deactivated_layout_id' => $deactivated->pos_layout_id,
+                            'branch_id' => $branch->id,
+                            'active_from' => $activeFrom->toDateTimeString(),
+                        ],
                     ]);
+                }
 
                 // Attach new active layout
+                $pivotId = Str::uuid();
                 $layout->branches()->attach($branch->id, [
-                    'id' => Str::uuid(),
+                    'id' => $pivotId,
                     'tenant_id' => $layout->tenant_id,
                     'is_active' => true,
                     'active_from' => $activeFrom,
                     'published_by' => $publisher->id,
                     'published_at' => now(),
+                ]);
+
+                // Log branch assignment
+                \App\Models\AuditLog::create([
+                    'tenant_id' => $layout->tenant_id,
+                    'branch_id' => $branch->id,
+                    'actor_user_id' => $publisher->id,
+                    'actor_type' => 'user',
+                    'action' => 'pos_layout_branch_assigned',
+                    'auditable_type' => PosLayout::class,
+                    'auditable_id' => $layout->id,
+                    'metadata' => [
+                        'branch_id' => $branch->id,
+                        'layout_version' => $layout->version,
+                        'active_from' => $activeFrom->toDateTimeString(),
+                    ],
                 ]);
             }
 
@@ -75,6 +114,22 @@ class PosLayoutPublishService
             $layout->update([
                 'status' => PosLayout::STATUS_PUBLISHED,
                 'updated_by' => $publisher->id,
+            ]);
+
+            // Log layout published event
+            \App\Models\AuditLog::create([
+                'tenant_id' => $layout->tenant_id,
+                'actor_user_id' => $publisher->id,
+                'actor_type' => 'user',
+                'action' => 'pos_layout_published',
+                'auditable_type' => PosLayout::class,
+                'auditable_id' => $layout->id,
+                'metadata' => [
+                    'layout_id' => $layout->id,
+                    'layout_version' => $layout->version,
+                    'layout_name' => $layout->name,
+                    'branch_count' => count($branches),
+                ],
             ]);
         });
     }

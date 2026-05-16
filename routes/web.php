@@ -216,8 +216,11 @@ Route::middleware(['auth', 'tenant'])->group(function () {
             ->middleware('permission:pos-layouts.manage')
             ->name('archive');
         Route::post('/{posLayout}/publish', [\App\Http\Controllers\Admin\PosLayoutController::class, 'publish'])
-            ->middleware('permission:pos-layouts.manage')
+            ->middleware('permission:pos-layouts.publish')
             ->name('publish');
+        Route::post('/{posLayout}/rollback', [\App\Http\Controllers\Admin\PosLayoutController::class, 'rollback'])
+            ->middleware('permission:pos-layouts.publish')
+            ->name('rollback');
     });
 });
 

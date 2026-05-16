@@ -10,13 +10,17 @@ import {
     Edit3, 
     AlertCircle,
     CheckCircle2,
-    Monitor
+    Monitor,
+    History,
+    RotateCcw,
+    Calendar,
+    User
 } from 'lucide-react';
 import TileRegistry from '@/Components/POS/TileRegistry';
 import LayoutEditorGrid from '@/Components/POS/LayoutEditorGrid';
 import ProductGrid from '@/Pages/POS/Components/ProductGrid';
 
-export default function Show({ layout, registry }) {
+export default function Show({ layout, registry, history }) {
     const [isDesignMode, setIsDesignMode] = useState(layout.status === 'draft');
     const [activeSelection, setActiveSelection] = useState(null);
     const [successMessage, setSuccessMessage] = useState('');
@@ -35,6 +39,10 @@ export default function Show({ layout, registry }) {
     const publishForm = useForm({
         branch_ids: [],
         active_from: null,
+    });
+
+    const rollbackForm = useForm({
+        branch_id: null,
     });
 
     useEffect(() => {
@@ -101,6 +109,15 @@ export default function Show({ layout, registry }) {
         publishForm.post(route('admin.pos-layouts.publish', layout.id), {
             onSuccess: () => setIsPublishModalOpen(false),
         });
+    };
+
+    const handleRollback = (branchId) => {
+        if (confirm('Are you sure you want to rollback and reactivate this layout version for this branch?')) {
+            rollbackForm.post(route('admin.pos-layouts.rollback', { 
+                posLayout: layout.id,
+                branch_id: branchId 
+            }));
+        }
     };
 
     const toggleBranch = (id) => {
@@ -283,8 +300,8 @@ export default function Show({ layout, registry }) {
                     )}
                 </div>
 
-                {/* Right Sidebar: Status & Info */}
-                <div className="w-72 bg-slate-900 border-l border-slate-800 flex flex-col p-6 overflow-y-auto">
+                {/* Right Sidebar: Status & History */}
+                <div className="w-80 bg-slate-900 border-l border-slate-800 flex flex-col p-6 overflow-y-auto">
                     <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-6">Configuration</h3>
                     
                     <div className="space-y-6">
@@ -322,6 +339,65 @@ export default function Show({ layout, registry }) {
                             </div>
                         </div>
 
+                        {/* Deployment History */}
+                        <div className="space-y-4">
+                            <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                                <History className="w-3.5 h-3.5" /> Deployment History
+                            </h4>
+                            
+                            <div className="space-y-3">
+                                {history?.length > 0 ? (
+                                    history.map((entry) => (
+                                        <div 
+                                            key={entry.id} 
+                                            className={`p-3 rounded-xl border transition-all ${
+                                                entry.is_active 
+                                                ? 'bg-emerald-500/5 border-emerald-500/20' 
+                                                : 'bg-slate-800/50 border-slate-800'
+                                            }`}
+                                        >
+                                            <div className="flex items-center justify-between mb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`w-2 h-2 rounded-full ${entry.is_active ? 'bg-emerald-500 animate-pulse' : 'bg-slate-700'}`}></span>
+                                                    <span className="text-[11px] font-bold text-slate-200">{entry.branch_name}</span>
+                                                </div>
+                                                {!entry.is_active && layout.status === 'published' && (
+                                                    <button 
+                                                        onClick={() => handleRollback(entry.branch_id)}
+                                                        disabled={rollbackForm.processing}
+                                                        className="p-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white transition-all disabled:opacity-50"
+                                                        title="Rollback/Redeploy this layout to this branch"
+                                                    >
+                                                        <RotateCcw className="w-3 h-3" />
+                                                    </button>
+                                                )}
+                                            </div>
+                                            
+                                            <div className="space-y-1">
+                                                <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                                                    <Calendar className="w-3 h-3" />
+                                                    <span>{new Date(entry.published_at).toLocaleString()}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                                                    <User className="w-3 h-3" />
+                                                    <span>Published by Admin</span>
+                                                </div>
+                                                {entry.active_until && (
+                                                    <div className="text-[9px] text-slate-600 mt-1 italic">
+                                                        Active until {new Date(entry.active_until).toLocaleString()}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="text-center py-6 px-4 bg-slate-800/30 rounded-2xl border border-slate-800/50">
+                                        <p className="text-[10px] text-slate-500 italic">No deployment history found.</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
                         {layout.status !== 'draft' && (
                             <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4">
                                 <div className="flex items-start gap-3">
@@ -339,10 +415,10 @@ export default function Show({ layout, registry }) {
 
                     <div className="mt-auto pt-6">
                         <div className="p-4 bg-indigo-500/5 rounded-2xl border border-indigo-500/10 text-center">
-                            <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-1">Admin Security</p>
+                            <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-1">Deployment Security</p>
                             <p className="text-[9px] text-slate-500 leading-tight">
-                                Changes are only persisted when you click Save Draft. 
-                                Pricing and inventory data are protected.
+                                Rollbacks create a new audit entry. 
+                                Only one active layout per branch is permitted.
                             </p>
                         </div>
                     </div>

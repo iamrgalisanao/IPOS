@@ -54,6 +54,10 @@
 - [x] S22.E: One-Active-Layout-Per-Branch: Business logic enforces single active layout constraint per branch.
 - [x] S22.E: Tenant-Enforced Deployment: Branch selection validated against layout tenant ownership.
 - [x] S22.E: RBAC `pos-layouts.publish` enforced for deployment actions.
+- [x] S22.F: Audit Integrity: All publishing and rollback events captured in `audit_logs` without schema payloads.
+- [x] S22.F: Deployment History: Visual visibility into branch-layout lifecycle with active-status highlighting.
+- [x] S22.F: Auditable Rollback: safe "Option A" re-publish strategy for instant recovery.
+- [x] S22.F: RBAC `pos-layouts.publish` enforced for rollback actions.
 
 ---
 Last updated: 2026-05-15

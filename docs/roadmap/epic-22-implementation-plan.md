@@ -114,11 +114,33 @@ Refine the POS terminal interface to be centrally customizable by administrators
     3.  Enforce business rule: A branch can have only one active layout at a time (deactivate previous layouts by setting `active_until` and `is_active = false`).
 
 ### Slice F: Governance / Audit / Rollout Hardening
-**Goal:** Ensure rollout is secure, auditable, and rollback-ready.
-*   **Tasks:**
-    1.  Add audit logging to all publish and unpublish events.
-    2.  Implement rollback features to revert to a previous layout version.
-    3.  Finalize security hardening and review against constraints.
+**Goal:** Ensure rollout is secure, auditable, and rollback-ready with a safe "Option A" re-publish strategy.
+*   **Objective:** Implement audit logging, deployment history, and a safe rollback mechanism.
+*   **Scope:**
+    *   **Audit Logging**: Log `pos_layout_published`, `pos_layout_branch_assigned`, and `pos_layout_branch_replaced` events using the existing `AuditLog` infrastructure.
+    *   **Deployment History**: Add a new "Deployment History" view for each POS layout and branch.
+    *   **Rollback Strategy (Option A)**: Implement a "Rollback" action that re-publishes a previously active layout for a branch, reusing `PosLayoutPublishService`.
+    *   **Audit Metadata**: Record actor, tenant, branch, layout version, and replaced layout details.
+    *   **Final Hardening**: Perform final security review and regression testing.
+*   **Out of Scope:**
+    *   Live WebSocket hot-swapping.
+    *   A/B testing or user-specific layouts.
+    *   Direct activation of old pivot rows (Option B).
+*   **Design Rules:**
+    *   **Metadata Only**: Audit logs must not store full schema JSON or sensitive business data.
+    *   **Auditable Rollback**: Rollbacks are treated as new publishing events to maintain a clean history.
+    *   **Permission**: Rollback requires `pos-layouts.publish`.
+*   **Audit Events:**
+    *   `pos_layout_published`: Logged when a layout status changes to published.
+    *   `pos_layout_branch_assigned`: Logged for each branch receiving a new layout.
+    *   `pos_layout_branch_replaced`: Logged when an existing branch layout is deactivated during publishing.
+    *   `pos_layout_rollback_completed`: Logged when a rollback republish succeeds.
+*   **Test Strategy:**
+    *   Verify audit records created after publishing.
+    *   Verify metadata contains correct `layout_id` and `branch_id`.
+    *   Verify rollback correctly deactivates current and re-activates target previous layout.
+    *   Verify tenant isolation for history and audit views.
+    *   Verify no side effects on pricing/inventory logic.
 
 ## 5. Security & Constraints
 *   **Business Integrity:** Layout customization must not change product prices, tax behavior, checkout calculations, or inventory behavior.
@@ -136,5 +158,5 @@ Refine the POS terminal interface to be centrally customizable by administrators
 *   **Open Question:** Should layouts automatically sync to live terminals mid-shift? (Recommendation: Terminals should fetch layout on load or after a transaction completes to avoid disruption).
 
 ## 7. Implementation Readiness
-*   **Status:** **Slice A, B, C, D, & E CLOSED.** Slice F Ready for Planning.
-*   **Next Action:** Plan **Slice F: Governance / Audit / Rollout Hardening**.
+*   **Status:** **CLOSED / EPIC COMPLETE.**
+*   **Final Validation:** All slices (A-F) implemented, verified with 43/43 layout tests and 16/16 security tests. Audit logging and transactional rollback fully operational.

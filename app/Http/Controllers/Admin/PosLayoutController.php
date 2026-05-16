@@ -84,6 +84,17 @@ class PosLayoutController extends Controller
         $categories = ProductCategory::active()->get();
         $branches = Branch::active()->get();
 
+        // Fetch deployment history for this layout
+        $history = \Illuminate\Support\Facades\DB::table('branch_pos_layout')
+            ->join('branches', 'branch_pos_layout.branch_id', '=', 'branches.id')
+            ->where('branch_pos_layout.pos_layout_id', $posLayout->id)
+            ->select(
+                'branches.name as branch_name',
+                'branch_pos_layout.*'
+            )
+            ->latest('branch_pos_layout.published_at')
+            ->get();
+
         return Inertia::render('Admin/PosLayouts/Show', [
             'layout' => $posLayout,
             'registry' => [
@@ -91,6 +102,7 @@ class PosLayoutController extends Controller
                 'categories' => $categories,
                 'branches' => $branches,
             ],
+            'history' => $history,
         ]);
     }
 
@@ -146,6 +158,46 @@ class PosLayoutController extends Controller
                 ->with('success', 'POS layout published and deployed successfully.');
         } catch (\Exception $e) {
             return back()->withErrors(['publish' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Rollback the specified branch to a previous layout.
+     */
+    public function rollback(Request $request, PosLayout $posLayout)
+    {
+        $this->authorize('publish', $posLayout);
+
+        $request->validate([
+            'branch_id' => 'required|uuid|exists:branches,id',
+        ]);
+
+        try {
+            $this->publishService->publish(
+                $posLayout,
+                [$request->branch_id],
+                Auth::user()
+            );
+
+            // Log rollback completion
+            \App\Models\AuditLog::create([
+                'tenant_id' => $posLayout->tenant_id,
+                'branch_id' => $request->branch_id,
+                'actor_user_id' => Auth::id(),
+                'actor_type' => 'user',
+                'action' => 'pos_layout_rollback_completed',
+                'auditable_type' => PosLayout::class,
+                'auditable_id' => $posLayout->id,
+                'metadata' => [
+                    'branch_id' => $request->branch_id,
+                    'layout_id' => $posLayout->id,
+                    'layout_version' => $posLayout->version,
+                ],
+            ]);
+
+            return back()->with('success', 'POS layout rolled back and deployed successfully.');
+        } catch (\Exception $e) {
+            return back()->withErrors(['rollback' => $e->getMessage()]);
         }
     }
 
