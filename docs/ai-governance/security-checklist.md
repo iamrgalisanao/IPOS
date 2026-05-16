@@ -42,8 +42,9 @@
 ## 6. POS Layout Builder (Epic 22)
 - [x] Layout customization explicitly blocked from mutating pricing, tax, or inventory (Slice A).
 - [x] Schema validation blocks unsafe fields (`price`, `tax`, `inventory`, `discount`).
-- [x] Permission-based access (`pos-layouts.view/manage/publish`) enforced via RBAC.
-- [x] Tenant/Branch isolation strictly enforced for layout storage and assignment.
+- [x] Permission-based access (`pos-layouts.view/manage/publish`) enforced via RBAC and Controller-level authorization (Slice B).
+- [x] Immutable status locks for `published` and `archived` layouts prevent unauthorized terminal configuration changes.
+- [x] Admin CRUD endpoints strictly follow tenant isolation guardrails.
 - [ ] Terminal fallback to default rendering for invalid/missing layouts (Deferred to Slice C).
 - [ ] Publishing enforcement (one active layout per branch) planned for Slice E.
 

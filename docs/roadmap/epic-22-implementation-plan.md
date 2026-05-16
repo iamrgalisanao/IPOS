@@ -49,11 +49,24 @@ Refine the POS terminal interface to be centrally customizable by administrators
     4.  Ensure `TenantContext` isolation applies to layout CRUD operations.
 
 ### Slice B: Admin Layout CRUD + Validation
-**Goal:** Build the backend endpoints to store, version, and manage draft layouts.
-*   **Tasks:**
-    1.  Create `PosLayoutController` with CRUD endpoints.
-    2.  Implement permission checks (`pos-layouts.manage`).
-    3.  Implement version incrementing logic when updating a published layout.
+**Goal:** Implement backend CRUD for managing POS layout drafts with strict schema validation.
+*   **Objective:** Provide administrative control over POS layout entities within a tenant scope.
+*   **Scope:**
+    *   List, Create, Show, Update, and Archive POS layouts.
+    *   Permission-gated access (`pos-layouts.view/manage`).
+    *   Schema integrity enforcement via `PosLayoutSchemaValidator`.
+*   **Out of Scope:** Visual editor (Slice D), Publishing/Sync (Slice E).
+*   **Design Rules:**
+    *   **Drafts:** Fully editable.
+    *   **Published/Archived:** Read-only (prevents live terminal instability).
+    *   **Tenant Isolation:** Automated via `BelongsToTenant`.
+*   **Route Design:**
+    *   `GET /admin/pos-layouts` (List)
+    *   `POST /admin/pos-layouts` (Create Draft)
+    *   `GET /admin/pos-layouts/{posLayout}` (Detail)
+    *   `PUT /admin/pos-layouts/{posLayout}` (Update Draft)
+    *   `POST /admin/pos-layouts/{posLayout}/archive` (Archive)
+*   **Test Strategy:** Feature tests for authorized/unauthorized access, tenant scoping, schema validation, and status-based mutation locks.
 
 ### Slice C: Terminal Layout Fetch + Fallback Rendering
 **Goal:** Prove the POS can safely render a stored layout with fallback to default.
@@ -97,5 +110,5 @@ Refine the POS terminal interface to be centrally customizable by administrators
 *   **Open Question:** Should layouts automatically sync to live terminals mid-shift, or only upon terminal refresh/next login? (Recommendation: Live sync can be disruptive. Terminals should fetch layout on load or after a transaction completes).
 
 ## 7. Implementation Readiness
-*   **Status:** **Slice A Completed. Awaiting approval for Slice B.**
-*   **Next Action:** Begin **Slice B: Admin Layout CRUD + Validation**.
+*   **Status:** **Slice A Completed. Slice B Planning Completed.**
+*   **Next Action:** Implement **Slice B: Admin Layout CRUD + Validation**.

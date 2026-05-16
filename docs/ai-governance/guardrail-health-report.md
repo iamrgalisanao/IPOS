@@ -129,5 +129,20 @@ Signed: Sync-Discovery + Antigravity Guardrail Audit
 - **Validation**: `PosLayoutSchemaValidator` successfully blocks unsafe fields.
 - **Incomplete Test**: `test_only_one_active_layout_per_branch_is_allowed` is marked incomplete due to SQLite limitations. Service-level enforcement is documented for **Slice E**.
 
+---
+
+## Epic 22 Slice B Closure Note (2026-05-16)
+
+### Status:
+- **Slice B (Admin CRUD)**: IMPLEMENTED and VALIDATED.
+- **Scope**: Admin endpoints for Listing, Creating, Viewing, Updating, and Archiving POS layouts.
+- **Security**: Tenant isolation and RBAC (`pos-layouts.view/manage`) strictly enforced.
+- **Integrity**: Mutation blocked for `published` and `archived` layouts to ensure terminal stability.
+
+### Findings:
+- **Validation**: `PosLayoutSchemaValidator` integration verified in the controller layer.
+- **Tests**: 13 feature tests passed with 100% success rate for Slice B specific logic.
+- **Status Locks**: Correctly returns 422 errors when attempting to update non-draft layouts.
+
 ### Decision:
-- Slice A is approved for closure. Proceed to Slice B planning.
+- Slice B is approved for closure. Proceed to Slice C planning.

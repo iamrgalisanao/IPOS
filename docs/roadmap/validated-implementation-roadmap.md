@@ -173,7 +173,7 @@ Implementation plan: [epic-14-implementation-plan.md](./epic-14-implementation-p
 
 ## Epic 22: Visual POS Layout Builder & Enterprise Sync [In Progress]
 - [x] 22.1 Schema & Layout Foundation (Slice A)
-- [ ] 22.2 Admin Layout CRUD + Validation (Slice B)
+- [ ] 22.2 Admin Layout CRUD + Validation (Slice B) [Planning Completed]
 - [ ] 22.3 Terminal Layout Fetch + Fallback Rendering (Slice C)
 - [ ] 22.4 Visual Sandbox Editor (Slice D)
 - [ ] 22.5 Publish / Branch Deployment / Sync (Slice E)

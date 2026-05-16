@@ -194,6 +194,27 @@ Route::middleware(['auth', 'tenant'])->group(function () {
         Route::get('/inventory/movements', [\App\Http\Controllers\Inventory\InventoryMovementController::class, 'index'])
              ->name('inventory.movements.index');
     });
+
+    // POS Layout Admin Routes
+    Route::prefix('admin/pos-layouts')->name('admin.pos-layouts.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Admin\PosLayoutController::class, 'index'])
+            ->middleware('permission:pos-layouts.view')
+            ->name('index');
+        Route::post('/', [\App\Http\Controllers\Admin\PosLayoutController::class, 'store'])
+            ->middleware('permission:pos-layouts.manage')
+            ->name('store');
+        Route::get('/{posLayout}', [\App\Http\Controllers\Admin\PosLayoutController::class, 'show'])
+            ->middleware('permission:pos-layouts.view')
+            ->name('show');
+        Route::put('/{posLayout}', [\App\Http\Controllers\Admin\PosLayoutController::class, 'update'])
+            ->middleware('permission:pos-layouts.manage')
+            ->name('update');
+        Route::patch('/{posLayout}', [\App\Http\Controllers\Admin\PosLayoutController::class, 'update'])
+            ->middleware('permission:pos-layouts.manage');
+        Route::post('/{posLayout}/archive', [\App\Http\Controllers\Admin\PosLayoutController::class, 'archive'])
+            ->middleware('permission:pos-layouts.manage')
+            ->name('archive');
+    });
 });
 
 Route::prefix('/support/assisted/{supportAccessSession}')

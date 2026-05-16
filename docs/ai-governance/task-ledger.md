@@ -11,7 +11,7 @@ Last updated: 2026-05-13
  | G-017 | Close release-readiness blockers after Epic 13/14 | Resolved | `docs/roadmap/validated-implementation-roadmap.md`, `docs/ai-governance/release-readiness-checklist.md`, `docs/ai-governance/release-decision.md` | Hand off to human owner for production reinjection and deployment sign-off |
  | G-019 | Execute Epic 15: Sales & Transaction History | In Progress | `epic-15-implementation-plan.md`, `SalesHistoryQueryService.php`, `SalesHistoryController.php`, `SalesHistoryQueryTest.php` | Slice A: Completed — Validated; Slice B: Completed Early — Accepted as Baseline; Slice C: Completed Early — Accepted as Baseline; Slice D: Completed — Validated. **Governance Note**: Scope drift and Slice D closure review successfully completed. |
  | G-020 | Execute Shift Operations Hardening | In Progress | `slice-3-validation-report.md`, `shift-hardening-slice-4-plan.md` | Slices 1-4: Completed — Validated. Awaiting final branch closure. |
- | G-021 | Execute Epic 22: Visual POS Layout Builder | In Progress | `docs/roadmap/epic-22-implementation-plan.md`, `docs/ai-governance/epic-22-slice-a-validation-report.md` | Slice A: Completed — Validated. Schema, RBAC, and models created. Proceed to Slice B planning. |
+ | G-021 | Execute Epic 22: Visual POS Layout Builder | In Progress | `docs/roadmap/epic-22-implementation-plan.md`, `docs/ai-governance/epic-22-slice-a-validation-report.md` | Slice A: Completed — Validated; Slice B: Completed — Validated; Slice C: Planning/Ready. |
 
  ## Completed Governance Tasks
 
