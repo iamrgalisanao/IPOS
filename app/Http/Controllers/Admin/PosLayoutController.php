@@ -7,16 +7,20 @@ use App\Http\Requests\StorePosLayoutRequest;
 use App\Http\Requests\UpdatePosLayoutRequest;
 use App\Models\PosLayout;
 use App\Services\POS\PosLayoutSchemaValidator;
+use App\Services\POS\PosLayoutPublishService;
 use App\Services\CatalogService;
 use App\Models\ProductCategory;
+use App\Models\Branch;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 
 class PosLayoutController extends Controller
 {
-    public function __construct(protected CatalogService $catalogService)
-    {
+    public function __construct(
+        protected CatalogService $catalogService,
+        protected PosLayoutPublishService $publishService
+    ) {
     }
 
     /**
@@ -75,15 +79,17 @@ class PosLayoutController extends Controller
     {
         $this->authorize('view', $posLayout);
 
-        // Fetch products and categories for the editor registry
+        // Fetch products, categories, and branches for the editor/publisher
         $products = $this->catalogService->search('');
         $categories = ProductCategory::active()->get();
+        $branches = Branch::active()->get();
 
         return Inertia::render('Admin/PosLayouts/Show', [
             'layout' => $posLayout,
             'registry' => [
                 'products' => $products,
                 'categories' => $categories,
+                'branches' => $branches,
             ],
         ]);
     }
@@ -113,6 +119,34 @@ class PosLayoutController extends Controller
         ]);
 
         return back()->with('success', 'POS layout updated.');
+    }
+
+    /**
+     * Publish the specified resource.
+     */
+    public function publish(Request $request, PosLayout $posLayout)
+    {
+        $this->authorize('publish', $posLayout);
+
+        $request->validate([
+            'branch_ids' => 'required|array',
+            'branch_ids.*' => 'required|uuid|exists:branches,id',
+            'active_from' => 'nullable|date',
+        ]);
+
+        try {
+            $this->publishService->publish(
+                $posLayout,
+                $request->branch_ids,
+                Auth::user(),
+                $request->active_from ? \Carbon\Carbon::parse($request->active_from) : null
+            );
+
+            return redirect()->route('admin.pos-layouts.index')
+                ->with('success', 'POS layout published and deployed successfully.');
+        } catch (\Exception $e) {
+            return back()->withErrors(['publish' => $e->getMessage()]);
+        }
     }
 
     /**
@@ -156,6 +190,13 @@ class PosLayoutController extends Controller
                     $user->hasPermission('pos-layouts.manage'),
                     403,
                     'Management permission required for POS layouts.'
+                );
+                break;
+            case 'publish':
+                abort_unless(
+                    $user->hasPermission('pos-layouts.publish'),
+                    403,
+                    'Publishing permission required for POS layouts.'
                 );
                 break;
         }

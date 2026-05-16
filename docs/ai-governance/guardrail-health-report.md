@@ -116,6 +116,16 @@ Signed: Sync-Discovery + Antigravity Guardrail Audit
 
 ---
 
+### Epic 22 Slice E Closure Note (2026-05-16)
+**Findings:**
+- **Atomicity**: `DB::transaction` verified to roll back all branch assignments on any failure. PASSED.
+- **Isolation**: Tenant ownership of target branches is strictly validated. PASSED.
+- **RBAC**: `pos-layouts.publish` requirement successfully implemented and tested. PASSED.
+- **Terminal Parity**: Terminals correctly resolve the newly active layout for assigned branches. PASSED.
+- **State Integrity**: Previous active layouts are deactivated (`is_active = false`) upon new deployment. PASSED.
+
+---
+
 ### Epic 22 Slice C/D Closure Note (2026-05-16)
 **Findings:**
 - **Terminal Isolation (Slice C)**: `/pos/layout` strictly scoped to `latest()` active layout per branch/tenant. PASSED.

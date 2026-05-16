@@ -50,7 +50,10 @@
 - [x] Terminal fallback to default rendering for invalid/missing layouts (Slice C).
 - [x] Layout rendering uses source-of-truth Catalog pricing/tax/stock (Slice C).
 - [x] POS search/category filters correctly bypass layout mode for usability (Slice C).
-- [ ] Publishing enforcement (one active layout per branch) planned for Slice E.
+- [x] S22.E: Transactional Publishing: `PosLayoutPublishService` ensures atomic branch deployment.
+- [x] S22.E: One-Active-Layout-Per-Branch: Business logic enforces single active layout constraint per branch.
+- [x] S22.E: Tenant-Enforced Deployment: Branch selection validated against layout tenant ownership.
+- [x] S22.E: RBAC `pos-layouts.publish` enforced for deployment actions.
 
 ---
 Last updated: 2026-05-15

@@ -176,5 +176,5 @@ Implementation plan: [epic-14-implementation-plan.md](./epic-14-implementation-p
 - [x] 22.2 Admin Layout CRUD + Validation (Slice B) [CLOSED]
 - [x] 22.3 Terminal Layout Fetch & Fallback Rendering (Slice C) [CLOSED]
 - [x] 22.4 Visual Sandbox Editor (Slice D) [CLOSED]
-- [ ] 22.5 Publish / Branch Deployment / Sync (Slice E)
-- [ ] 22.6 Governance / Audit / Rollout Hardening (Slice F)
+- [x] 22.5 Publish / Branch Deployment / Sync (Slice E) [CLOSED]
+- [ ] 22.6 Governance / Audit / Rollout Hardening (Slice F) [Ready for Planning]

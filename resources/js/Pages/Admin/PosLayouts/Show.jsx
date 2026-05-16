@@ -29,6 +29,14 @@ export default function Show({ layout, registry }) {
         }
     });
 
+    const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+    const [selectedBranches, setSelectedBranches] = useState([]);
+
+    const publishForm = useForm({
+        branch_ids: [],
+        active_from: null,
+    });
+
     useEffect(() => {
         if (recentlySuccessful) {
             setSuccessMessage('Layout saved successfully.');
@@ -85,6 +93,20 @@ export default function Show({ layout, registry }) {
     const submit = (e) => {
         e.preventDefault();
         put(route('admin.pos-layouts.update', layout.id));
+    };
+
+    const handlePublish = (e) => {
+        e.preventDefault();
+        publishForm.setData('branch_ids', selectedBranches);
+        publishForm.post(route('admin.pos-layouts.publish', layout.id), {
+            onSuccess: () => setIsPublishModalOpen(false),
+        });
+    };
+
+    const toggleBranch = (id) => {
+        setSelectedBranches(prev => 
+            prev.includes(id) ? prev.filter(b => b !== id) : [...prev, id]
+        );
     };
 
     return (
@@ -148,14 +170,23 @@ export default function Show({ layout, registry }) {
                     </div>
 
                     {layout.status === 'draft' && (
-                        <button 
-                            onClick={submit}
-                            disabled={processing}
-                            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-indigo-500/20 transition-all disabled:opacity-50"
-                        >
-                            <Save className="w-4 h-4" />
-                            {processing ? 'Saving...' : 'Save Draft'}
-                        </button>
+                        <>
+                            <button 
+                                onClick={submit}
+                                disabled={processing}
+                                className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 px-5 py-2.5 rounded-xl text-sm font-bold border border-slate-700 transition-all disabled:opacity-50"
+                            >
+                                <Save className="w-4 h-4" />
+                                {processing ? 'Saving...' : 'Save Draft'}
+                            </button>
+                            <button 
+                                onClick={() => setIsPublishModalOpen(true)}
+                                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-emerald-500/20 transition-all"
+                            >
+                                <Monitor className="w-4 h-4" />
+                                Publish to Branches
+                            </button>
+                        </>
                     )}
                 </div>
             </header>
@@ -317,6 +348,86 @@ export default function Show({ layout, registry }) {
                     </div>
                 </div>
             </main>
+
+            {/* Publish Modal */}
+            {isPublishModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-[2rem] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-300">
+                        <div className="px-8 py-6 border-b border-slate-800 flex items-center justify-between">
+                            <div>
+                                <h3 className="text-xl font-bold text-white tracking-tight">Deploy Layout</h3>
+                                <p className="text-xs text-slate-500 mt-1 uppercase tracking-widest font-bold">Select target branches</p>
+                            </div>
+                            <button 
+                                onClick={() => setIsPublishModalOpen(false)}
+                                className="p-2 rounded-xl hover:bg-slate-800 transition-all"
+                            >
+                                <ChevronLeft className="w-5 h-5 rotate-90" />
+                            </button>
+                        </div>
+                        
+                        <div className="p-8 space-y-6">
+                            <div className="bg-indigo-500/5 border border-indigo-500/10 p-4 rounded-2xl">
+                                <div className="flex gap-3">
+                                    <AlertCircle className="w-5 h-5 text-indigo-400 mt-0.5" />
+                                    <p className="text-[11px] text-slate-400 leading-relaxed font-medium">
+                                        Publishing will make this layout <span className="text-indigo-400 font-bold uppercase tracking-widest">Active</span> for selected branches. 
+                                        Previous active layouts for these branches will be deactivated.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2 max-h-60 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
+                                {registry.branches?.length > 0 ? (
+                                    registry.branches.map(branch => (
+                                        <button
+                                            key={branch.id}
+                                            onClick={() => toggleBranch(branch.id)}
+                                            className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all ${
+                                                selectedBranches.includes(branch.id)
+                                                ? 'bg-indigo-600/10 border-indigo-600 shadow-inner'
+                                                : 'bg-slate-800/50 border-slate-700/50 hover:border-slate-600'
+                                            }`}
+                                        >
+                                            <div className="text-left">
+                                                <p className={`text-sm font-bold ${selectedBranches.includes(branch.id) ? 'text-white' : 'text-slate-300'}`}>
+                                                    {branch.name}
+                                                </p>
+                                                <p className="text-[10px] text-slate-500 font-medium uppercase tracking-tighter">{branch.id.split('-')[0]}</p>
+                                            </div>
+                                            <div className={`w-6 h-6 rounded-lg border flex items-center justify-center transition-all ${
+                                                selectedBranches.includes(branch.id)
+                                                ? 'bg-indigo-600 border-indigo-500'
+                                                : 'bg-slate-900 border-slate-700'
+                                            }`}>
+                                                {selectedBranches.includes(branch.id) && <CheckCircle2 className="w-4 h-4 text-white" />}
+                                            </div>
+                                        </button>
+                                    ))
+                                ) : (
+                                    <p className="text-center text-xs text-slate-500 py-8 italic">No branches available for deployment.</p>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="p-8 bg-slate-800/50 border-t border-slate-800 flex gap-3">
+                            <button 
+                                onClick={() => setIsPublishModalOpen(false)}
+                                className="flex-1 px-6 py-3.5 rounded-2xl bg-slate-800 text-slate-300 font-bold text-sm border border-slate-700 hover:bg-slate-700 transition-all"
+                            >
+                                Cancel
+                            </button>
+                            <button 
+                                onClick={handlePublish}
+                                disabled={selectedBranches.length === 0 || publishForm.processing}
+                                className="flex-[2] px-6 py-3.5 rounded-2xl bg-indigo-600 text-white font-bold text-sm shadow-lg shadow-indigo-600/20 hover:bg-indigo-500 transition-all disabled:opacity-50"
+                            >
+                                {publishForm.processing ? 'Deploying...' : `Deploy to ${selectedBranches.length} Branch${selectedBranches.length === 1 ? '' : 'es'}`}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

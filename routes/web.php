@@ -215,6 +215,9 @@ Route::middleware(['auth', 'tenant'])->group(function () {
         Route::post('/{posLayout}/archive', [\App\Http\Controllers\Admin\PosLayoutController::class, 'archive'])
             ->middleware('permission:pos-layouts.manage')
             ->name('archive');
+        Route::post('/{posLayout}/publish', [\App\Http\Controllers\Admin\PosLayoutController::class, 'publish'])
+            ->middleware('permission:pos-layouts.manage')
+            ->name('publish');
     });
 });
 
