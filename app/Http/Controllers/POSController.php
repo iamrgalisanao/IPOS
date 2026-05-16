@@ -31,7 +31,7 @@ class POSController extends Controller
         }
 
         $user = $request->user();
-        $isAdminMode = $user && ($user->hasRole('admin') || $user->hasRole('owner'));
+        $isAdminMode = $user && $user->roles()->whereIn('name', ['admin', 'owner'])->exists();
 
         return Inertia::render('POS/Index', [
             'tenant' => $tenant,
