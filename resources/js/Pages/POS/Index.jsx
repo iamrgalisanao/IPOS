@@ -14,7 +14,7 @@ import CloseShiftModal from '@/Components/Shift/CloseShiftModal';
 import RecordCashEventModal from '@/Components/Shift/RecordCashEventModal';
 import { createUncertainCheckoutError, getCheckoutErrorMessage, getGuardianPresentation, isUncertainCheckoutError } from './helpers/checkoutFailureHelper';
 
-export default function Index({ categories, payment_methods, tenant_id, branch_id, user_id }) {
+export default function Index({ categories, payment_methods, tenant_id, branch_id, user_id, is_admin_mode }) {
     const [products, setProducts] = useState([]);
     const [cart, setCart] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
@@ -510,12 +510,24 @@ export default function Index({ categories, payment_methods, tenant_id, branch_i
 
             <Head title="POS Terminal" />
 
-            {/* Shift Dashboard & HUD */}
-            <ShiftHUD 
-                shift={activeShift} 
-                onRecordEvent={() => setShowCashEvent(true)}
-                onCloseShift={() => setShowCloseShift(true)}
-            />
+            {/* Shift Dashboard & HUD or Admin Banner */}
+            {is_admin_mode ? (
+                <div className="bg-indigo-600/10 border-b border-indigo-500/20 px-4 py-2 flex items-center justify-between">
+                    <div className="flex items-center gap-3 text-indigo-400">
+                        <AlertTriangle className="w-4 h-4" />
+                        <span className="text-xs font-bold uppercase tracking-wider">Admin Sandbox Mode</span>
+                    </div>
+                    <span className="text-xs text-indigo-300 font-medium tracking-wide">
+                        Layout customization & edit mode (Read-only checkout)
+                    </span>
+                </div>
+            ) : (
+                <ShiftHUD 
+                    shift={activeShift} 
+                    onRecordEvent={() => setShowCashEvent(true)}
+                    onCloseShift={() => setShowCloseShift(true)}
+                />
+            )}
 
             {/* Main Content Area */}
             <main className="flex-1 flex flex-col h-screen overflow-hidden">
@@ -649,13 +661,16 @@ export default function Index({ categories, payment_methods, tenant_id, branch_i
             )}
 
             {/* Cash Drawer Event Modal */}
-            <RecordCashEventModal
-                show={showCashEvent}
-                onClose={() => setShowCashEvent(false)}
-                shift={activeShift}
-            />
+            {!is_admin_mode && (
+                <RecordCashEventModal
+                    show={showCashEvent}
+                    onClose={() => setShowCashEvent(false)}
+                    shift={activeShift}
+                />
+            )}
+            
             {/* Close Shift Modal */}
-            {activeShift && (
+            {!is_admin_mode && activeShift && (
                 <CloseShiftModal
                     show={showCloseShift}
                     onClose={() => setShowCloseShift(false)}

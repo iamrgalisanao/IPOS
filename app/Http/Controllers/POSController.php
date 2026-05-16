@@ -30,11 +30,15 @@ class POSController extends Controller
             $this->configurationService->ensureDefaultPaymentMethods($tenant);
         }
 
+        $user = $request->user();
+        $isAdminMode = $user && ($user->hasRole('admin') || $user->hasRole('owner'));
+
         return Inertia::render('POS/Index', [
             'tenant' => $tenant,
             'tenant_id' => $this->tenantContext->getTenantId(),
-            'branch_id' => $this->branchContext->getBranchId() ?: $request->user()?->branches()->first()?->id,
-            'user_id' => $request->user()?->id,
+            'branch_id' => $this->branchContext->getBranchId() ?: $user?->branches()->first()?->id,
+            'user_id' => $user?->id,
+            'is_admin_mode' => $isAdminMode,
             'categories' => ProductCategory::active()->get(),
             'payment_methods' => PaymentMethod::active()
                 ->orderByDesc('is_default')
