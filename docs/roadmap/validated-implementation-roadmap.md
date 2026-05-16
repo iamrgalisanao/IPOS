@@ -169,3 +169,10 @@ Implementation plan: [epic-14-implementation-plan.md](./epic-14-implementation-p
 - 15.4 Transaction Detail Timeline and Financial Breakdown [Implemented - Accepted Early]
 - 15.5 Transaction Export and Audit Trail [Implemented - Validated]
 - 15.6 Receipt Reprint and Evidence Linking [Implemented - Accepted Early]
+
+## Epic 22: Visual POS Layout Builder & Enterprise Sync [Planned]
+- 22.1 POS Layout Customization Scope Lock
+- 22.2 POS Layout Data Foundation
+- 22.3 Admin Layout Sandbox Mode
+- 22.4 Layout Deployment and Sync Engine
+- 22.5 Terminal Grid Renderer

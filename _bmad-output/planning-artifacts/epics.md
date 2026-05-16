@@ -290,3 +290,20 @@ Execution note: Slice A read-only UI foundation, Slice B grouped breakdown prese
 
 ### Story 21.6: BI Export and Snapshot Sharing
 **Goal**: Support exportable comparison summaries and owner-ready snapshot sharing for branch review meetings and periodic business check-ins.
+
+## Epic 22: Visual POS Layout Builder & Enterprise Sync [Planned]
+
+### Story 22.1: POS Layout Customization Scope Lock
+**Goal**: Define the grid schema, dimensions, branch deployment strategy, multi-device sync behavior, and permission model for visual layout customization.
+
+### Story 22.2: POS Layout Data Foundation
+**Goal**: Create the `pos_layouts` table to store serialized grid configurations and establish a many-to-many relationship with `Branch` to support global and targeted deployments.
+
+### Story 22.3: Admin Layout Sandbox Mode
+**Goal**: Implement an admin-only "Layout Designer" mode within the POS web interface, enabling drag-and-drop tile positioning, resizing, and category assignment.
+
+### Story 22.4: Layout Deployment and Sync Engine
+**Goal**: Build the deployment API to push a saved layout to selected branches, ensuring all physical POS terminals pull and render the active layout schema.
+
+### Story 22.5: Terminal Grid Renderer
+**Goal**: Refactor the POS frontend to parse the assigned layout schema, dynamically generating the grid UI rather than relying solely on automated alphabetical sorting.
