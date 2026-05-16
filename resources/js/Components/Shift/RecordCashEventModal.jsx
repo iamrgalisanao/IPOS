@@ -9,15 +9,15 @@ import PrimaryButton from '@/Components/PrimaryButton';
 import { AlertCircle, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
 
 export default function RecordCashEventModal({ show, onClose, shift }) {
-    if (!shift) return null;
-
     const { data, setData, post, processing, errors, reset } = useForm({
-        shift_id: shift.id,
+        shift_id: shift?.id || '',
         event_type: 'cash_drop',
         amount: '',
         reason_code: 'SKIM',
         reason_notes: '',
     });
+
+    if (!shift) return null;
 
     const THRESHOLD = 5000;
 
