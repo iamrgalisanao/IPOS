@@ -90,6 +90,16 @@ export default function ShiftShow({ auth, shift }) {
                             </button>
                         )}
                         
+                        {shift.status !== 'open' && (
+                            <Link
+                                href={route('shifts.z-report', shift.id)}
+                                className="inline-flex items-center px-4 py-2 bg-white border border-gray-200 rounded-xl font-bold text-gray-700 text-sm uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm"
+                            >
+                                <FileText className="w-4 h-4 mr-2" />
+                                Z-Report
+                            </Link>
+                        )}
+                        
                         {shift.status === 'closed' && auth.user.permissions.includes('approve_shift') && (
                             <button
                                 onClick={handleApprove}

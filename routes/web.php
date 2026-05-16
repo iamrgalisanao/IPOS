@@ -155,6 +155,10 @@ Route::middleware(['auth', 'tenant'])->group(function () {
         Route::get('/{shift}', [\App\Http\Controllers\Shift\ShiftSummaryController::class, 'show'])
             ->middleware('permission:view_shift')
             ->name('show');
+            
+        Route::get('/{shift}/z-report', [\App\Http\Controllers\Shift\ShiftSummaryController::class, 'zReport'])
+            ->middleware('permission:view_shift')
+            ->name('z-report');
     });
 
     // POS Routes
