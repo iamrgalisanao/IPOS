@@ -19,7 +19,7 @@ Harden the POS shift lifecycle by implementing robust cash reconciliation, mid-s
 ---
 
 ## 4. Slice 4: Z-Reports & Closing Hardening
-- **Objective**: Finalize the shift closure with printable Z-reports and multi-device session hardening.
+- **Objective**: Finalize the shift closure with printable, read-only Z-reports and closing-summary hardening.
 - **Status**: COMPLETED.
 
 ---
