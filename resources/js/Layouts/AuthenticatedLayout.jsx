@@ -107,12 +107,9 @@ export default function AuthenticatedLayout({ header, children }) {
                             <Menu size={24} />
                         </button>
                         
-                        {/* Page Header (Breadcrumbs/Title) */}
-                        {header && (
-                            <div className="flex-1 text-gray-800">
-                                {header}
-                            </div>
-                        )}
+                        <div className="flex-1 text-xl font-semibold text-gray-800 lg:hidden">
+                            IPOS Admin
+                        </div>
                     </div>
                     
                     <div className="flex items-center gap-4">
@@ -133,6 +130,13 @@ export default function AuthenticatedLayout({ header, children }) {
 
                 {/* Page Content */}
                 <main className="flex-1 overflow-y-auto bg-gray-50 relative">
+                    {header && (
+                        <header className="bg-white shadow-sm border-b border-gray-200">
+                            <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+                                {header}
+                            </div>
+                        </header>
+                    )}
                     {children}
                 </main>
             </div>
