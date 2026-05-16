@@ -45,7 +45,7 @@ export default function ShiftHUD({ shift, onRecordEvent, onCloseShift }) {
                     <span className="text-xs font-medium uppercase tracking-wider">No Active Shift</span>
                 </div>
                 <Link
-                    href={route('shifts.create')}
+                    href={route('shifts.open')}
                     className="text-xs font-bold text-indigo-400 hover:text-indigo-300 transition-colors uppercase tracking-widest"
                 >
                     Open Shift
