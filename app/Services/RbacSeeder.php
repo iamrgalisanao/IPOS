@@ -68,6 +68,9 @@ class RbacSeeder
             'open_shift' => 'Can open a new POS shift',
             'close_shift' => 'Can close an active POS shift',
             'approve_shift' => 'Can review and approve submitted POS shifts',
+            'view_shift' => 'Can access shift summary and history',
+            'view_all_shifts' => 'Can view shifts across all branches',
+            'view_branch_shifts' => 'Can view all shifts within assigned branches',
             'view_own_shift_summary' => 'Can view own shift performance',
             'manage_cash_drawer' => 'Can record cash drawer operational events',
 
@@ -122,7 +125,7 @@ class RbacSeeder
                 'description' => 'Standard POS operator',
                 'permissions' => [
                     'access_pos', 'create_sale', 'apply_discount', 
-                    'open_shift', 'close_shift', 'view_own_shift_summary',
+                    'open_shift', 'close_shift', 'view_shift', 'view_own_shift_summary',
                     'manage_cash_drawer'
                 ],
             ],

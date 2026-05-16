@@ -127,11 +127,28 @@ Route::middleware(['auth', 'tenant'])->group(function () {
             ->name('show');
     });
 
-    // Shift Summary Routes
+    // Shift Management
     Route::prefix('shifts')->name('shifts.')->group(function () {
         Route::get('/', [\App\Http\Controllers\Shift\ShiftSummaryController::class, 'index'])
             ->middleware('permission:view_shift')
             ->name('index');
+
+        // Operational Actions (Require Branch Context)
+        Route::middleware(['branch'])->group(function () {
+            Route::get('/open', [\App\Http\Controllers\Shift\ShiftController::class, 'open'])
+                ->middleware('permission:open_shift')
+                ->name('open');
+            Route::post('/', [\App\Http\Controllers\Shift\ShiftController::class, 'store'])
+                ->middleware('permission:open_shift')
+                ->name('store');
+            Route::post('/{shift}/submit-closing', [\App\Http\Controllers\Shift\ShiftController::class, 'submitClosing'])
+                ->middleware('permission:close_shift')
+                ->name('submit-closing');
+            Route::post('/{shift}/approve', [\App\Http\Controllers\Shift\ShiftController::class, 'approve'])
+                ->middleware('permission:approve_shift')
+                ->name('approve');
+        });
+
         Route::get('/{shift}', [\App\Http\Controllers\Shift\ShiftSummaryController::class, 'show'])
             ->middleware('permission:view_shift')
             ->name('show');

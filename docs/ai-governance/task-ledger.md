@@ -10,6 +10,7 @@ Last updated: 2026-05-13
  | G-009 | Rotate previously committed MCP and Hermes credentials | Partially Resolved | `docs/ai-governance/g-009-credential-reinjection-plan.md`, `app/Console/Commands/Security/InjectCredentialsCommand.php`, `app/Services/Security/CredentialManagementService.php` | Phase B CLI Tool implemented. Local operational workflow verified via mail_provider trial. Perform actual reinjection/validation for target environment before final release |
  | G-017 | Close release-readiness blockers after Epic 13/14 | Resolved | `docs/roadmap/validated-implementation-roadmap.md`, `docs/ai-governance/release-readiness-checklist.md`, `docs/ai-governance/release-decision.md` | Hand off to human owner for production reinjection and deployment sign-off |
  | G-019 | Execute Epic 15: Sales & Transaction History | In Progress | `epic-15-implementation-plan.md`, `SalesHistoryQueryService.php`, `SalesHistoryController.php`, `SalesHistoryQueryTest.php` | Slice A: Completed — Validated; Slice B: Completed Early — Accepted as Baseline; Slice C: Completed Early — Accepted as Baseline; Slice D: Completed — Validated. **Governance Note**: Scope drift and Slice D closure review successfully completed. |
+ | G-020 | Execute Shift Operations Hardening | In Progress | `slice-1-validation-report.md`, `ShiftController.php`, `DenominationGrid.jsx` | Slice 1: Completed — Under Closure Review. **Governance Note**: Significant scope drift detected (Reconciliation, Approval, Branch Fallback). Review in progress. |
 
  ## Completed Governance Tasks
 
