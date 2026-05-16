@@ -274,9 +274,10 @@ export default function Index({ auth, sales, filters, meta }) {
                             </p>
                             <div className="flex items-center gap-2">
                                 {sales.links.map((link, idx) => (
-                                    <Link
+                                    <button
                                         key={idx}
-                                        href={link.url}
+                                        disabled={!link.url || link.active}
+                                        onClick={() => link.url && router.get(link.url)}
                                         dangerouslySetInnerHTML={{ __html: link.label }}
                                         className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
                                             link.active 
