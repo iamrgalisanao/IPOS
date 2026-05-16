@@ -24,6 +24,7 @@ This document represents the **Actual Execution Truth** of the IPOS project. It 
 | **Epic 13** | Support Assisted Mode & Production Hardening | **[Closed]** |
 | **Epic 14** | BIR Tax Reporting & Compliance Exports | **[Closed]** |
 | **Epic 15** | Sales & Transaction History Back Office | **In Progress** |
+| **Epic 22** | Visual POS Layout Builder & Enterprise Sync | **In Progress** |
 
 *\*Epic 3 catalog core is closed; advanced stock UX/CDN are pending enhancements.*
 
@@ -170,9 +171,10 @@ Implementation plan: [epic-14-implementation-plan.md](./epic-14-implementation-p
 - 15.5 Transaction Export and Audit Trail [Implemented - Validated]
 - 15.6 Receipt Reprint and Evidence Linking [Implemented - Accepted Early]
 
-## Epic 22: Visual POS Layout Builder & Enterprise Sync [Planned]
-- 22.1 POS Layout Customization Scope Lock
-- 22.2 POS Layout Data Foundation
-- 22.3 Admin Layout Sandbox Mode
-- 22.4 Layout Deployment and Sync Engine
-- 22.5 Terminal Grid Renderer
+## Epic 22: Visual POS Layout Builder & Enterprise Sync [In Progress]
+- [x] 22.1 Schema & Layout Foundation (Slice A)
+- [ ] 22.2 Admin Layout CRUD + Validation (Slice B)
+- [ ] 22.3 Terminal Layout Fetch + Fallback Rendering (Slice C)
+- [ ] 22.4 Visual Sandbox Editor (Slice D)
+- [ ] 22.5 Publish / Branch Deployment / Sync (Slice E)
+- [ ] 22.6 Governance / Audit / Rollout Hardening (Slice F)

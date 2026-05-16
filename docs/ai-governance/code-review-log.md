@@ -9,6 +9,7 @@ Last updated: 2026-05-12
 | 2026-05-16 | Shift Operations Hardening Slice 1: Denomination Counting & RBAC | Antigravity | Approved | `docs/validation/shift-hardening-slice-1-validation-report.md` |
 | 2026-05-16 | Shift Operations Hardening Slice 2: Cash Drawer Events (Drops & Top-ups) | Antigravity | Approved | `slice-2-validation-report.md` |
 | 2026-05-16 | Shift Operations Hardening Slice 3: Shift Dashboard & HUD | Antigravity | Approved | `slice-3-validation-report.md` |
+| 2026-05-16 | Epic 22 Slice A: POS Layout Schema & Foundation | Antigravity | Approved | `docs/ai-governance/epic-22-slice-a-validation-report.md` |
 
 ## Traceability
 

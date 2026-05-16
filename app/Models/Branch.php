@@ -43,6 +43,20 @@ class Branch extends Model
         return $this->hasMany(Shift::class);
     }
 
+    public function posLayouts(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(PosLayout::class, 'branch_pos_layout')
+            ->withPivot([
+                'id',
+                'active_from',
+                'active_until',
+                'is_active',
+                'published_by',
+                'published_at'
+            ])
+            ->withTimestamps();
+    }
+
     public function cashDrawerEvents(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(CashDrawerEvent::class);

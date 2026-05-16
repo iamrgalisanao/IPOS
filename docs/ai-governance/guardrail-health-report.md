@@ -113,3 +113,21 @@ The G-009 Credential Rotation task has been revised to a **Credential Reinjectio
 ---
 
 Signed: Sync-Discovery + Antigravity Guardrail Audit
+
+---
+
+## Epic 22 Slice A Closure Note (2026-05-16)
+
+### Status:
+- **Slice A (Schema Foundation)**: IMPLEMENTED and VALIDATED.
+- **Scope**: Database schema, models, RBAC permissions, and JSON validation logic.
+- **Integrity**: Verified no mutation of pricing, tax, or inventory logic.
+- **RBAC**: `pos-layouts.view/manage/publish` permissions properly scoped.
+
+### Findings:
+- **Tenant Isolation**: `PosLayout` correctly implements `BelongsToTenant`.
+- **Validation**: `PosLayoutSchemaValidator` successfully blocks unsafe fields.
+- **Incomplete Test**: `test_only_one_active_layout_per_branch_is_allowed` is marked incomplete due to SQLite limitations. Service-level enforcement is documented for **Slice E**.
+
+### Decision:
+- Slice A is approved for closure. Proceed to Slice B planning.

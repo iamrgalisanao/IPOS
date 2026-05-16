@@ -39,6 +39,14 @@
 - [x] Manager Live Operations Monitor restricted to authorized branch scope.
 - [x] Active Shift API resolves context safely via branch middleware.
 
+## 6. POS Layout Builder (Epic 22)
+- [x] Layout customization explicitly blocked from mutating pricing, tax, or inventory (Slice A).
+- [x] Schema validation blocks unsafe fields (`price`, `tax`, `inventory`, `discount`).
+- [x] Permission-based access (`pos-layouts.view/manage/publish`) enforced via RBAC.
+- [x] Tenant/Branch isolation strictly enforced for layout storage and assignment.
+- [ ] Terminal fallback to default rendering for invalid/missing layouts (Deferred to Slice C).
+- [ ] Publishing enforcement (one active layout per branch) planned for Slice E.
+
 ---
 Last updated: 2026-05-15
 Status: **Ready for Go-Live Validation**

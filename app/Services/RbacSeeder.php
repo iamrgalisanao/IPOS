@@ -112,6 +112,11 @@ class RbacSeeder
             'view_sales_history' => 'Can view transactional history index',
             'view_sale_details' => 'Can view individual transaction details and reversals',
             'export_sales_history' => 'Can export transactional history as CSV for audit purposes',
+
+            // POS Layouts
+            'pos-layouts.view' => 'Can view custom POS layouts',
+            'pos-layouts.manage' => 'Can create and edit custom POS layouts',
+            'pos-layouts.publish' => 'Can publish POS layouts to branches',
         ];
     }
 
@@ -138,7 +143,8 @@ class RbacSeeder
                     'view_branch_dashboard', 'manage_branch_inventory',
                     'approve_void', 'approve_refund', 'view_branch_reports',
                     'close_branch_day', 'view_reports',
-                    'view_sales_history', 'view_sale_details'
+                    'view_sales_history', 'view_sale_details',
+                    'pos-layouts.view'
                 ],
             ],
             'Owner/Admin' => [
