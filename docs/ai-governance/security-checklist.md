@@ -45,7 +45,9 @@
 - [x] Permission-based access (`pos-layouts.view/manage/publish`) enforced via RBAC and Controller-level authorization (Slice B).
 - [x] Immutable status locks for `published` and `archived` layouts prevent unauthorized terminal configuration changes.
 - [x] Admin CRUD endpoints strictly follow tenant isolation guardrails.
-- [ ] Terminal fallback to default rendering for invalid/missing layouts (Deferred to Slice C).
+- [x] Terminal fallback to default rendering for invalid/missing layouts (Slice C).
+- [x] Layout rendering uses source-of-truth Catalog pricing/tax/stock (Slice C).
+- [x] POS search/category filters correctly bypass layout mode for usability (Slice C).
 - [ ] Publishing enforcement (one active layout per branch) planned for Slice E.
 
 ---

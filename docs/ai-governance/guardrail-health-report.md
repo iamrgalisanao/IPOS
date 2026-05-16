@@ -145,4 +145,19 @@ Signed: Sync-Discovery + Antigravity Guardrail Audit
 - **Status Locks**: Correctly returns 422 errors when attempting to update non-draft layouts.
 
 ### Decision:
-- Slice B is approved for closure. Proceed to Slice C planning.
+---
+ 
+ ## Epic 22 Slice C Closure Note (2026-05-16)
+ 
+ ### Status:
+ - **Slice C (Terminal Fetch & Fallback)**: IMPLEMENTED and VALIDATED.
+ - **Scope**: Terminal-side layout resolution, dynamic ProductGrid rendering, and safe fallback logic.
+ - **Security**: Branch-scoped resolution via middleware verified; pricing/tax re-fetched from Catalog source-of-truth.
+ 
+ ### Findings:
+ - **Fallback Resilience**: Verified that terminal gracefully reverts to alphabetical grid for search, categories, or missing layouts.
+ - **Rendering Stability**: "Unavailable" state for missing/deactivated products prevents frontend crashes.
+ - **Tests**: 8 focused terminal feature tests passed; full POS regression passed.
+ 
+ ### Decision:
+ - Slice C is approved for closure. Proceed to Slice D planning only.

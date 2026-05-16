@@ -98,4 +98,60 @@ class POSController extends Controller
 
         return response()->json($data);
     }
+
+    /**
+     * API: Get active POS layout for the current branch.
+     */
+    public function layout(Request $request)
+    {
+        $branchId = $this->branchContext->getBranchId();
+        $tenantId = $this->tenantContext->getTenantId();
+
+        if (!$branchId || !$tenantId) {
+            return response()->json(['fallback' => true, 'layout' => null, 'products' => []]);
+        }
+
+        $branch = \App\Models\Branch::where('id', $branchId)
+            ->where('tenant_id', $tenantId)
+            ->first();
+
+        if (!$branch) {
+            return response()->json(['fallback' => true, 'layout' => null, 'products' => []]);
+        }
+
+        $activeLayout = $branch->posLayouts()
+            ->where('is_active', true)
+            ->where('status', \App\Models\PosLayout::STATUS_PUBLISHED)
+            ->latest()
+            ->first();
+
+        if (!$activeLayout) {
+            return response()->json(['fallback' => true, 'layout' => null, 'products' => []]);
+        }
+
+        // Double check schema validity
+        if (!\App\Services\POS\PosLayoutSchemaValidator::validate($activeLayout->schema)) {
+            return response()->json(['fallback' => true, 'layout' => null, 'products' => []]);
+        }
+
+        // Resolve products in the layout
+        $productIds = collect($activeLayout->schema['tiles'])
+            ->where('type', 'product')
+            ->pluck('id')
+            ->unique()
+            ->toArray();
+
+        $products = $this->catalogService->getByIds($productIds);
+
+        return response()->json([
+            'fallback' => false,
+            'layout' => [
+                'id' => $activeLayout->id,
+                'name' => $activeLayout->name,
+                'version' => $activeLayout->version,
+                'schema' => $activeLayout->schema,
+            ],
+            'products' => $products
+        ]);
+    }
 }

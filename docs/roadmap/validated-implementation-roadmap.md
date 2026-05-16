@@ -172,9 +172,9 @@ Implementation plan: [epic-14-implementation-plan.md](./epic-14-implementation-p
 - 15.6 Receipt Reprint and Evidence Linking [Implemented - Accepted Early]
 
 ## Epic 22: Visual POS Layout Builder & Enterprise Sync [In Progress]
-- [x] 22.1 Schema & Layout Foundation (Slice A)
-- [ ] 22.2 Admin Layout CRUD + Validation (Slice B) [Planning Completed]
-- [ ] 22.3 Terminal Layout Fetch + Fallback Rendering (Slice C)
+- [x] 22.1 Schema & Layout Foundation (Slice A) [CLOSED]
+- [x] 22.2 Admin Layout CRUD + Validation (Slice B) [CLOSED]
+- [x] 22.3 Terminal Layout Fetch & Fallback Rendering (Slice C) [CLOSED]
 - [ ] 22.4 Visual Sandbox Editor (Slice D)
 - [ ] 22.5 Publish / Branch Deployment / Sync (Slice E)
 - [ ] 22.6 Governance / Audit / Rollout Hardening (Slice F)

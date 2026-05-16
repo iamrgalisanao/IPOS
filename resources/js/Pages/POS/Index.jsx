@@ -35,6 +35,8 @@ export default function Index({ categories, payment_methods, tenant_id, branch_i
     const [errorMessage, setErrorMessage] = useState(null);
     const [showCashEvent, setShowCashEvent] = useState(false);
     const [activeShift, setActiveShift] = useState(null);
+    const [activeLayout, setActiveLayout] = useState(null);
+    const [isLayoutLoading, setIsLayoutLoading] = useState(false);
 
     const { generateUUID, saveDraft, restoreDraftIfSafe, clearDraft } = useTransactionStore();
 
@@ -226,28 +228,37 @@ export default function Index({ categories, payment_methods, tenant_id, branch_i
         }
     }, [context]); // Run once when context is stable
 
-    // Fetch active shift for drawer events
+    // Fetch Active Shift and Layout
     useEffect(() => {
-        const fetchActiveShift = async () => {
+        const fetchShift = async () => {
             try {
-                const response = await fetch('/pos/active-shift', {
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-Tenant-ID': tenant_id,
-                        'X-Branch-ID': branch_id
-                    }
-                });
-                if (response.ok) {
-                    const data = await response.json();
-                    setActiveShift(data);
-                }
-            } catch (error) {
-                console.error('Failed to fetch active shift:', error);
+                const response = await axios.get(route('pos.active-shift'));
+                setActiveShift(response.data);
+            } catch (err) {
+                console.error("Failed to fetch active shift:", err);
             }
         };
 
-        fetchActiveShift();
-    }, [tenant_id, branch_id]);
+        const fetchLayout = async () => {
+            setIsLayoutLoading(true);
+            try {
+                const response = await axios.get(route('pos.layout'));
+                if (response.data && !response.data.fallback) {
+                    setActiveLayout(response.data);
+                } else {
+                    setActiveLayout(null);
+                }
+            } catch (err) {
+                console.error("Failed to fetch POS layout:", err);
+                setActiveLayout(null);
+            } finally {
+                setIsLayoutLoading(false);
+            }
+        };
+
+        fetchShift();
+        fetchLayout();
+    }, []);
 
     const [showCloseShift, setShowCloseShift] = useState(false);
 
@@ -583,6 +594,8 @@ export default function Index({ categories, payment_methods, tenant_id, branch_i
                         products={products} 
                         loading={loading} 
                         onSelect={addToCart} 
+                        activeLayout={activeLayout}
+                        isSearchActive={searchQuery.length > 0 || selectedCategory !== null}
                     />
                 </section>
 

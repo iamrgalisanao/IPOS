@@ -68,12 +68,24 @@ Refine the POS terminal interface to be centrally customizable by administrators
     *   `POST /admin/pos-layouts/{posLayout}/archive` (Archive)
 *   **Test Strategy:** Feature tests for authorized/unauthorized access, tenant scoping, schema validation, and status-based mutation locks.
 
-### Slice C: Terminal Layout Fetch + Fallback Rendering
-**Goal:** Prove the POS can safely render a stored layout with fallback to default.
-*   **Tasks:**
-    1.  Create `GET /api/v1/pos/layout` endpoint scoped strictly to the requesting terminal's branch context.
-    2.  Update `ProductGrid.jsx` to parse the `schema` JSON.
-    3.  Implement safe fallback to the default alphabetical render if schema is missing, invalid, or unpublished.
+### Slice C: Terminal Layout Fetch & Fallback Rendering
+**Goal:** Prove the POS terminal can safely retrieve and render a branch-specific layout with robust fallback behavior.
+*   **Objective:** Implement terminal-side layout resolution and safe rendering.
+*   **Scope:**
+    *   `GET /pos/layout` endpoint scoped to authenticated branch context.
+    *   Resolution logic: Fetches the latest active, published layout for the branch.
+    *   Response Contract: Includes `layout` schema and current source-of-truth `products` data for all items in the layout.
+    *   Frontend Integration: `Index.jsx` fetches layout on mount and passes it to `ProductGrid`.
+    *   Layout-Aware Rendering: `ProductGrid` renders a CSS grid based on the schema when no search/category filter is active.
+    *   Fallback Strategy: Standard alphabetical grid remains active if no valid layout is found or if search is active.
+*   **Out of Scope:** Visual editor (Slice D), Administrative publishing/deployment (Slice E).
+*   **Design Rules:**
+    *   **Isolation:** Fetch resolves strictly via `BranchContext` and `TenantContext` middleware.
+    *   **Read-Only:** Terminal cannot modify layouts.
+    *   **Data Integrity:** Product prices and taxes are ALWAYS fetched from the `CatalogService`, never from the layout schema.
+*   **Route Design:**
+    *   `GET /pos/layout` (Returns `{ layout, products, fallback }`)
+*   **Test Strategy:** Feature tests for layout resolution, branch isolation, and fallback behavior for unpublished/missing/invalid layouts.
 
 ### Slice D: Visual Sandbox Editor
 **Goal:** Build the administrative visual grid editor.
@@ -107,8 +119,12 @@ Refine the POS terminal interface to be centrally customizable by administrators
 ## 6. Risks & Open Questions
 *   **Risk:** Invalid JSON schemas could crash the React frontend during a busy shift.
     *   *Mitigation:* Strict backend validation rules (Slice A) and robust React error boundaries with automatic fallback (Slice C).
-*   **Open Question:** Should layouts automatically sync to live terminals mid-shift, or only upon terminal refresh/next login? (Recommendation: Live sync can be disruptive. Terminals should fetch layout on load or after a transaction completes).
+*   **Risk:** Large layouts (e.g. 10x10) causing rendering lag on low-end tablets.
+    *   *Mitigation:* Limit grid dimensions in `PosLayoutSchemaValidator`.
+*   **Risk:** Missing product data in tiles (e.g. deactivated products).
+    *   *Mitigation:* `ProductGrid` must handle missing products in the resolved map by rendering an "Unavailable" tile.
+*   **Open Question:** Should layouts automatically sync to live terminals mid-shift? (Recommendation: Terminals should fetch layout on load or after a transaction completes to avoid disruption).
 
 ## 7. Implementation Readiness
-*   **Status:** **Slice A Completed. Slice B Planning Completed.**
-*   **Next Action:** Implement **Slice B: Admin Layout CRUD + Validation**.
+*   **Status:** **Slice A, B, & C CLOSED.** Slice D Planning Ready.
+*   **Next Action:** Plan **Slice D: Visual Sandbox Editor**.

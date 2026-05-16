@@ -129,6 +129,32 @@ class CatalogService
     }
 
     /**
+     * Get specific products by IDs shaped for POS.
+     */
+    public function getByIds(array $ids): Collection
+    {
+        $tenantId = $this->tenantContext->getTenantId();
+        if (!$tenantId) {
+            throw new \RuntimeException('Cannot fetch products without active TenantContext.');
+        }
+
+        $query = Product::with(['category', 'taxCategory'])
+            ->whereIn('id', $ids)
+            ->where('tenant_id', $tenantId);
+
+        if ($this->branchContext->hasBranch()) {
+            $branchId = $this->branchContext->getBranchId();
+            $query->with(['branchInventories' => function ($q) use ($branchId) {
+                $q->where('branch_id', $branchId);
+            }]);
+        }
+
+        return $query->get()->map(function (Product $product) {
+            return $this->shapeForPOS($product);
+        });
+    }
+
+    /**
      * Shape the product payload for POS readiness.
      */
     protected function shapeForPOS(Product $product): array

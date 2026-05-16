@@ -1,4 +1,31 @@
-# Validation Report: Epic 15 — Sales & Transaction History (Slice D)
+# Validation Report: Epic 22 — POS Layout Builder (Slice C)
+ 
+ ## 1. Objective
+ Validate the secure terminal-side resolution and rendering of POS layouts with robust fallback logic.
+ 
+ ## 2. Validation Evidence
+ 
+ ### 2.1 Focused Terminal Tests
+ - **Suite**: `tests/Feature/POS/PosLayoutTerminalTest.php`
+ - **Results**: 8 tests / 17 assertions PASSED.
+ - **Coverage**:
+     - [x] Branch-scoped resolution via middleware.
+     - [x] Tenant isolation (cross-tenant access blocked).
+     - [x] Draft/Archived layouts return fallback.
+     - [x] Pricing/Stock re-fetched from Catalog source-of-truth.
+     - [x] Invalid schema returns fallback.
+ 
+ ### 2.2 Security Regression Suite
+ - **Suite**: `tests/Feature/Security`
+ - **Results**: 16 tests / 90 assertions PASSED.
+ 
+ ## 3. Findings
+ - **Integrity**: Verified that layout schema only influences presentation. No mutation of business data.
+ - **Stability**: Fallback grid is resilient to missing data or search filters.
+ 
+ ---
+ 
+ # Validation Report: Epic 15 — Sales & Transaction History (Slice D)
 
 ## 1. Objective
 Validate the secure implementation of the Sales & Transaction History CSV export, ensuring isolation, auditability, and data safety.
