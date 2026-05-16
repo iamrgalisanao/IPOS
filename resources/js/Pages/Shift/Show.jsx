@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
+import CloseShiftModal from '@/Components/Shift/CloseShiftModal';
+import RecordCashEventModal from '@/Components/Shift/RecordCashEventModal';
 import { 
     ArrowLeft, 
     Calendar, 
@@ -14,10 +16,14 @@ import {
     Clock,
     FileText,
     History,
-    ShoppingCart
+    ShoppingCart,
+    Lock
 } from 'lucide-react';
 
 export default function ShiftShow({ auth, shift }) {
+    const [showCloseModal, setShowCloseModal] = useState(false);
+    const [showEventModal, setShowEventModal] = useState(false);
+
     const formatCurrency = (val) => {
         return new Intl.NumberFormat('en-PH', {
             style: 'currency',
@@ -27,6 +33,7 @@ export default function ShiftShow({ auth, shift }) {
     };
 
     const formatDate = (dateStr) => {
+        if (!dateStr) return '---';
         return new Date(dateStr).toLocaleString('en-PH', {
             weekday: 'short',
             month: 'short',
@@ -47,25 +54,69 @@ export default function ShiftShow({ auth, shift }) {
         }
     };
 
+    const handleApprove = () => {
+        if (confirm('Are you sure you want to approve and finalize this shift?')) {
+            router.post(route('shifts.approve', shift.id));
+        }
+    };
+
     return (
         <AuthenticatedLayout
+            user={auth.user}
             header={
-                <div className="flex items-center gap-4">
-                    <Link href={route('shifts.index')} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-                        <ArrowLeft size={20} className="text-gray-500" />
-                    </Link>
-                    <div>
-                        <h2 className="text-xl font-bold leading-tight text-gray-800">Shift Summary</h2>
-                        <div className="flex items-center gap-2 mt-0.5 text-xs font-medium text-gray-500">
-                            <span>ID: {shift.id.split('-')[0].toUpperCase()}</span>
-                            <span>•</span>
-                            <span>{shift.branch?.name}</span>
+                <div className="flex items-center justify-between w-full">
+                    <div className="flex items-center gap-4">
+                        <Link href={route('shifts.index')} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                            <ArrowLeft size={20} className="text-gray-500" />
+                        </Link>
+                        <div>
+                            <h2 className="text-xl font-bold leading-tight text-gray-800">Shift Summary</h2>
+                            <div className="flex items-center gap-2 mt-0.5 text-xs font-medium text-gray-500">
+                                <span>ID: {shift.id.split('-')[0].toUpperCase()}</span>
+                                <span>•</span>
+                                <span>{shift.branch?.name}</span>
+                            </div>
                         </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                        {shift.status === 'open' && shift.cashier_id === auth.user.id && (
+                            <button
+                                onClick={() => setShowCloseModal(true)}
+                                className="inline-flex items-center px-4 py-2 bg-rose-600 border border-transparent rounded-xl font-bold text-white text-sm uppercase tracking-widest hover:bg-rose-700 transition-all shadow-lg shadow-rose-100"
+                            >
+                                <Lock className="w-4 h-4 mr-2" />
+                                Close Shift
+                            </button>
+                        )}
+                        
+                        {shift.status !== 'open' && (
+                            <Link
+                                href={route('shifts.z-report', shift.id)}
+                                className="inline-flex items-center px-4 py-2 bg-white border border-gray-200 rounded-xl font-bold text-gray-700 text-sm uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm"
+                            >
+                                <FileText className="w-4 h-4 mr-2" />
+                                Z-Report
+                            </Link>
+                        )}
+                        
+                        {shift.status === 'closed' && auth.user.permissions.includes('approve_shift') && (
+                            <button
+                                onClick={handleApprove}
+                                className="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-xl font-bold text-white text-sm uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+                            >
+                                <CheckCircle2 className="w-4 h-4 mr-2" />
+                                Approve Shift
+                            </button>
+                        )}
                     </div>
                 </div>
             }
         >
             <Head title={`Shift Summary - ${shift.cashier?.name}`} />
+
+            {showCloseModal && <CloseShiftModal shift={shift} onClose={() => setShowCloseModal(false)} />}
+            {showEventModal && <RecordCashEventModal shift={shift} show={showEventModal} onClose={() => setShowEventModal(false)} />}
 
             <div className="py-8">
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-8">
@@ -81,7 +132,7 @@ export default function ShiftShow({ auth, shift }) {
                                     <h3 className="text-2xl font-bold text-gray-900">{shift.cashier?.name}</h3>
                                     <p className="text-sm text-gray-500 mt-1 flex items-center gap-2">
                                         <Calendar size={14} />
-                                        {formatDate(shift.opened_at)}
+                                        Opened: {formatDate(shift.opened_at)}
                                     </p>
                                 </div>
                             </div>
@@ -133,7 +184,17 @@ export default function ShiftShow({ auth, shift }) {
                                         <History size={18} className="text-gray-400" />
                                         Cash Drawer Events
                                     </h4>
-                                    <span className="text-xs text-gray-500 font-medium">{shift.cash_drawer_events?.length || 0} Events</span>
+                                    <div className="flex items-center gap-3">
+                                        {shift.status === 'open' && auth.user.permissions.includes('manage_cash_drawer') && (
+                                            <button
+                                                onClick={() => setShowEventModal(true)}
+                                                className="text-xs font-bold text-indigo-600 hover:text-indigo-700 uppercase tracking-wider"
+                                            >
+                                                + Record Event
+                                            </button>
+                                        )}
+                                        <span className="text-xs text-gray-500 font-medium">{shift.cash_drawer_events?.length || 0} Events</span>
+                                    </div>
                                 </div>
                                 <div className="divide-y divide-gray-50">
                                     {shift.cash_drawer_events?.length > 0 ? shift.cash_drawer_events.map((event) => (
@@ -144,14 +205,23 @@ export default function ShiftShow({ auth, shift }) {
                                                 </div>
                                                 <div>
                                                     <p className="text-sm font-semibold text-gray-900 uppercase tracking-tight">{event.event_type.replace(/_/g, ' ')}</p>
-                                                    <p className="text-xs text-gray-500 mt-0.5">{event.reason || 'No reason provided'}</p>
+                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                        <p className="text-xs text-gray-500">{event.reason_code || event.reason || 'No reason'}</p>
+                                                        {event.created_by && (
+                                                            <>
+                                                                <span className="text-gray-300">•</span>
+                                                                <p className="text-[10px] text-gray-400 font-medium">By {event.created_by.name}</p>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                    {event.reason_notes && <p className="text-[10px] text-gray-400 italic mt-1">"{event.reason_notes}"</p>}
                                                 </div>
                                             </div>
                                             <div className="text-right">
                                                 <p className={`text-sm font-bold ${['cash_in', 'cash_top_up'].includes(event.event_type) ? 'text-emerald-600' : 'text-rose-600'}`}>
                                                     {['cash_in', 'cash_top_up'].includes(event.event_type) ? '+' : '-'}{formatCurrency(event.amount)}
                                                 </p>
-                                                <p className="text-[10px] text-gray-400 mt-0.5 font-medium">{formatDate(event.occurred_at)}</p>
+                                                <p className="text-[10px] text-gray-400 mt-0.5 font-medium">{formatDate(event.created_at || event.occurred_at)}</p>
                                             </div>
                                         </div>
                                     )) : (
@@ -194,6 +264,46 @@ export default function ShiftShow({ auth, shift }) {
                                     </div>
                                 </div>
                             </div>
+
+                            {/* Denomination Breakdown */}
+                            {(shift.opening_denominations || shift.closing_denominations) && (
+                                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                                    <div className="px-6 py-4 border-b border-gray-50 flex items-center gap-2">
+                                        <FileText size={18} className="text-gray-400" />
+                                        <h4 className="font-bold text-gray-900">Cash Count Audit</h4>
+                                    </div>
+                                    <div className="p-6">
+                                        <div className="grid grid-cols-2 gap-8">
+                                            <div>
+                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Opening Breakout</p>
+                                                {shift.opening_denominations ? (
+                                                    <div className="space-y-1">
+                                                        {Object.entries(shift.opening_denominations).filter(([_, count]) => count > 0).map(([val, count]) => (
+                                                            <div key={val} className="flex justify-between text-xs py-1 border-b border-gray-50 last:border-0">
+                                                                <span className="text-gray-500">₱{val} × {count}</span>
+                                                                <span className="font-bold text-gray-700">{formatCurrency(parseFloat(val) * count)}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                ) : <p className="text-xs text-gray-400 italic">No breakdown available.</p>}
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Closing Breakout</p>
+                                                {shift.closing_denominations ? (
+                                                    <div className="space-y-1">
+                                                        {Object.entries(shift.closing_denominations).filter(([_, count]) => count > 0).map(([val, count]) => (
+                                                            <div key={val} className="flex justify-between text-xs py-1 border-b border-gray-50 last:border-0">
+                                                                <span className="text-gray-500">₱{val} × {count}</span>
+                                                                <span className="font-bold text-gray-700">{formatCurrency(parseFloat(val) * count)}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                ) : <p className="text-xs text-gray-400 italic">No breakdown available.</p>}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Approval Status */}
                             {shift.status !== 'open' && (

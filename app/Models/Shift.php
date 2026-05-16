@@ -37,6 +37,8 @@ class Shift extends Model
         'closed_at',
         'closing_notes',
         'manager_notes',
+        'opening_denominations',
+        'closing_denominations',
     ];
 
     protected $casts = [
@@ -48,6 +50,8 @@ class Shift extends Model
         'closing_submitted_at' => 'datetime',
         'approved_at' => 'datetime',
         'closed_at' => 'datetime',
+        'opening_denominations' => 'array',
+        'closing_denominations' => 'array',
     ];
 
     public function cashier(): BelongsTo

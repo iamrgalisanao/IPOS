@@ -127,19 +127,46 @@ Route::middleware(['auth', 'tenant'])->group(function () {
             ->name('show');
     });
 
-    // Shift Summary Routes
+    // Shift Management
     Route::prefix('shifts')->name('shifts.')->group(function () {
         Route::get('/', [\App\Http\Controllers\Shift\ShiftSummaryController::class, 'index'])
             ->middleware('permission:view_shift')
             ->name('index');
+
+        // Operational Actions (Require Branch Context)
+        Route::middleware(['branch'])->group(function () {
+            Route::get('/open', [\App\Http\Controllers\Shift\ShiftController::class, 'open'])
+                ->middleware('permission:open_shift')
+                ->name('open');
+            Route::post('/', [\App\Http\Controllers\Shift\ShiftController::class, 'store'])
+                ->middleware('permission:open_shift')
+                ->name('store');
+            Route::post('/{shift}/submit-closing', [\App\Http\Controllers\Shift\ShiftController::class, 'submitClosing'])
+                ->middleware('permission:close_shift')
+                ->name('submit-closing');
+            Route::post('/{shift}/approve', [\App\Http\Controllers\Shift\ShiftController::class, 'approve'])
+                ->middleware('permission:approve_shift')
+                ->name('approve');
+            Route::post('/drawer-events', [\App\Http\Controllers\Shift\ShiftController::class, 'recordDrawerEvent'])
+                ->middleware('permission:manage_cash_drawer')
+                ->name('drawer-events');
+        });
+
         Route::get('/{shift}', [\App\Http\Controllers\Shift\ShiftSummaryController::class, 'show'])
             ->middleware('permission:view_shift')
             ->name('show');
+            
+        Route::get('/{shift}/z-report', [\App\Http\Controllers\Shift\ShiftSummaryController::class, 'zReport'])
+            ->middleware('permission:view_shift')
+            ->name('z-report');
     });
 
     // POS Routes
-    Route::get('/pos', [\App\Http\Controllers\POSController::class, 'index'])->name('pos.index');
-    Route::get('/pos/search', [\App\Http\Controllers\POSController::class, 'search'])->name('pos.search');
+    Route::middleware(['branch'])->group(function () {
+        Route::get('/pos', [\App\Http\Controllers\POSController::class, 'index'])->name('pos.index');
+        Route::get('/pos/search', [\App\Http\Controllers\POSController::class, 'search'])->name('pos.search');
+        Route::get('/pos/active-shift', [\App\Http\Controllers\POSController::class, 'activeShift'])->name('pos.active-shift');
+    });
 
     // Checkout Validation: requires branch context + create_sale permission
     Route::middleware(['branch', 'permission:create_sale'])->group(function () {

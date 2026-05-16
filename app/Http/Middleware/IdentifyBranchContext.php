@@ -30,7 +30,29 @@ class IdentifyBranchContext
         }
 
         if (!$branchId) {
-            abort(403, 'Branch context missing.');
+            $user = $request->user();
+            if ($user) {
+                // Primary fallback: User's first assigned branch
+                $firstAssigned = $user->branches()->first();
+                if ($firstAssigned) {
+                    $branchId = $firstAssigned->id;
+                } 
+                // Secondary fallback: For Admins/Owners without explicit assignment, pick the first branch of the tenant
+                elseif ($user->hasPermission('view_multi_branch_dashboard')) {
+                    $tenantBranch = \App\Models\Branch::where('tenant_id', $this->tenantContext->getTenantId())->first();
+                    if ($tenantBranch) {
+                        $branchId = $tenantBranch->id;
+                    }
+                }
+                
+                if ($branchId) {
+                    session(['active_branch_id' => $branchId]);
+                }
+            }
+        }
+
+        if (!$branchId) {
+            abort(403, 'Branch context missing. Please select a branch from the dashboard.');
         }
 
         // Branch model is already scoped to the active tenant via BelongsToTenant trait.

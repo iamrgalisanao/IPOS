@@ -102,6 +102,14 @@ The G-009 Credential Rotation task has been revised to a **Credential Reinjectio
 - **Safety**: Formula injection protection verified for `=`, `+`, `-`, `@`.
 - **Closure**: Slice D is closed and pending final Epic 15 release sign-off.
 
+- [x] **Slice 2**: Cash Drawer Events (Drops & Top-ups) implemented and target-validated.
+- [x] **Slice 3**: Shift Dashboard & HUD implemented and target-validated.
+- [x] **Blind Reconciliation**: Confirmed `expected_cash_amount` and `variance` are omitted from the backend response for standard cashiers.
+- [x] **Security**: Verified `branch` middleware application to POS API routes.
+- [x] **Isolation**: Manager monitor strictly limited to assigned branches.
+- [x] **Validation**: 4 focused HUD tests passed; 75 shift regression tests passed; 16 security tests passed.
+- [x] **Closure**: Slice 3 is ready for commit.
+
 ---
 
 Signed: Sync-Discovery + Antigravity Guardrail Audit

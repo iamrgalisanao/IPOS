@@ -38,6 +38,8 @@ class HandleInertiaRequests extends Middleware
                 'user' => $user,
                 'permissions' => $this->resolvePermissions($request),
             ],
+            'tenant_id' => app(\App\Services\TenantContext::class)->getTenantId(),
+            'branch_id' => app(\App\Services\BranchContext::class)->getBranchId(),
         ];
     }
 

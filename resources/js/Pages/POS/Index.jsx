@@ -7,8 +7,11 @@ import Receipt from './Components/Receipt';
 import SplitPayWizard from './Components/SplitPayWizard';
 import FailureGuardianBanner from './Components/FailureGuardianBanner';
 import { isCashPayment, calculateCashChange } from './helpers/splitPaymentHelper';
-import { ShoppingCart, Package, AlertTriangle } from 'lucide-react';
+import { ShoppingCart, Package, AlertTriangle, ArrowDownCircle } from 'lucide-react';
 import { useTransactionStore } from './hooks/useTransactionStore';
+import ShiftHUD from '@/Components/Shift/ShiftHUD';
+import CloseShiftModal from '@/Components/Shift/CloseShiftModal';
+import RecordCashEventModal from '@/Components/Shift/RecordCashEventModal';
 import { createUncertainCheckoutError, getCheckoutErrorMessage, getGuardianPresentation, isUncertainCheckoutError } from './helpers/checkoutFailureHelper';
 
 export default function Index({ categories, payment_methods, tenant_id, branch_id, user_id }) {
@@ -30,6 +33,8 @@ export default function Index({ categories, payment_methods, tenant_id, branch_i
     const [guardianBanner, setGuardianBanner] = useState(null);
     const [isCheckingStatus, setIsCheckingStatus] = useState(false);
     const [errorMessage, setErrorMessage] = useState(null);
+    const [showCashEvent, setShowCashEvent] = useState(false);
+    const [activeShift, setActiveShift] = useState(null);
 
     const { generateUUID, saveDraft, restoreDraftIfSafe, clearDraft } = useTransactionStore();
 
@@ -220,6 +225,31 @@ export default function Index({ categories, payment_methods, tenant_id, branch_i
             }
         }
     }, [context]); // Run once when context is stable
+
+    // Fetch active shift for drawer events
+    useEffect(() => {
+        const fetchActiveShift = async () => {
+            try {
+                const response = await fetch('/pos/active-shift', {
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Tenant-ID': tenant_id,
+                        'X-Branch-ID': branch_id
+                    }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    setActiveShift(data);
+                }
+            } catch (error) {
+                console.error('Failed to fetch active shift:', error);
+            }
+        };
+
+        fetchActiveShift();
+    }, [tenant_id, branch_id]);
+
+    const [showCloseShift, setShowCloseShift] = useState(false);
 
     // Persist draft, recovery, and payment-wizard metadata whenever local state changes.
     useEffect(() => {
@@ -480,6 +510,13 @@ export default function Index({ categories, payment_methods, tenant_id, branch_i
 
             <Head title="POS Terminal" />
 
+            {/* Shift Dashboard & HUD */}
+            <ShiftHUD 
+                shift={activeShift} 
+                onRecordEvent={() => setShowCashEvent(true)}
+                onCloseShift={() => setShowCloseShift(true)}
+            />
+
             {/* Main Content Area */}
             <main className="flex-1 flex flex-col h-screen overflow-hidden">
                 {/* Header / Search Bar Area */}
@@ -491,7 +528,7 @@ export default function Index({ categories, payment_methods, tenant_id, branch_i
                             </div>
                             <h1 className="text-xl font-bold tracking-tight">Draft Cart</h1>
                         </div>
-                        <div className="flex-1 sm:max-w-md">
+                        <div className="flex items-center gap-3 flex-1 sm:max-w-md">
                             <SearchBar 
                                 value={searchQuery} 
                                 onChange={setSearchQuery} 
@@ -608,6 +645,21 @@ export default function Index({ categories, payment_methods, tenant_id, branch_i
                         clearCartState();
                     }}
                     onPaymentRecorded={handlePaymentRecorded}
+                />
+            )}
+
+            {/* Cash Drawer Event Modal */}
+            <RecordCashEventModal
+                show={showCashEvent}
+                onClose={() => setShowCashEvent(false)}
+                shift={activeShift}
+            />
+            {/* Close Shift Modal */}
+            {activeShift && (
+                <CloseShiftModal
+                    show={showCloseShift}
+                    onClose={() => setShowCloseShift(false)}
+                    shift={activeShift}
                 />
             )}
         </div>
