@@ -123,4 +123,40 @@ class ShiftSummaryController extends Controller
             'shift' => $shift,
         ]);
     }
+
+    /**
+     * Generate a printable Z-Report for the shift.
+     */
+    public function zReport(Shift $shift, Request $request, \App\Services\Shift\ShiftReportService $reportService): Response
+    {
+        $user = $request->user();
+
+        // 1. Tenant/Branch Isolation
+        if ($shift->tenant_id !== $this->tenantContext->getTenantId()) {
+            abort(403, 'Cross-tenant access blocked.');
+        }
+
+        // 2. Authorization
+        $canView = $user->hasPermission('view_all_shifts') || 
+                   $shift->cashier_id === $user->id ||
+                   ($user->hasPermission('view_branch_shifts') && $user->canAccessBranch($shift->branch));
+
+        if (!$canView) {
+            abort(403, 'Unauthorized to view this shift report.');
+        }
+
+        if ($this->branchContext->hasBranch() && $shift->branch_id !== $this->branchContext->getBranchId()) {
+            abort(403, 'Shift branch mismatch.');
+        }
+
+        // 3. Redaction Logic: Only users with 'approve_shift' see expected/variance
+        $includeSensitivity = $user->hasPermission('approve_shift');
+
+        $reportData = $reportService->generateSummary($shift, $includeSensitivity);
+
+        return Inertia::render('Shift/ZReport', [
+            'report' => $reportData,
+            'can_see_sensitivity' => $includeSensitivity,
+        ]);
+    }
 }
