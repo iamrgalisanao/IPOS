@@ -102,6 +102,17 @@ The G-009 Credential Rotation task has been revised to a **Credential Reinjectio
 - **Safety**: Formula injection protection verified for `=`, `+`, `-`, `@`.
 - **Closure**: Slice D is closed and pending final Epic 15 release sign-off.
 
+## Shift Operations Hardening Slice 2 Audit (2026-05-16)
+
+### Status:
+- **Slice 2**: Cash Drawer Events (Drops & Top-ups) implemented and target-validated.
+- **Threshold Guard**: ₱5,000.00 limit for cash drops correctly gated by `approve_shift` permission.
+- **Self-Approval**: Strictly blocked for shift owners, preventing conflict of interest for high-value drops.
+- **Mutation Safety**: Verified that drawer events affect reconciliation calculations only; no mutation of sales or tax totals.
+- **Tenant/Branch Isolation**: Verified for `activeShift` endpoint and `recordDrawerEvent` action.
+- **Validation**: 15 focused tests passed; 71 shift regression tests passed.
+- **Closure**: Slice 2 is ready for commit.
+
 ---
 
 Signed: Sync-Discovery + Antigravity Guardrail Audit

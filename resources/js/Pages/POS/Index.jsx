@@ -7,8 +7,9 @@ import Receipt from './Components/Receipt';
 import SplitPayWizard from './Components/SplitPayWizard';
 import FailureGuardianBanner from './Components/FailureGuardianBanner';
 import { isCashPayment, calculateCashChange } from './helpers/splitPaymentHelper';
-import { ShoppingCart, Package, AlertTriangle } from 'lucide-react';
+import { ShoppingCart, Package, AlertTriangle, ArrowDownCircle } from 'lucide-react';
 import { useTransactionStore } from './hooks/useTransactionStore';
+import RecordCashEventModal from '@/Components/Shift/RecordCashEventModal';
 import { createUncertainCheckoutError, getCheckoutErrorMessage, getGuardianPresentation, isUncertainCheckoutError } from './helpers/checkoutFailureHelper';
 
 export default function Index({ categories, payment_methods, tenant_id, branch_id, user_id }) {
@@ -30,6 +31,8 @@ export default function Index({ categories, payment_methods, tenant_id, branch_i
     const [guardianBanner, setGuardianBanner] = useState(null);
     const [isCheckingStatus, setIsCheckingStatus] = useState(false);
     const [errorMessage, setErrorMessage] = useState(null);
+    const [showCashEvent, setShowCashEvent] = useState(false);
+    const [activeShift, setActiveShift] = useState(null);
 
     const { generateUUID, saveDraft, restoreDraftIfSafe, clearDraft } = useTransactionStore();
 
@@ -220,6 +223,29 @@ export default function Index({ categories, payment_methods, tenant_id, branch_i
             }
         }
     }, [context]); // Run once when context is stable
+
+    // Fetch active shift for drawer events
+    useEffect(() => {
+        const fetchActiveShift = async () => {
+            try {
+                const response = await fetch('/pos/active-shift', {
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Tenant-ID': tenant_id,
+                        'X-Branch-ID': branch_id
+                    }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    setActiveShift(data);
+                }
+            } catch (error) {
+                console.error('Failed to fetch active shift:', error);
+            }
+        };
+
+        fetchActiveShift();
+    }, [tenant_id, branch_id]);
 
     // Persist draft, recovery, and payment-wizard metadata whenever local state changes.
     useEffect(() => {
@@ -491,13 +517,24 @@ export default function Index({ categories, payment_methods, tenant_id, branch_i
                             </div>
                             <h1 className="text-xl font-bold tracking-tight">Draft Cart</h1>
                         </div>
-                        <div className="flex-1 sm:max-w-md">
-                            <SearchBar 
-                                value={searchQuery} 
-                                onChange={setSearchQuery} 
-                                onScan={(barcode) => setSearchQuery(barcode)}
-                                loading={loading}
-                            />
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => setShowCashEvent(true)}
+                                className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 transition-colors"
+                                title="Record Cash Drop or Top-up"
+                            >
+                                <ArrowDownCircle className="w-4 h-4 text-rose-400" />
+                                <span className="text-sm font-medium">Cash Drawer</span>
+                            </button>
+                            <div className="w-px h-6 bg-slate-800 hidden sm:block"></div>
+                            <div className="flex-1 sm:max-w-md">
+                                <SearchBar 
+                                    value={searchQuery} 
+                                    onChange={setSearchQuery} 
+                                    onScan={(barcode) => setSearchQuery(barcode)}
+                                    loading={loading}
+                                />
+                            </div>
                         </div>
                     </div>
 
@@ -610,6 +647,13 @@ export default function Index({ categories, payment_methods, tenant_id, branch_i
                     onPaymentRecorded={handlePaymentRecorded}
                 />
             )}
+
+            {/* Cash Drawer Event Modal */}
+            <RecordCashEventModal
+                show={showCashEvent}
+                onClose={() => setShowCashEvent(false)}
+                shift={activeShift}
+            />
         </div>
     );
 }

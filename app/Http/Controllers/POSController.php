@@ -55,4 +55,24 @@ class POSController extends Controller
             $this->catalogService->search($searchTerm, $categoryId)
         );
     }
+
+    /**
+     * API: Get current active shift for the cashier.
+     */
+    public function activeShift(Request $request, \App\Services\Shift\ShiftService $shiftService)
+    {
+        $branchId = $this->branchContext->getBranchId();
+        if (!$branchId) {
+            return response()->json(null);
+        }
+
+        $branch = \App\Models\Branch::find($branchId);
+        if (!$branch) {
+            return response()->json(null);
+        }
+
+        $shift = $shiftService->getActiveShiftFor($request->user(), $branch);
+
+        return response()->json($shift);
+    }
 }

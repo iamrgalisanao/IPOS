@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link, router } from '@inertiajs/react';
 import CloseShiftModal from '@/Components/Shift/CloseShiftModal';
+import RecordCashEventModal from '@/Components/Shift/RecordCashEventModal';
 import { 
     ArrowLeft, 
     Calendar, 
@@ -21,6 +22,7 @@ import {
 
 export default function ShiftShow({ auth, shift }) {
     const [showCloseModal, setShowCloseModal] = useState(false);
+    const [showEventModal, setShowEventModal] = useState(false);
 
     const formatCurrency = (val) => {
         return new Intl.NumberFormat('en-PH', {
@@ -104,6 +106,7 @@ export default function ShiftShow({ auth, shift }) {
             <Head title={`Shift Summary - ${shift.cashier?.name}`} />
 
             {showCloseModal && <CloseShiftModal shift={shift} onClose={() => setShowCloseModal(false)} />}
+            {showEventModal && <RecordCashEventModal shift={shift} show={showEventModal} onClose={() => setShowEventModal(false)} />}
 
             <div className="py-8">
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-8">
@@ -171,7 +174,17 @@ export default function ShiftShow({ auth, shift }) {
                                         <History size={18} className="text-gray-400" />
                                         Cash Drawer Events
                                     </h4>
-                                    <span className="text-xs text-gray-500 font-medium">{shift.cash_drawer_events?.length || 0} Events</span>
+                                    <div className="flex items-center gap-3">
+                                        {shift.status === 'open' && auth.user.permissions.includes('manage_cash_drawer') && (
+                                            <button
+                                                onClick={() => setShowEventModal(true)}
+                                                className="text-xs font-bold text-indigo-600 hover:text-indigo-700 uppercase tracking-wider"
+                                            >
+                                                + Record Event
+                                            </button>
+                                        )}
+                                        <span className="text-xs text-gray-500 font-medium">{shift.cash_drawer_events?.length || 0} Events</span>
+                                    </div>
                                 </div>
                                 <div className="divide-y divide-gray-50">
                                     {shift.cash_drawer_events?.length > 0 ? shift.cash_drawer_events.map((event) => (
@@ -182,14 +195,23 @@ export default function ShiftShow({ auth, shift }) {
                                                 </div>
                                                 <div>
                                                     <p className="text-sm font-semibold text-gray-900 uppercase tracking-tight">{event.event_type.replace(/_/g, ' ')}</p>
-                                                    <p className="text-xs text-gray-500 mt-0.5">{event.reason || 'No reason provided'}</p>
+                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                        <p className="text-xs text-gray-500">{event.reason_code || event.reason || 'No reason'}</p>
+                                                        {event.created_by && (
+                                                            <>
+                                                                <span className="text-gray-300">•</span>
+                                                                <p className="text-[10px] text-gray-400 font-medium">By {event.created_by.name}</p>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                    {event.reason_notes && <p className="text-[10px] text-gray-400 italic mt-1">"{event.reason_notes}"</p>}
                                                 </div>
                                             </div>
                                             <div className="text-right">
                                                 <p className={`text-sm font-bold ${['cash_in', 'cash_top_up'].includes(event.event_type) ? 'text-emerald-600' : 'text-rose-600'}`}>
                                                     {['cash_in', 'cash_top_up'].includes(event.event_type) ? '+' : '-'}{formatCurrency(event.amount)}
                                                 </p>
-                                                <p className="text-[10px] text-gray-400 mt-0.5 font-medium">{formatDate(event.occurred_at)}</p>
+                                                <p className="text-[10px] text-gray-400 mt-0.5 font-medium">{formatDate(event.created_at || event.occurred_at)}</p>
                                             </div>
                                         </div>
                                     )) : (

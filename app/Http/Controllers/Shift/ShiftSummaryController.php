@@ -95,7 +95,7 @@ class ShiftSummaryController extends Controller
             'branch:id,name',
             'openedByUser:id,name',
             'approvedByUser:id,name',
-            'cashDrawerEvents' => fn($q) => $q->with('cashier:id,name')->latest('occurred_at'),
+            'cashDrawerEvents' => fn($q) => $q->with(['cashier:id,name', 'createdBy:id,name'])->latest('occurred_at'),
             'salePayments' => fn($q) => $q->whereHas('paymentMethod', fn($pq) => $pq->whereRaw('LOWER(code) = ?', ['cash']))->with('sale:id,order_number'),
         ]);
 

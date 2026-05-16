@@ -15,6 +15,12 @@ use Illuminate\Support\Facades\DB;
 
 class ShiftService
 {
+    /**
+     * Threshold for cash drops requiring manager approval.
+     * Future enhancement: make this tenant-configurable.
+     */
+    public const CASH_DROP_APPROVAL_THRESHOLD = 5000.00;
+
     public function __construct(
         protected TenantContext $tenantContext,
         protected BranchContext $branchContext,
@@ -230,8 +236,8 @@ class ShiftService
             throw new \RuntimeException('Cannot record event for a closed shift.');
         }
 
-        // 4. Ownership check (MVP rule: cashier can only record on their own shift)
-        if ($shift->cashier_id !== $actor->id) {
+        // 4. Ownership check (Cashier can only record on their own shift, but manager can override)
+        if ($shift->cashier_id !== $actor->id && !$actor->hasPermission('approve_shift')) {
             throw new \RuntimeException('Unauthorized: shift belongs to another cashier.');
         }
 
@@ -249,6 +255,21 @@ class ShiftService
         // 6. Amount validation
         if (!is_numeric($amount) || bccomp($amount, '0', 4) <= 0) {
             throw new \InvalidArgumentException('Drawer event amount must be positive.');
+        }
+
+        // 6.1 Threshold Guard for Cash Drops
+        if ($eventType === CashDrawerEvent::TYPE_CASH_DROP && bccomp($amount, (string) self::CASH_DROP_APPROVAL_THRESHOLD, 4) > 0) {
+            if (!$actor->hasPermission('approve_shift')) {
+                throw new \RuntimeException('Unauthorized: high-value cash drop requires manager approval.');
+            }
+            
+            // Self-approval block for high-value drops
+            if ($shift->cashier_id === $actor->id && $actor->hasPermission('approve_shift')) {
+                // If the cashier has permission, they CAN approve, but we should log it as a risk.
+                // However, the rule says "Cashier self-approval for high-value drop must be blocked".
+                // I'll enforce it strictly: if they are the shift owner, they need ANOTHER manager to record it.
+                throw new \RuntimeException('Security Block: Cashiers cannot approve their own high-value cash drop.');
+            }
         }
 
         // 7. Reason code validation

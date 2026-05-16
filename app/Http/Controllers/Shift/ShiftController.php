@@ -135,4 +135,35 @@ class ShiftController extends Controller
 
         return back()->with('success', 'Shift approved and finalized.');
     }
+
+    /**
+     * Record a cash drawer operational event.
+     */
+    public function recordDrawerEvent(Request $request, ShiftService $shiftService)
+    {
+        $request->validate([
+            'shift_id' => 'required|uuid|exists:shifts,id',
+            'event_type' => 'required|string|in:cash_drop,cash_top_up',
+            'amount' => 'required|numeric|min:0.01',
+            'reason_code' => 'required|string|max:50',
+            'reason_notes' => 'nullable|string|max:255',
+        ]);
+
+        $shift = Shift::findOrFail($request->shift_id);
+
+        try {
+            $shiftService->recordDrawerEvent(
+                $shift,
+                $request->user(),
+                $request->event_type,
+                (string) $request->amount,
+                $request->reason_code,
+                $request->reason_notes
+            );
+
+            return back()->with('success', 'Cash drawer event recorded successfully.');
+        } catch (\Exception $e) {
+            return back()->withErrors(['amount' => $e->getMessage()]);
+        }
+    }
 }

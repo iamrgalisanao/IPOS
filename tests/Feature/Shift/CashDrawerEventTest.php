@@ -289,4 +289,56 @@ class CashDrawerEventTest extends TestCase
             $this->assertEquals(0, \DB::table('inventory_movements')->count());
         }
     }
+
+    /** Threshold Guard Tests */
+    public function test_it_allows_high_value_drop_for_authorized_manager(): void
+    {
+        $manager = User::factory()->create(['tenant_id' => $this->tenant->id]);
+        $manager->assignToBranch($this->branch);
+        $role = Role::where('name', 'Branch Manager')->first();
+        $manager->assignRole($role); // Has approve_shift permission
+
+        $event = $this->shiftService->recordDrawerEvent(
+            $this->shift,
+            $manager,
+            CashDrawerEvent::TYPE_CASH_DROP,
+            '6000.00',
+            'MANAGER_DROP'
+        );
+
+        $this->assertEquals('6000.0000', $event->amount);
+        $this->assertEquals($manager->id, $event->created_by);
+    }
+
+    public function test_it_rejects_high_value_drop_for_unauthorized_cashier(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Unauthorized: high-value cash drop requires manager approval.');
+
+        $this->shiftService->recordDrawerEvent(
+            $this->shift,
+            $this->cashier,
+            CashDrawerEvent::TYPE_CASH_DROP,
+            '6000.00',
+            'CASHIER_DROP'
+        );
+    }
+
+    public function test_it_blocks_self_approval_for_high_value_drop(): void
+    {
+        // Give cashier manager permissions
+        $role = Role::where('name', 'Branch Manager')->first();
+        $this->cashier->assignRole($role);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Security Block: Cashiers cannot approve their own high-value cash drop.');
+
+        $this->shiftService->recordDrawerEvent(
+            $this->shift,
+            $this->cashier,
+            CashDrawerEvent::TYPE_CASH_DROP,
+            '6000.00',
+            'SELF_DROP'
+        );
+    }
 }
