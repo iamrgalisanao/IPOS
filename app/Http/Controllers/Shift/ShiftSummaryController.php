@@ -20,7 +20,7 @@ class ShiftSummaryController extends Controller
     /**
      * Display a listing of shifts.
      */
-    public function index(Request $request): Response
+    public function index(Request $request, \App\Services\Shift\ShiftService $shiftService): Response
     {
         $user = $request->user();
         $query = Shift::with(['cashier:id,name', 'branch:id,name']);
@@ -33,7 +33,7 @@ class ShiftSummaryController extends Controller
             }
         } elseif ($user->hasPermission('view_branch_shifts')) {
             // Manager can see assigned branches
-            $branchIds = $user->branches()->pluck('branch_id');
+            $branchIds = $user->branches()->pluck('id');
             $query->whereIn('branch_id', $branchIds);
             
             if ($this->branchContext->hasBranch()) {
@@ -42,6 +42,25 @@ class ShiftSummaryController extends Controller
         } else {
             // Regular cashier only own
             $query->where('cashier_id', $user->id);
+        }
+
+        // Active Shifts Section (Managers only)
+        $activeShifts = [];
+        if ($user->hasPermission('approve_shift')) {
+            $activeQuery = clone $query;
+            $activeShifts = $activeQuery->where('status', Shift::STATUS_OPEN)
+                ->get()
+                ->map(function ($shift) use ($shiftService) {
+                    return [
+                        'id' => $shift->id,
+                        'cashier_name' => $shift->cashier->name,
+                        'branch_name' => $shift->branch->name,
+                        'opened_at' => $shift->opened_at,
+                        'opening_cash_amount' => $shift->opening_cash_amount,
+                        'expected_cash_amount' => $shiftService->calculateExpectedCash($shift),
+                        'duration_seconds' => now()->diffInSeconds($shift->opened_at),
+                    ];
+                });
         }
 
         // 2. Filters
@@ -59,6 +78,7 @@ class ShiftSummaryController extends Controller
 
         return Inertia::render('Shift/Index', [
             'shifts' => $shifts,
+            'activeShifts' => $activeShifts,
             'filters' => $request->only(['status', 'date']),
         ]);
     }

@@ -73,6 +73,25 @@ class POSController extends Controller
 
         $shift = $shiftService->getActiveShiftFor($request->user(), $branch);
 
-        return response()->json($shift);
+        if (!$shift) {
+            return response()->json(null);
+        }
+
+        // Base response for everyone
+        $data = [
+            'id' => $shift->id,
+            'opened_at' => $shift->opened_at,
+            'cashier_name' => $shift->cashier->name,
+            'opening_cash_amount' => $shift->opening_cash_amount,
+            'status' => $shift->status,
+        ];
+
+        // Manager-only sensitive fields
+        if ($request->user()->hasPermission('approve_shift')) {
+            $data['expected_cash_amount'] = $shiftService->calculateExpectedCash($shift);
+            $data['is_manager_view'] = true;
+        }
+
+        return response()->json($data);
     }
 }

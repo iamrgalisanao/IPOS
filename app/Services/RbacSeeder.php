@@ -133,7 +133,7 @@ class RbacSeeder
                 'description' => 'Branch operations supervisor',
                 'permissions' => [
                     'access_pos', 'create_sale', 'apply_discount', 
-                    'open_shift', 'close_shift', 'approve_shift', 'view_own_shift_summary',
+                    'open_shift', 'close_shift', 'approve_shift', 'view_shift', 'view_branch_shifts', 'view_own_shift_summary',
                     'manage_cash_drawer',
                     'view_branch_dashboard', 'manage_branch_inventory',
                     'approve_void', 'approve_refund', 'view_branch_reports',

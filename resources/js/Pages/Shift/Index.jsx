@@ -3,7 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link, router } from '@inertiajs/react';
 import { Search, Filter, Calendar, User, Building2, ChevronRight, Clock } from 'lucide-react';
 
-export default function ShiftIndex({ auth, shifts, filters }) {
+export default function ShiftIndex({ auth, shifts, activeShifts, filters }) {
     const handleFilter = (key, value) => {
         router.get(route('shifts.index'), {
             ...filters,
@@ -46,8 +46,63 @@ export default function ShiftIndex({ auth, shifts, filters }) {
             <Head title="Shifts" />
 
             <div className="py-8">
-                <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-6">
+                <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-8">
                     
+                    {/* Active Shifts Monitor (Managers only) */}
+                    {activeShifts && activeShifts.length > 0 && (
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                <h3 className="text-sm font-bold text-gray-700 uppercase tracking-widest">Live Operations Monitor</h3>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {activeShifts.map((active) => (
+                                    <div key={active.id} className="bg-white rounded-xl border border-emerald-100 shadow-sm p-4 hover:shadow-md transition-shadow relative overflow-hidden group">
+                                        <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                                            <Clock size={48} className="text-emerald-500" />
+                                        </div>
+                                        
+                                        <div className="flex justify-between items-start mb-4">
+                                            <div>
+                                                <p className="text-xs font-bold text-gray-400 uppercase tracking-tighter">Cashier</p>
+                                                <p className="text-sm font-bold text-gray-800">{active.cashier_name}</p>
+                                            </div>
+                                            <Link 
+                                                href={route('shifts.show', active.id)}
+                                                className="p-1.5 bg-gray-50 rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 transition-colors"
+                                            >
+                                                <ChevronRight size={16} />
+                                            </Link>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">Branch</p>
+                                                <p className="text-xs font-medium text-gray-600">{active.branch_name}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">Expected Drawer</p>
+                                                <p className="text-sm font-bold text-emerald-600">
+                                                    {new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(active.expected_cash_amount)}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div className="mt-4 pt-4 border-t border-gray-50 flex items-center justify-between text-[10px] font-bold uppercase tracking-widest">
+                                            <span className="text-gray-400">Since {new Date(active.opened_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                            <span className="text-emerald-500">Live</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-bold text-gray-700 uppercase tracking-widest">Shift History</h3>
+                        </div>
                     {/* Filters */}
                     <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-wrap items-center gap-4">
                         <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg border border-gray-100">
@@ -150,6 +205,7 @@ export default function ShiftIndex({ auth, shifts, filters }) {
                                 ))}
                             </div>
                         )}
+                        </div>
                     </div>
                 </div>
             </div>

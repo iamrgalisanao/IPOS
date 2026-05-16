@@ -27,13 +27,17 @@
 - [x] Redaction of internal POS payloads and secrets from CSV exports.
 - [x] Export events recorded in append-only AuditLog.
 +
-+## 5. Shift Operations (Epic 12 Hardening)
-+- [x] Denomination-based cash counting validated (Slice 1).
-+- [x] High-value cash drop threshold guard (₱5,000) enforced (Slice 2).
-+- [x] Manager approval required for threshold-exceeding drops.
-+- [x] Cashier self-approval for high-value drops blocked.
-+- [x] Tenant/Branch isolation enforced for activeShift endpoint.
-+- [x] Immutable drawer event audit trail verified.
+
+## 5. Shift Operations (Epic 12 Hardening)
+- [x] Denomination-based cash counting validated (Slice 1).
+- [x] High-value cash drop threshold guard (₱5,000) enforced (Slice 2).
+- [x] Manager approval required for threshold-exceeding drops.
+- [x] Cashier self-approval for high-value drops blocked.
+- [x] Tenant/Branch isolation enforced for activeShift endpoint.
+- [x] Immutable drawer event audit trail verified.
+- [x] Blind Reconciliation enforced in HUD (Sensitive fields omitted for cashiers).
+- [x] Manager Live Operations Monitor restricted to authorized branch scope.
+- [x] Active Shift API resolves context safely via branch middleware.
 
 ---
 Last updated: 2026-05-15

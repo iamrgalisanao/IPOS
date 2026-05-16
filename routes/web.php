@@ -158,9 +158,11 @@ Route::middleware(['auth', 'tenant'])->group(function () {
     });
 
     // POS Routes
-    Route::get('/pos', [\App\Http\Controllers\POSController::class, 'index'])->name('pos.index');
-    Route::get('/pos/search', [\App\Http\Controllers\POSController::class, 'search'])->name('pos.search');
-    Route::get('/pos/active-shift', [\App\Http\Controllers\POSController::class, 'activeShift'])->name('pos.active-shift');
+    Route::middleware(['branch'])->group(function () {
+        Route::get('/pos', [\App\Http\Controllers\POSController::class, 'index'])->name('pos.index');
+        Route::get('/pos/search', [\App\Http\Controllers\POSController::class, 'search'])->name('pos.search');
+        Route::get('/pos/active-shift', [\App\Http\Controllers\POSController::class, 'activeShift'])->name('pos.active-shift');
+    });
 
     // Checkout Validation: requires branch context + create_sale permission
     Route::middleware(['branch', 'permission:create_sale'])->group(function () {
