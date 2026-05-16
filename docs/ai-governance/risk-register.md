@@ -15,3 +15,5 @@ Last updated: 2026-05-12
 | R-011 | Rendering lag on low-end tablets from complex layout grids | Medium | UI performance degradation during busy shifts | Limit max grid dimensions in validator; optimize React rendering in Slice C. | Mitigated |
 | R-012 | Missing product data for layout tiles (deactivated/deleted items) | Low | Tiles rendering as empty or causing frontend errors | `ProductGrid` must handle missing product lookups gracefully by rendering "Unavailable" state. | Mitigated |
 | R-013 | Concurrent layout resolution conflicts | Low | POS might fetch inconsistent versions during a mid-shift transition | Terminal fetches layout on load or after transaction; resolution logic uses `latest()` active layout. | Mitigated |
+| R-014 | Coordinate drift/orphaned tiles on grid resize | Low | UI rendering tiles that are outside the current grid dimensions | Frontend validation and backend coordinate stripping during dimension decrease. | Open |
+| R-015 | Drag-and-drop accessibility or Z-index conflicts | Low | Editor becomes unusable on specific browsers or small admin screens | Standardize on dnd-kit and use portal-based overlays for drag previews. | Open |

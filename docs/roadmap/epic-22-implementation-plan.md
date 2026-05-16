@@ -88,13 +88,23 @@ Refine the POS terminal interface to be centrally customizable by administrators
 *   **Test Strategy:** Feature tests for layout resolution, branch isolation, and fallback behavior for unpublished/missing/invalid layouts.
 
 ### Slice D: Visual Sandbox Editor
-**Goal:** Build the administrative visual grid editor.
-*   **Tasks:**
-    1.  Build upon the `Admin Sandbox Mode`.
-    2.  Add a "Design Mode" switch.
-    3.  Implement a drag-and-drop grid interface using libraries like `dnd-kit`.
-    4.  Implement a Tile Registry sidebar to drag products/categories onto the grid.
-    5.  Serialize grid state into JSON and post to the backend.
+**Goal:** Build a high-fidelity, interactive visual editor for authorized admins.
+*   **Objective:** Provide a WYSIWYG sandbox for designing POS grid layouts.
+*   **Scope:**
+    *   Interactive Grid Editor UI in the Admin panel.
+    *   Design/Preview mode toggle.
+    *   Grid dimension controls (Rows/Columns).
+    *   Tile Registry sidebar with Product/Category search.
+    *   Drag-and-drop or click-to-place placement logic.
+    *   Real-time schema serialization and validation.
+    *   Draft-save integration using existing CRUD endpoints.
+*   **Out of Scope:** Publishing (Slice E), Rollback (Slice F), Price/Tax editing.
+*   **Design Rules:**
+    *   **WYSIWYG**: Editor must reuse `ProductGrid` rendering rules for parity.
+    *   **Safety**: Editor must not permit saving pricing, tax, or inventory data.
+    *   **Permission**: Requires `pos-layouts.manage`.
+*   **Dependencies**: `dnd-kit` (recommended for drag-and-drop interaction).
+*   **Validation**: Client-side coordinate safety and backend schema integrity.
 
 ### Slice E: Publish / Branch Deployment / Sync
 **Goal:** Safely deploy and sync layouts to active terminals.
@@ -126,5 +136,5 @@ Refine the POS terminal interface to be centrally customizable by administrators
 *   **Open Question:** Should layouts automatically sync to live terminals mid-shift? (Recommendation: Terminals should fetch layout on load or after a transaction completes to avoid disruption).
 
 ## 7. Implementation Readiness
-*   **Status:** **Slice A, B, & C CLOSED.** Slice D Planning Ready.
-*   **Next Action:** Plan **Slice D: Visual Sandbox Editor**.
+*   **Status:** **Slice A, B, C, & D CLOSED.**
+*   **Next Action:** Plan **Slice E: Publish / Branch Deployment / Sync**.

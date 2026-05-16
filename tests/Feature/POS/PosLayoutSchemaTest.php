@@ -124,7 +124,26 @@ class PosLayoutSchemaTest extends TestCase
             [
                 'grid' => ['rows' => 4, 'columns' => 4],
                 'tiles' => [
-                    ['type' => 'product'] // Missing coordinates
+                    ['type' => 'product', 'id' => '123'] // Missing coordinates
+                ]
+            ],
+            [
+                'grid' => ['rows' => 4, 'columns' => 4],
+                'tiles' => [
+                    ['x' => 4, 'y' => 0, 'type' => 'product', 'id' => '123'] // Out of bounds (x=4 in 4-column grid)
+                ]
+            ],
+            [
+                'grid' => ['rows' => 4, 'columns' => 4],
+                'tiles' => [
+                    ['x' => 0, 'y' => 4, 'type' => 'product', 'id' => '123'] // Out of bounds (y=4 in 4-row grid)
+                ]
+            ],
+            [
+                'grid' => ['rows' => 4, 'columns' => 4],
+                'tiles' => [
+                    ['x' => 0, 'y' => 0, 'type' => 'product', 'id' => '123'],
+                    ['x' => 0, 'y' => 0, 'type' => 'product', 'id' => '456'] // Overlapping
                 ]
             ]
         ];

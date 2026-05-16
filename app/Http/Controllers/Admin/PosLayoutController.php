@@ -7,12 +7,18 @@ use App\Http\Requests\StorePosLayoutRequest;
 use App\Http\Requests\UpdatePosLayoutRequest;
 use App\Models\PosLayout;
 use App\Services\POS\PosLayoutSchemaValidator;
+use App\Services\CatalogService;
+use App\Models\ProductCategory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 
 class PosLayoutController extends Controller
 {
+    public function __construct(protected CatalogService $catalogService)
+    {
+    }
+
     /**
      * Display a listing of the resource.
      */
@@ -69,8 +75,16 @@ class PosLayoutController extends Controller
     {
         $this->authorize('view', $posLayout);
 
+        // Fetch products and categories for the editor registry
+        $products = $this->catalogService->search('');
+        $categories = ProductCategory::active()->get();
+
         return Inertia::render('Admin/PosLayouts/Show', [
             'layout' => $posLayout,
+            'registry' => [
+                'products' => $products,
+                'categories' => $categories,
+            ],
         ]);
     }
 

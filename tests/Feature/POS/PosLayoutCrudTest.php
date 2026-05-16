@@ -253,4 +253,22 @@ class PosLayoutCrudTest extends TestCase
 
         $this->assertDatabaseHas('pos_layouts', ['id' => $layout->id]);
     }
+
+    public function test_show_route_provides_registry_data_for_editor()
+    {
+        \App\Models\Product::factory()->count(2)->create(['tenant_id' => $this->tenant->id]);
+        \App\Models\ProductCategory::factory()->count(2)->create(['tenant_id' => $this->tenant->id]);
+        
+        $layout = PosLayout::factory()->create(['tenant_id' => $this->tenant->id]);
+
+        $response = $this->actingAs($this->adminUser)
+            ->get(route('admin.pos-layouts.show', $layout));
+
+        $response->assertStatus(200);
+        $response->assertInertia(fn ($page) => $page
+            ->has('layout')
+            ->has('registry.products')
+            ->has('registry.categories')
+        );
+    }
 }

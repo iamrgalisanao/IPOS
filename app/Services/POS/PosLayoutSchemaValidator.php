@@ -34,6 +34,8 @@ class PosLayoutSchemaValidator
             return false;
         }
 
+        $occupied = [];
+
         foreach ($schema['tiles'] as $tile) {
             if (!is_array($tile)) {
                 return false;
@@ -46,6 +48,18 @@ class PosLayoutSchemaValidator
             if (!isset($tile['y']) || !is_int($tile['y']) || $tile['y'] < 0) {
                 return false;
             }
+
+            // Boundary check
+            if ($tile['x'] >= $schema['grid']['columns'] || $tile['y'] >= $schema['grid']['rows']) {
+                return false;
+            }
+
+            // Overlap check (1x1 tiles only for now)
+            $pos = "{$tile['x']},{$tile['y']}";
+            if (isset($occupied[$pos])) {
+                return false;
+            }
+            $occupied[$pos] = true;
 
             // Cannot contain malicious/checkout-altering fields
             $forbiddenKeys = ['price', 'tax', 'inventory', 'discount'];

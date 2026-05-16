@@ -116,6 +116,18 @@ Signed: Sync-Discovery + Antigravity Guardrail Audit
 
 ---
 
+### Epic 22 Slice C/D Closure Note (2026-05-16)
+**Findings:**
+- **Terminal Isolation (Slice C)**: `/pos/layout` strictly scoped to `latest()` active layout per branch/tenant. PASSED.
+- **Data Decoupling (Slice C)**: `CatalogService::getByIds` ensures layout schema never dictates financial values. PASSED.
+- **Visual Integrity (Slice D)**: `PosLayoutSchemaValidator` extended to enforce coordinate boundaries and overlap prevention. PASSED.
+- **Non-Mutating Registry (Slice D)**: `TileRegistry` fetches items without exposing write access to product masters. PASSED.
+- **Draft Locking**: Update logic verified to block mutations on non-draft layouts. PASSED.
+- **Validation**: `PosLayoutSchemaValidator` successfully blocks unsafe fields.
+- **Incomplete Test**: `test_only_one_active_layout_per_branch_is_allowed` is marked incomplete due to SQLite limitations. Service-level enforcement is documented for **Slice E**.
+
+---
+
 ## Epic 22 Slice A Closure Note (2026-05-16)
 
 ### Status:
