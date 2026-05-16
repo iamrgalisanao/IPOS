@@ -13,7 +13,8 @@ import {
     X, 
     LogOut, 
     User as UserIcon,
-    Settings 
+    Settings,
+    MonitorSmartphone
 } from 'lucide-react';
 
 export default function AuthenticatedLayout({ header, children }) {
@@ -22,6 +23,7 @@ export default function AuthenticatedLayout({ header, children }) {
 
     // Navigation links mapping to all our built modules
     const navigation = [
+        { name: 'Launch Register', href: route('pos.index'), icon: MonitorSmartphone, active: route().current('pos.*') },
         { name: 'Dashboard', href: route('dashboard'), icon: LayoutDashboard, active: route().current('dashboard') },
         { name: 'Shift Operations', href: route('shifts.index'), icon: Clock, active: route().current('shifts.*') },
         { name: 'Sales History', href: route('sales.history.index'), icon: Receipt, active: route().current('sales.history.*') },
