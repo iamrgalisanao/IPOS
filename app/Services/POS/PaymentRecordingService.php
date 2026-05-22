@@ -155,52 +155,65 @@ class PaymentRecordingService
                 $sale->save();
 
                 // 7. Success Audit
-                $this->auditLogger->log('payment_recorded', $sale, null, ['status' => 'paid'], null, null, [
-                    'payment_count' => $createdPayments->count(),
-                    'total_amount' => $totalPaymentAmount,
-                    'payment_ids' => $createdPayments->pluck('id')->toArray()
-                ]);
+                $this->auditLogger->log(
+                    action: $sale->is_training_mode ? 'training_payment_recorded' : 'payment_recorded',
+                    auditable: $sale,
+                    beforeValues: null,
+                    afterValues: ['status' => 'paid'],
+                    reason: null,
+                    remarks: $sale->is_training_mode ? 'Training payment recorded successfully' : null,
+                    metadata: [
+                        'payment_count' => $createdPayments->count(),
+                        'total_amount' => $totalPaymentAmount,
+                        'payment_ids' => $createdPayments->pluck('id')->toArray(),
+                        'is_training_mode' => (bool)$sale->is_training_mode,
+                    ]
+                );
 
-                // 8. Inventory Deduction
-                $this->inventoryService->deductFromSale($sale);
+                // 8. Inventory Deduction (Skip for training mode)
+                if (!$sale->is_training_mode) {
+                    $this->inventoryService->deductFromSale($sale);
+                }
 
-                // 9. Accounting Outbox
-                $this->outboxService->recordEvent('sale_paid', $sale, [
-                    'sale_id' => $sale->id,
-                    'sale_number' => $sale->sale_number,
-                    'subtotal' => (string) $sale->subtotal,
-                    'tax_total' => (string) $sale->tax_total,
-                    'discount_total' => (string) $sale->discount_total,
-                    'total' => (string) $sale->total,
-                    'paid_at' => (string) now(),
-                    'items' => $sale->items->map(fn($item) => [
-                        'sale_item_id' => $item->id,
-                        'product_id' => $item->product_id,
-                        'product_name' => $item->product_name,
-                        'quantity' => (string) $item->quantity,
-                        'unit_price' => (string) $item->unit_price,
-                        'line_total' => (string) $item->line_total,
-                    ])->toArray(),
-                    'taxes' => $sale->items
-                        ->filter(fn($item) => $item->tax_category_id && bccomp((string) $item->tax_amount, '0', 4) !== 0)
-                        ->groupBy('tax_category_id')
-                        ->map(fn($items, $taxCategoryId) => [
-                            'tax_category_id' => $taxCategoryId,
-                            'tax_rate' => (string) $items->first()->tax_rate,
-                            'tax_amount' => (string) $items->reduce(
-                                fn($carry, $item) => bcadd($carry, (string) $item->tax_amount, 4),
-                                '0.0000'
-                            ),
-                        ])
-                        ->values()
-                        ->toArray(),
-                    'payments' => $createdPayments->map(fn($p) => [
-                        'id' => $p->id,
-                        'method' => $p->payment_method_id,
-                        'amount' => (string) $p->amount,
-                        'reference' => $p->reference_number
-                    ])->toArray()
-                ]);
+                // 9. Accounting Outbox (Skip for training mode)
+                if (!$sale->is_training_mode) {
+                    $this->outboxService->recordEvent('sale_paid', $sale, [
+                        'sale_id' => $sale->id,
+                        'sale_number' => $sale->sale_number,
+                        'subtotal' => (string) $sale->subtotal,
+                        'tax_total' => (string) $sale->tax_total,
+                        'discount_total' => (string) $sale->discount_total,
+                        'total' => (string) $sale->total,
+                        'paid_at' => (string) now(),
+                        'items' => $sale->items->map(fn($item) => [
+                            'sale_item_id' => $item->id,
+                            'product_id' => $item->product_id,
+                            'product_name' => $item->product_name,
+                            'quantity' => (string) $item->quantity,
+                            'unit_price' => (string) $item->unit_price,
+                            'line_total' => (string) $item->line_total,
+                        ])->toArray(),
+                        'taxes' => $sale->items
+                            ->filter(fn($item) => $item->tax_category_id && bccomp((string) $item->tax_amount, '0', 4) !== 0)
+                            ->groupBy('tax_category_id')
+                            ->map(fn($items, $taxCategoryId) => [
+                                'tax_category_id' => $taxCategoryId,
+                                'tax_rate' => (string) $items->first()->tax_rate,
+                                'tax_amount' => (string) $items->reduce(
+                                    fn($carry, $item) => bcadd($carry, (string) $item->tax_amount, 4),
+                                    '0.0000'
+                                ),
+                            ])
+                            ->values()
+                            ->toArray(),
+                        'payments' => $createdPayments->map(fn($p) => [
+                            'id' => $p->id,
+                            'method' => $p->payment_method_id,
+                            'amount' => (string) $p->amount,
+                            'reference' => $p->reference_number
+                        ])->toArray()
+                    ]);
+                }
 
                 return $createdPayments;
             });

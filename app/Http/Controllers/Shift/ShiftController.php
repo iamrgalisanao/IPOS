@@ -5,11 +5,15 @@ namespace App\Http\Controllers\Shift;
 use App\Http\Controllers\Controller;
 use App\Models\Shift;
 use App\Services\BranchContext;
+use App\Services\Shift\ShiftService;
 use Illuminate\Http\Request;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Inertia\Inertia;
 
 class ShiftController extends Controller
 {
+    use AuthorizesRequests;
+
     public function __construct(
         protected BranchContext $branchContext
     ) {}
@@ -79,7 +83,7 @@ class ShiftController extends Controller
     /**
      * Submit shift for closing (from POS).
      */
-    public function submitClosing(Request $request, Shift $shift)
+    public function submitClosing(Request $request, Shift $shift, ShiftService $shiftService)
     {
         // Simple permission check for now
         if ($shift->cashier_id !== auth()->id()) {
@@ -103,37 +107,38 @@ class ShiftController extends Controller
             return back()->withErrors(['actual_cash' => 'Total amount mismatch with denominations. Please recount.']);
         }
 
-        $shift->update([
-            'status' => Shift::STATUS_CLOSED,
-            'closed_at' => now(),
-            'closed_by' => auth()->id(),
-            'counted_cash_amount' => $calculatedTotal,
-            'closing_denominations' => $request->closing_denominations,
-            'closing_notes' => $request->closing_notes,
-        ]);
+        try {
+            $shiftService->submitClosingCount(
+                $shift,
+                $request->user(),
+                (string) $calculatedTotal,
+                $request->closing_notes,
+                null,
+                $request->closing_denominations
+            );
 
-        return redirect()->route('shifts.show', $shift)
-            ->with('success', 'Shift closed successfully.');
+            return redirect()->route('shifts.show', $shift)
+                ->with('success', 'Shift closed successfully.');
+        } catch (\Exception $e) {
+            return back()->withErrors(['actual_cash' => $e->getMessage()]);
+        }
     }
 
     /**
      * Approve a submitted shift (Admin action).
      */
-    public function approve(Request $request, Shift $shift)
+    public function approve(Request $request, Shift $shift, ShiftService $shiftService)
     {
-        $this->authorize('approve_shift');
-
-        if ($shift->status !== Shift::STATUS_CLOSED) {
-            return back()->with('error', 'Only closed shifts can be approved.');
+        if (!$request->user()->hasPermission('approve_shift')) {
+            abort(403, 'Unauthorized.');
         }
 
-        $shift->update([
-            'status' => Shift::STATUS_APPROVED,
-            'approved_at' => now(),
-            'approved_by' => auth()->id(),
-        ]);
-
-        return back()->with('success', 'Shift approved and finalized.');
+        try {
+            $shiftService->approveShift($shift, $request->user(), $request->manager_notes);
+            return back()->with('success', 'Shift approved and finalized.');
+        } catch (\Exception $e) {
+            return back()->with('error', $e->getMessage());
+        }
     }
 
     /**

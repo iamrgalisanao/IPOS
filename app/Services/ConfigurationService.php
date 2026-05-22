@@ -198,21 +198,47 @@ class ConfigurationService
         app(TenantContext::class)->setTenant($tenant);
 
         // 15. Default tax setup
-        $this->createTaxCategory([
-            'code' => 'VAT',
-            'name' => 'VATable (12%)',
-            'tax_type' => 'vatable',
-            'rate' => 12.00,
-            'is_default' => true
-        ]);
+        $categories = [
+            [
+                'code' => 'VAT',
+                'name' => 'VATable (12%)',
+                'tax_type' => 'vatable',
+                'rate' => 12.00,
+                'is_default' => true
+            ],
+            [
+                'code' => 'EXEMPT',
+                'name' => 'VAT Exempt',
+                'tax_type' => 'exempt',
+                'rate' => 0.00,
+                'is_default' => false
+            ],
+            [
+                'code' => 'ZERO-RATED',
+                'name' => 'Zero Rated',
+                'tax_type' => 'zero-rated',
+                'rate' => 0.00,
+                'is_default' => false
+            ],
+            [
+                'code' => 'NON-VAT',
+                'name' => 'Non-VAT',
+                'tax_type' => 'non-vat',
+                'rate' => 0.00,
+                'is_default' => false
+            ]
+        ];
 
-        $this->createTaxCategory([
-            'code' => 'EXEMPT',
-            'name' => 'VAT Exempt',
-            'tax_type' => 'exempt',
-            'rate' => 0.00,
-            'is_default' => false
-        ]);
+        foreach ($categories as $cat) {
+            $exists = TaxCategory::withoutGlobalScope('tenant')
+                ->where('tenant_id', $tenant->id)
+                ->where('code', $cat['code'])
+                ->exists();
+
+            if (!$exists) {
+                $this->createTaxCategory($cat);
+            }
+        }
 
         // 15. Default payment setup
         $this->ensureDefaultPaymentMethods($tenant);

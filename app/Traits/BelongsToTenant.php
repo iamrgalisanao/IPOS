@@ -12,7 +12,7 @@ trait BelongsToTenant
     {
         static::addGlobalScope('tenant', function (Builder $builder) {
             $tenantContext = app(TenantContext::class);
-            
+
             if ($tenantContext->hasTenant()) {
                 $builder->where($builder->getQuery()->from . '.tenant_id', $tenantContext->getTenantId());
             } else {

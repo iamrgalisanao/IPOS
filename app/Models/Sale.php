@@ -58,11 +58,21 @@ class Sale extends Model
         'tax_source_version',
         'tax_computation_source',
         'tax_profile_snapshot',
+        'source',
+        'offline_sales_import_id',
+        'offline_sequence_number',
+        'offline_submitted_at',
+        'offline_local_created_at',
+        'offline_posted_at',
         'is_reversal',
         'reversal_of_sale_id',
         'reversal_reason',
         'reversal_tax_impact_snapshot',
         'confirmed_at',
+        'receipt_print_count',
+        'last_reprint_reason',
+        'register_z_read_id',
+        'is_training_mode',
     ];
 
     protected $casts = [
@@ -83,9 +93,14 @@ class Sale extends Model
         'other_adjustment_total'      => 'decimal:4',
         'contains_statutory_discount' => 'boolean',
         'tax_profile_snapshot'        => 'array',
+        'offline_submitted_at'         => 'datetime',
+        'offline_local_created_at'     => 'datetime',
+        'offline_posted_at'            => 'datetime',
         'is_reversal'                 => 'boolean',
+        'is_training_mode'            => 'boolean',
         'reversal_tax_impact_snapshot'=> 'array',
         'confirmed_at'                => 'datetime',
+        'receipt_print_count'         => 'integer',
     ];
 
     public function tenant(): BelongsTo
@@ -106,6 +121,11 @@ class Sale extends Model
     public function checkoutRequest(): BelongsTo
     {
         return $this->belongsTo(CheckoutRequest::class);
+    }
+
+    public function offlineSalesImport(): BelongsTo
+    {
+        return $this->belongsTo(OfflineSalesImport::class, 'offline_sales_import_id');
     }
 
     public function items(): HasMany
@@ -168,8 +188,35 @@ class Sale extends Model
     protected static function booted()
     {
         static::updating(function ($sale) {
-            // Block updates to financial totals and core identity fields
-            if ($sale->isDirty(['subtotal', 'tax_total', 'discount_total', 'total', 'tenant_id', 'branch_id', 'client_request_uuid'])) {
+            // Block updates if already locked in a finalized Z-read
+            if ($sale->getOriginal('register_z_read_id') !== null) {
+                throw new \RuntimeException('Sales locked in a finalized Z-read cannot be modified.');
+            }
+
+            // Block updates to invoice numbering, financial totals, and core identity fields per BIR regulations
+            $immutableFields = [
+                'tenant_id',
+                'branch_id',
+                'user_id',
+                'client_request_uuid',
+                'checkout_request_id',
+                'sales_machine_profile_id',
+                'sale_number',
+                'principal_invoice_number',
+                'invoice_issued_at',
+                'subtotal',
+                'tax_total',
+                'discount_total',
+                'total',
+                'gross_sales_amount',
+                'vatable_sales_amount',
+                'vat_exempt_sales_amount',
+                'zero_rated_sales_amount',
+                'non_vat_sales_amount',
+                'vat_amount',
+            ];
+
+            if ($sale->isDirty($immutableFields)) {
                 throw new \RuntimeException('Financial totals and core identity of a sale are immutable.');
             }
         });

@@ -21,7 +21,8 @@ class Tenant extends Model
         'receipt_header',
         'receipt_footer',
         'business_registration_number',
-        'subscription_metadata'
+        'subscription_metadata',
+        'offline_sales_enabled'
     ];
 
     protected $attributes = [
@@ -32,6 +33,7 @@ class Tenant extends Model
 
     protected $casts = [
         'subscription_metadata' => 'array',
+        'offline_sales_enabled' => 'boolean',
     ];
 
     public function branches(): HasMany
@@ -48,4 +50,64 @@ class Tenant extends Model
     {
         return $this->hasMany(CashDrawerEvent::class);
     }
+
+    /**
+     * Determine if the tenant has access to a specific feature.
+     */
+    public function hasFeature(string $feature): bool
+    {
+        $metadata = $this->subscription_metadata ?? [];
+        $plan = $metadata['plan'] ?? config('subscriptions.default_tier', 'basic');
+        
+        // Load tier features from configuration, fallback to default basic tier if plan is unrecognized
+        $tierConfig = config("subscriptions.tiers.{$plan}") ?? config('subscriptions.tiers.' . config('subscriptions.default_tier', 'basic'));
+        $features = $tierConfig['features'] ?? [];
+
+        // Check for tenant-specific feature overrides
+        if (isset($metadata['features'][$feature])) {
+            return (bool) $metadata['features'][$feature];
+        }
+
+        return (bool) ($features[$feature] ?? false);
+    }
+
+    /**
+     * Determine if a resource count is strictly within the tenant's permitted limits.
+     * Evaluates if the current count is strictly less than the allowed threshold.
+     */
+    public function withinLimit(string $limit, int $currentCount): bool
+    {
+        $metadata = $this->subscription_metadata ?? [];
+        $plan = $metadata['plan'] ?? config('subscriptions.default_tier', 'basic');
+
+        // Load tier limits from configuration
+        $tierConfig = config("subscriptions.tiers.{$plan}") ?? config('subscriptions.tiers.' . config('subscriptions.default_tier', 'basic'));
+        $limits = $tierConfig['limits'] ?? [];
+
+        // Check for tenant-specific limit overrides
+        if (isset($metadata['limits'][$limit])) {
+            $allowed = (int) $metadata['limits'][$limit];
+        } else {
+            $allowed = (int) ($limits[$limit] ?? 0);
+        }
+
+        return $currentCount < $allowed;
+    }
+
+    /**
+     * Expiry lots registered for this tenant.
+     */
+    public function expiryLots(): HasMany
+    {
+        return $this->hasMany(ExpiryLot::class);
+    }
+
+    /**
+     * Supplier invoices linked to this tenant.
+     */
+    public function supplierInvoices(): HasMany
+    {
+        return $this->hasMany(SupplierInvoice::class);
+    }
 }
+

@@ -31,6 +31,7 @@ class ValidateCheckoutRequest extends FormRequest
         return [
             'client_request_uuid'      => ['required', 'uuid'],
             'cart_state'               => ['sometimes', 'string'],
+            'is_training_mode'         => ['sometimes', 'boolean'],
             'items'                    => ['required', 'array', 'min:1'],
             'items.*.product_id'       => ['required', 'uuid'],
             'items.*.quantity'         => ['required', 'numeric', 'gt:0'],

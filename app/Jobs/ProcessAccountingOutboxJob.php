@@ -55,7 +55,19 @@ class ProcessAccountingOutboxJob implements ShouldQueue
             Log::shareContext($queueContext);
             Log::info('accounting.outbox_job.started', $queueContext);
 
+            // Gating verification: QuickBooks sync is an Enterprise/Professional feature
+            if (!$tenant->hasFeature('quickbooks.sync')) {
+                $record->sync_status = 'failed';
+                $record->sync_error = 'Tenant does not have subscription to quickbooks.sync.';
+                $record->sync_error_category = 'subscription';
+                $record->save();
+
+                Log::warning('accounting.outbox_job.blocked_by_subscription', $queueContext);
+                return;
+            }
+
             $processor->process($record);
+
 
             $record->refresh();
             $queueContext = $this->queueContext($correlationId, $record);

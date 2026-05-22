@@ -275,42 +275,31 @@ class InventoryService
 
         DB::transaction(function () use ($sale) {
             foreach ($sale->items as $item) {
-                if (!$item->is_inventory_tracked) {
-                    continue;
+                // Load product with recipes to check for ingredients
+                $product = $item->product()->with('recipes')->first();
+                
+                if ($product && $product->recipes->count() > 0) {
+                    // Scenario: Recipe-based deduction (Ingredients)
+                    foreach ($product->recipes as $recipe) {
+                        $this->deductComponent($recipe, $sale, $item->quantity, $product->id);
+                    }
+                } else {
+                    // Scenario: Standard product deduction
+                    if (!$item->is_inventory_tracked) {
+                        continue;
+                    }
+
+                    $inventory = BranchInventory::where('branch_id', $sale->branch_id)
+                        ->where('product_id', $item->product_id)
+                        ->lockForUpdate()
+                        ->first();
+
+                    if (!$inventory) {
+                        throw new \RuntimeException("Inventory record not found for product {$item->product_name} at branch {$sale->branch_id}.");
+                    }
+
+                    $this->performDeduction($inventory, (float) $item->quantity, $sale);
                 }
-
-                // 2. Lookup Branch Inventory
-                $inventory = BranchInventory::where('branch_id', $sale->branch_id)
-                    ->where('product_id', $item->product_id)
-                    ->lockForUpdate()
-                    ->first();
-
-                if (!$inventory) {
-                    throw new \RuntimeException("Inventory record not found for product {$item->product_name} at branch {$sale->branch_id}.");
-                }
-
-                $quantityBefore = (float) $inventory->current_stock;
-                $quantityChange = (float) $item->quantity;
-                $quantityAfter = $quantityBefore - $quantityChange;
-
-                // 3. Update stock levels
-                if ($quantityAfter < 0) {
-                    throw new \RuntimeException("Insufficient stock for product {$item->product_name}. Available: {$quantityBefore}, Required: {$quantityChange}.");
-                }
-
-                $inventory->update(['current_stock' => $quantityAfter]);
-
-                // 4. Create immutable movement log
-                $this->recordMovement($inventory, [
-                    'movement_type' => 'sale_deduction',
-                    'quantity_change' => -$quantityChange,
-                    'quantity_before' => $quantityBefore,
-                    'quantity_after' => $quantityAfter,
-                    'source_type' => 'sale',
-                    'source_id' => $sale->id,
-                    'user_id' => $sale->user_id,
-                    'remarks' => "Deduction for Sale #{$sale->sale_number}",
-                ]);
             }
         });
 
@@ -322,6 +311,161 @@ class InventoryService
                 'item_count' => $sale->items->count()
             ]
         );
+    }
+
+    /**
+     * Deduct a single component/ingredient for a recipe.
+     */
+    protected function deductComponent(\App\Models\ProductRecipe $recipe, \App\Models\Sale $sale, float $parentQuantity, ?string $parentProductId = null): void
+    {
+        $deductQty = (float) $recipe->quantity * $parentQuantity;
+        $recipeUnit = $recipe->unit;
+        $ingredientUnit = $recipe->ingredient->unit_of_measure;
+
+        // Apply Unit Conversion if units differ
+        if ($recipeUnit !== $ingredientUnit) {
+            $deductQty = $this->convertUnit($deductQty, $recipeUnit, $ingredientUnit, $recipe->ingredient_id);
+        }
+
+        $inventory = BranchInventory::where('branch_id', $sale->branch_id)
+            ->where('product_id', $recipe->ingredient_id)
+            ->lockForUpdate()
+            ->first();
+
+        if (!$inventory) {
+            // In a recipe system, if an ingredient isn't stocked at the branch, 
+            // it's usually a configuration error. We'll throw to ensure integrity.
+            throw new \RuntimeException("Ingredient {$recipe->ingredient->name} not found in inventory for branch {$sale->branch_id}.");
+        }
+
+        $this->performDeduction($inventory, $deductQty, $sale, "Recipe component for {$recipe->product->name}", $parentProductId);
+    }
+
+    /**
+     * Convert quantity from recipe unit to ingredient base unit.
+     */
+    protected function convertUnit(float $quantity, string $fromUnit, string $toUnit, ?string $productId = null): float
+    {
+        if ($fromUnit === $toUnit) {
+            return $quantity;
+        }
+
+        $tenant = $this->tenantContext->getTenant();
+        if ($tenant) {
+            // 1. Check Product-Specific Active Conversion
+            if ($productId) {
+                $conversion = \App\Models\UnitConversion::where('tenant_id', $tenant->id)
+                    ->where('product_id', $productId)
+                    ->where('from_unit', $fromUnit)
+                    ->where('to_unit', $toUnit)
+                    ->where('is_active', true)
+                    ->first();
+                if ($conversion) {
+                    return $quantity * (float) $conversion->conversion_factor;
+                }
+            }
+
+            // 2. Check Global Tenant Active Conversion
+            $conversion = \App\Models\UnitConversion::where('tenant_id', $tenant->id)
+                ->whereNull('product_id')
+                ->where('from_unit', $fromUnit)
+                ->where('to_unit', $toUnit)
+                ->where('is_active', true)
+                ->first();
+            if ($conversion) {
+                return $quantity * (float) $conversion->conversion_factor;
+            }
+        }
+
+        // 3. Fallback to standard metric conversions
+        $factors = [
+            'kg' => 1,
+            'gram' => 0.001,
+            'liter' => 1,
+            'ml' => 0.001,
+            'piece' => 1,
+        ];
+
+        if (isset($factors[$fromUnit]) && isset($factors[$toUnit])) {
+            $baseQuantity = $quantity * $factors[$fromUnit];
+            return $baseQuantity / $factors[$toUnit];
+        }
+
+        // If no conversion is possible, throw an error
+        throw new \RuntimeException("No active unit conversion rule found from {$fromUnit} to {$toUnit}" . ($productId ? " for product ID {$productId}" : "") . ".");
+    }
+
+    /**
+     * Internal helper to perform the actual stock decrement and movement logging.
+     */
+    protected function performDeduction(BranchInventory $inventory, float $quantityChange, \App\Models\Sale $sale, ?string $extraRemarks = null, ?string $parentProductId = null): void
+    {
+        $quantityBefore = (float) $inventory->current_stock;
+        $quantityAfter = $quantityBefore - $quantityChange;
+        $policy = $sale->branch->inventory_deduction_policy ?? 'strict_block';
+        if ($policy !== 'allow_negative_with_warning') {
+            $policy = 'strict_block';
+        }
+
+        if ($quantityAfter < 0) {
+            if ($policy === 'allow_negative_with_warning') {
+                $shortage = abs($quantityAfter);
+                
+                \App\Models\InventoryVarianceLog::create([
+                    'tenant_id' => $sale->tenant_id,
+                    'branch_id' => $sale->branch_id,
+                    'sale_id' => $sale->id,
+                    'product_id' => $parentProductId,
+                    'ingredient_id' => $inventory->product_id,
+                    'required_quantity' => $quantityChange,
+                    'available_quantity_before' => $quantityBefore,
+                    'shortage_quantity' => $shortage,
+                    'resulting_quantity' => $quantityAfter,
+                    'unit' => $inventory->product->unit_of_measure ?? 'piece',
+                    'policy' => $policy,
+                    'reason' => 'POS Checkout stock shortage deduction.',
+                    'metadata' => [
+                        'sale_number' => $sale->sale_number,
+                        'recipe_parent_id' => $parentProductId,
+                    ],
+                    'created_by' => $sale->user_id,
+                ]);
+
+                if ($this->auditLogger) {
+                    $this->auditLogger->log(
+                        action: 'inventory_negative_deduction_warning',
+                        auditable: $sale,
+                        metadata: [
+                            'sale_id' => $sale->id,
+                            'product_id' => $inventory->product_id,
+                            'shortage_quantity' => $shortage,
+                            'available_quantity_before' => $quantityBefore,
+                            'required_quantity' => $quantityChange,
+                        ]
+                    );
+                }
+            } else {
+                throw new \RuntimeException("Insufficient stock for product {$inventory->product->name}. Available: {$quantityBefore}, Required: {$quantityChange}.");
+            }
+        }
+
+        $inventory->update(['current_stock' => $quantityAfter]);
+
+        $remarks = "Deduction for Sale #{$sale->sale_number}";
+        if ($extraRemarks) {
+            $remarks .= " ({$extraRemarks})";
+        }
+
+        $this->recordMovement($inventory, [
+            'movement_type' => 'sale_deduction',
+            'quantity_change' => -$quantityChange,
+            'quantity_before' => $quantityBefore,
+            'quantity_after' => $quantityAfter,
+            'source_type' => 'sale',
+            'source_id' => $sale->id,
+            'user_id' => $sale->user_id,
+            'remarks' => $remarks,
+        ]);
     }
 
     /**

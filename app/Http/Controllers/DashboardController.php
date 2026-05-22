@@ -16,16 +16,30 @@ class DashboardController extends Controller
     /**
      * Handle the incoming dashboard request.
      */
-    public function index(Request $request): Response
+    public function index(Request $request): Response|\Illuminate\Http\RedirectResponse
     {
+        $user = $request->user();
+
+        if (!$user->hasPermission('view_reports')) {
+            if ($user->hasPermission('access_pos')) {
+                return redirect()->route('pos.index');
+            }
+
+            if ($user->hasPermission('procurement.suppliers.view')) {
+                return redirect()->route('procurement.suppliers.index');
+            }
+
+            throw new \Illuminate\Auth\Access\AuthorizationException('Unauthorized. Permission required: view_reports');
+        }
+
         $pulse = $this->dashboardService->getPulse(
-            $request->user(), 
+            $user, 
             $request->query('branch_id')
         );
 
         return Inertia::render('Dashboard', [
             'pulse' => $pulse,
-            'branches' => $request->user()->branches()->select('branches.id', 'branches.name')->get()
+            'branches' => $user->branches()->select('branches.id', 'branches.name')->get()
         ]);
     }
 }

@@ -102,12 +102,13 @@ class ShiftService
     /**
      * Submit the closing cash count for a shift.
      */
-    public function submitClosingCount(
+     public function submitClosingCount(
         Shift $shift,
         User $actor,
         string $countedCashAmount,
         ?string $closingNotes = null,
-        ?CarbonInterface $closingSubmittedAt = null
+        ?CarbonInterface $closingSubmittedAt = null,
+        ?array $closingDenominations = null
     ): Shift {
         $closingSubmittedAt = $closingSubmittedAt ?? now();
 
@@ -138,7 +139,7 @@ class ShiftService
             throw new \InvalidArgumentException('Counted cash amount must be non-negative.');
         }
 
-        return DB::transaction(function () use ($shift, $actor, $countedCashAmount, $closingNotes, $closingSubmittedAt) {
+        return DB::transaction(function () use ($shift, $actor, $countedCashAmount, $closingNotes, $closingDenominations, $closingSubmittedAt) {
             $expectedCash = $this->calculateExpectedCash($shift);
             $variance = bcsub($countedCashAmount, $expectedCash, 4);
 
@@ -149,6 +150,7 @@ class ShiftService
                 'variance_amount' => $variance,
                 'closing_submitted_at' => $closingSubmittedAt ?? now(),
                 'closing_notes' => $closingNotes,
+                'closing_denominations' => $closingDenominations,
             ]);
 
             $this->auditLogger->log(

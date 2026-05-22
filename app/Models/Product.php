@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Product extends Model
 {
@@ -26,7 +27,11 @@ class Product extends Model
         'is_taxable',
         'is_inventory_tracked',
         'tax_category_id',
+        'preferred_supplier_id',
         'status',
+        'product_type',
+        'is_sellable',
+        'expiry_tracking_enabled',
     ];
 
     protected $casts = [
@@ -35,6 +40,8 @@ class Product extends Model
         'is_discountable' => 'boolean',
         'is_taxable' => 'boolean',
         'is_inventory_tracked' => 'boolean',
+        'is_sellable' => 'boolean',
+        'expiry_tracking_enabled' => 'boolean',
     ];
 
     /**
@@ -76,8 +83,45 @@ class Product extends Model
         return $this->belongsTo(TaxCategory::class);
     }
 
-    public function branchInventories()
+    public function branchInventories(): HasMany
     {
         return $this->hasMany(BranchInventory::class);
+    }
+
+    public function branchProductPricings(): HasMany
+    {
+        return $this->hasMany(BranchProductPricing::class);
+    }
+
+    /**
+     * The recipe components that make up this product.
+     */
+    public function recipes(): HasMany
+    {
+        return $this->hasMany(ProductRecipe::class, 'product_id');
+    }
+
+    /**
+     * Recipes that use this product as an ingredient.
+     */
+    public function ingredientOf(): HasMany
+    {
+        return $this->hasMany(ProductRecipe::class, 'ingredient_id');
+    }
+
+    /**
+     * Expiry lots registered for this product.
+     */
+    public function expiryLots(): HasMany
+    {
+        return $this->hasMany(ExpiryLot::class);
+    }
+
+    /**
+     * Get the preferred supplier linked directly to the product.
+     */
+    public function preferredSupplier(): BelongsTo
+    {
+        return $this->belongsTo(Supplier::class, 'preferred_supplier_id');
     }
 }

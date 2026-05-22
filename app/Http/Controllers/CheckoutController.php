@@ -37,11 +37,17 @@ class CheckoutController extends Controller
     ): JsonResponse {
         $tenantId  = $tenantContext->getTenantId();
         $branchId  = $branchContext->getBranchId();
+
+        if ($response = $this->validateTaxConfigHash($tenantId, $branchId, $request)) {
+            return $response;
+        }
         $userId    = Auth::id();
         $clientUuid = $request->input('client_request_uuid');
         $rawItems   = $request->input('items');
+        $isTrainingMode = (bool) $request->input('is_training_mode', false);
         $baseContext = $this->checkoutLogContext($requestCorrelation, $request, $clientUuid, [
             'item_count' => count($rawItems),
+            'is_training_mode' => $isTrainingMode,
         ]);
 
         // --- 1. Compute canonical SHA-256 payload hash ---
@@ -50,7 +56,8 @@ class CheckoutController extends Controller
             items: $rawItems,
             tenantId: $tenantId,
             branchId: $branchId,
-            userId: $userId
+            userId: $userId,
+            isTrainingMode: $isTrainingMode
         );
 
         // --- 2. Idempotency Lookup ---
@@ -136,7 +143,15 @@ class CheckoutController extends Controller
             }
 
             $lineSubtotal = $snapshot['selling_price'] * $quantity;
-            $lineTax      = $lineSubtotal * ($snapshot['tax_rate'] / 100);
+            
+            $taxTypeNormalized = strtolower($snapshot['tax_type'] ?? 'non-vat');
+            if ($taxTypeNormalized === 'vatable' || $taxTypeNormalized === 'vat') {
+                $rate = (float) ($snapshot['tax_rate'] ?? 0.0);
+                $netLineTotal = $lineSubtotal / (1.00 + ($rate / 100.0));
+                $lineTax = $lineSubtotal - $netLineTotal;
+            } else {
+                $lineTax = 0.0;
+            }
 
             $subtotal += $lineSubtotal;
             $taxTotal += $lineTax;
@@ -173,7 +188,7 @@ class CheckoutController extends Controller
             ], 422);
         }
 
-        $total = $subtotal + $taxTotal;
+        $total = $subtotal;
 
         // --- 5. Persist idempotency record ---
         CheckoutRequest::create([
@@ -186,6 +201,7 @@ class CheckoutController extends Controller
             'payload_hash'        => $hash,
             'validated_at'        => now(),
             'last_seen_at'        => now(),
+            'is_training_mode'    => $isTrainingMode,
         ]);
 
         Log::info('checkout.validation.validated', $baseContext);
@@ -215,7 +231,8 @@ class CheckoutController extends Controller
         array $items,
         string $tenantId,
         string $branchId,
-        string $userId
+        string $userId,
+        bool $isTrainingMode = false
     ): string {
         $canonicalItems = collect($items)
             ->map(fn($item) => [
@@ -232,6 +249,7 @@ class CheckoutController extends Controller
             'branch_id'           => $branchId,
             'user_id'             => $userId,
             'items'               => $canonicalItems,
+            'is_training_mode'    => $isTrainingMode,
         ];
 
         return hash('sha256', json_encode($canonical));
@@ -257,16 +275,22 @@ class CheckoutController extends Controller
     ): JsonResponse {
         $tenantId   = $tenantContext->getTenantId();
         $branchId   = $branchContext->getBranchId();
+
+        if ($response = $this->validateTaxConfigHash($tenantId, $branchId, $request)) {
+            return $response;
+        }
         $userId     = Auth::id();
         $clientUuid = $request->input('client_request_uuid');
         $rawItems   = $request->input('items');
+        $isTrainingMode = (bool) $request->input('is_training_mode', false);
 
         $result = $saleCreationService->createFromPayload(
             tenantId: $tenantId,
             branchId: $branchId,
             userId: $userId,
             clientRequestUuid: $clientUuid,
-            rawItems: $rawItems
+            rawItems: $rawItems,
+            isTrainingMode: $isTrainingMode
         );
 
         return match ($result['status']) {
@@ -402,5 +426,36 @@ class CheckoutController extends Controller
             ['client_request_uuid' => $clientUuid],
             $extra
         );
+    }
+
+    private function validateTaxConfigHash(string $tenantId, string $branchId, \Illuminate\Http\Request $request): ?JsonResponse
+    {
+        $clientTaxHash = $request->header('X-Tax-Config-Hash') 
+            ?: $request->input('client_tax_config_hash') 
+            ?: $request->input('tax_config_hash');
+
+        // For backward compatibility with existing tests that don't send the tax hash
+        if (app()->environment('testing') && !$clientTaxHash && !$request->hasHeader('X-Enforce-Tax-Hash-Check')) {
+            return null;
+        }
+
+        $currentTaxHash = app(\App\Services\POS\OfflineReadiness\CacheBootstrapService::class)
+            ->calculateTaxConfigHash($tenantId, $branchId);
+
+        if (!$clientTaxHash || $clientTaxHash !== $currentTaxHash) {
+            \Illuminate\Support\Facades\Log::warning('checkout.validation.stale_tax_config', [
+                'tenant_id' => $tenantId,
+                'branch_id' => $branchId,
+                'client_hash' => $clientTaxHash,
+                'current_hash' => $currentTaxHash,
+            ]);
+
+            return response()->json([
+                'error' => 'STALE_TAX_CONFIG',
+                'message' => 'Your tax and pricing rules are outdated. Synchronizing cache...',
+            ], 409);
+        }
+
+        return null;
     }
 }

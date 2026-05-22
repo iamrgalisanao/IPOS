@@ -37,11 +37,51 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $user,
                 'permissions' => $this->resolvePermissions($request),
+                'tenant' => $this->resolveTenantData($request),
             ],
             'tenant_id' => app(\App\Services\TenantContext::class)->getTenantId(),
             'branch_id' => app(\App\Services\BranchContext::class)->getBranchId(),
         ];
     }
+
+    protected function resolveTenantData(Request $request): ?array
+    {
+        $tenantContext = app(TenantContext::class);
+        $tenant = $tenantContext->getTenant();
+
+        if (!$tenant && $request->user()?->tenant_id) {
+            $tenant = $request->user()->tenant;
+        }
+
+        if (!$tenant) {
+            return null;
+        }
+
+        $metadata = $tenant->subscription_metadata ?? [];
+        $plan = $metadata['plan'] ?? config('subscriptions.default_tier', 'basic');
+        $tierConfig = config("subscriptions.tiers.{$plan}") ?? config('subscriptions.tiers.' . config('subscriptions.default_tier', 'basic'));
+        
+        $features = $tierConfig['features'] ?? [];
+        if (isset($metadata['features']) && is_array($metadata['features'])) {
+            $features = array_merge($features, $metadata['features']);
+        }
+
+        $limits = $tierConfig['limits'] ?? [];
+        if (isset($metadata['limits']) && is_array($metadata['limits'])) {
+            $limits = array_merge($limits, $metadata['limits']);
+        }
+
+        return [
+            'id' => $tenant->id,
+            'name' => $tenant->name,
+            'subscription' => [
+                'plan' => $plan,
+                'features' => array_keys(array_filter($features)),
+                'limits' => $limits,
+            ]
+        ];
+    }
+
 
     protected function resolvePermissions(Request $request): array
     {
@@ -54,7 +94,10 @@ class HandleInertiaRequests extends Middleware
         $tenantContext = app(TenantContext::class);
 
         if (!$tenantContext->hasTenant() && $user->tenant_id) {
-            $tenantContext->setTenant($user->tenant);
+            $tenant = $user->tenant;
+            if ($tenant) {
+                $tenantContext->setTenant($tenant);
+            }
         }
 
         if (!$tenantContext->hasTenant()) {

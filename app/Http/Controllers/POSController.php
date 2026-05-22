@@ -31,7 +31,7 @@ class POSController extends Controller
         }
 
         $user = $request->user();
-        $isAdminMode = $user && $user->roles()->whereIn('name', ['admin', 'owner'])->exists();
+        $isAdminMode = $user && $user->hasPermission('pos-layouts.manage');
 
         return Inertia::render('POS/Index', [
             'tenant' => $tenant,
@@ -154,4 +154,48 @@ class POSController extends Controller
             'products' => $products
         ]);
     }
+
+    /**
+     * API: Verify current user password or manager bypass password to unlock terminal.
+     */
+    public function unlock(Request $request)
+    {
+        $request->validate([
+            'password' => 'required|string',
+        ]);
+
+        $user = $request->user();
+
+        // 1. Try unlocking with the current cashier's password
+        if (\Illuminate\Support\Facades\Hash::check($request->password, $user->password)) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Terminal unlocked.'
+            ]);
+        }
+
+        // 2. Try unlocking with a manager's credentials (manager bypass)
+        $tenantId = $this->tenantContext->getTenantId();
+        
+        $managers = \App\Models\User::where('tenant_id', $tenantId)
+            ->where('status', 'active')
+            ->get();
+
+        foreach ($managers as $manager) {
+            if ($manager->hasPermission('approve_shift') && \Illuminate\Support\Facades\Hash::check($request->password, $manager->password)) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Terminal unlocked by manager ' . $manager->name,
+                    'manager_bypass' => true,
+                    'manager_name' => $manager->name,
+                ]);
+            }
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Invalid password.'
+        ], 422);
+    }
 }
+

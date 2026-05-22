@@ -34,4 +34,51 @@ class TaxCategory extends Model
     {
         return $query->where('status', 'active');
     }
+
+    public function isVatable(): bool
+    {
+        return $this->tax_type === 'vatable';
+    }
+
+    public function isExempt(): bool
+    {
+        return $this->tax_type === 'exempt';
+    }
+
+    public function isZeroRated(): bool
+    {
+        return $this->tax_type === 'zero-rated';
+    }
+
+    public function isNonVat(): bool
+    {
+        return $this->tax_type === 'non-vat';
+    }
+
+    public function isVatBearing(): bool
+    {
+        return $this->isVatable();
+    }
+
+    public function birCode(): string
+    {
+        return match ($this->tax_type) {
+            'vatable' => 'VAT',
+            'exempt' => 'EXM',
+            'zero-rated' => 'ZRO',
+            'non-vat' => 'NONVAT',
+            default => strtoupper($this->code),
+        };
+    }
+
+    public function displayLabel(): string
+    {
+        return match ($this->tax_type) {
+            'vatable' => 'VATable Sale',
+            'exempt' => 'VAT-Exempt Sale',
+            'zero-rated' => 'Zero-Rated Sale',
+            'non-vat' => 'Non-VAT Sale',
+            default => $this->name,
+        };
+    }
 }

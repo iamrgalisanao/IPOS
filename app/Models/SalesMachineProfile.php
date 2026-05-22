@@ -31,13 +31,55 @@ class SalesMachineProfile extends Model
         'supplier_accreditation_issued_at',
         'supplier_accreditation_expires_at',
         'status',
+        'reset_counter',
+        'terminal_identifier',
+        'last_invoice_sequence',
+        'offline_sales_enabled',
+        'offline_sequence_prefix',
+        'offline_sequence_next_value',
+        'offline_sequence_status',
+        'last_offline_sync_at',
     ];
 
     protected $casts = [
         'permit_issued_at' => 'datetime',
         'supplier_accreditation_issued_at' => 'datetime',
         'supplier_accreditation_expires_at' => 'datetime',
+        'grand_cumulative_total' => 'decimal:4',
+        'reset_counter' => 'integer',
+        'z_read_counter' => 'integer',
+        'last_invoice_sequence' => 'integer',
+        'offline_sales_enabled' => 'boolean',
+        'offline_sequence_next_value' => 'integer',
+        'last_offline_sync_at' => 'datetime',
     ];
+
+    protected static function booted()
+    {
+        static::updating(function ($profile) {
+            if ($profile->isDirty('grand_cumulative_total')) {
+                $old = (float) $profile->getOriginal('grand_cumulative_total');
+                $new = (float) $profile->grand_cumulative_total;
+                if ($new < $old) {
+                    throw new \RuntimeException('Grand Cumulative Total (GCT) cannot be decreased.');
+                }
+            }
+            if ($profile->isDirty('z_read_counter')) {
+                $old = (int) $profile->getOriginal('z_read_counter');
+                $new = (int) $profile->z_read_counter;
+                if ($new < $old) {
+                    throw new \RuntimeException('z_read_counter cannot be decreased.');
+                }
+            }
+            if ($profile->isDirty('offline_sequence_next_value')) {
+                $old = (int) $profile->getOriginal('offline_sequence_next_value');
+                $new = (int) $profile->offline_sequence_next_value;
+                if ($new < $old) {
+                    throw new \RuntimeException('offline_sequence_next_value cannot be decreased.');
+                }
+            }
+        });
+    }
 
     public function sales(): HasMany
     {

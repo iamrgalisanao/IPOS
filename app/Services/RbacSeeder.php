@@ -113,10 +113,54 @@ class RbacSeeder
             'view_sale_details' => 'Can view individual transaction details and reversals',
             'export_sales_history' => 'Can export transactional history as CSV for audit purposes',
 
-            // POS Layouts
             'pos-layouts.view' => 'Can view custom POS layouts',
             'pos-layouts.manage' => 'Can create and edit custom POS layouts',
             'pos-layouts.publish' => 'Can publish POS layouts to branches',
+
+            // Inventory Operations
+            'inventory.stocktake.view' => 'Can view the stocktake history',
+            'inventory.stocktake.create' => 'Can initialize a new count',
+            'inventory.stocktake.count' => 'Can record quantities in an active session',
+            'inventory.stocktake.review' => 'Can perform supervisor review and variance analysis',
+            'inventory.stocktake.approve' => 'Can final authorization for inventory posting',
+            'inventory.stocktake.post' => 'Can trigger the inventory movement generation',
+            'inventory.stocktake.cancel' => 'Can abort a non-posted session',
+            'inventory.adjustment.view' => 'Can view manual stock adjustment history',
+            'inventory.adjustment.create' => 'Can record a one-off stock adjustment',
+            'inventory.adjustment.approve' => 'Can approve one-off stock adjustments',
+
+            // Epic 17: Cashier Accountability & Shift Report Export
+            'reports.cashier-accountability.view' => 'Can view cashier accountability summaries',
+            'reports.cashier-accountability.export' => 'Can export cashier accountability data',
+            'reports.shift-summary.view' => 'Can view Z-report style shift summaries',
+            'reports.shift-summary.export' => 'Can export shift summary reports',
+
+            // Epic 20: Supplier Directory & Procurement
+            'procurement.suppliers.view' => 'Can view supplier profiles',
+            'procurement.suppliers.manage' => 'Can manage supplier directory',
+            'procurement.purchase-orders.view' => 'Can view purchase orders',
+            'procurement.purchase-orders.create' => 'Can create and edit purchase orders',
+            'procurement.purchase-orders.approve' => 'Can review and approve purchase orders',
+            'procurement.purchase-orders.export' => 'Can export purchase orders',
+            'procurement.receiving.view' => 'Can view goods receiving vouchers',
+            'procurement.receiving.create' => 'Can create and manage goods receiving drafts',
+            'procurement.receiving.post' => 'Can post and commit goods receiving vouchers',
+            'procurement.receiving.export' => 'Can export goods receiving vouchers',
+            'procurement.returns.view' => 'Can view supplier returns',
+            'procurement.returns.create' => 'Can create and manage supplier return drafts',
+            'procurement.returns.approve' => 'Can review and approve supplier returns',
+            'procurement.returns.post' => 'Can post and commit supplier returns',
+            'procurement.returns.export' => 'Can export supplier returns',
+            
+            // Epic 27: Ingredient Inventory Upgrade (UI & Admin)
+            'edit_branch_policy' => 'Can manage branch inventory deduction policy',
+            'manage_unit_conversions' => 'Can manage unit conversion rules',
+            'view_inventory_reports' => 'Can view inventory reports',
+            'audit_inventory' => 'Can view inventory variance audit logs',
+
+            // Epic 28 Phase 2: Controlled Offline Sales
+            'manage_offline_sales_settings' => 'Can manage terminal offline sales settings and sequence registry',
+            'review_offline_sync_conflicts' => 'Can review and manage offline sales import conflicts',
         ];
     }
 
@@ -144,7 +188,18 @@ class RbacSeeder
                     'approve_void', 'approve_refund', 'view_branch_reports',
                     'close_branch_day', 'view_reports',
                     'view_sales_history', 'view_sale_details',
-                    'pos-layouts.view'
+                    'pos-layouts.view',
+                    'inventory.stocktake.view', 'inventory.stocktake.create', 'inventory.stocktake.count',                     'inventory.stocktake.review', 'inventory.stocktake.cancel', 'inventory.stocktake.post',
+                    'inventory.adjustment.view', 'inventory.adjustment.create',
+                    'reports.cashier-accountability.view', 'reports.cashier-accountability.export',
+                    'reports.shift-summary.view', 'reports.shift-summary.export',
+                    'procurement.suppliers.view',
+                    'procurement.purchase-orders.view', 'procurement.purchase-orders.create', 'procurement.purchase-orders.approve', 'procurement.purchase-orders.export',
+                    'procurement.receiving.view', 'procurement.receiving.create', 'procurement.receiving.post', 'procurement.receiving.export',
+                    'procurement.returns.view', 'procurement.returns.create', 'procurement.returns.approve', 'procurement.returns.post',
+                    
+                    // Epic 27 Branch Manager permissions
+                    'edit_branch_policy', 'view_inventory_reports', 'audit_inventory'
                 ],
             ],
             'Owner/Admin' => [
@@ -159,9 +214,18 @@ class RbacSeeder
                     'view_settlement_periods',
                     'view_sync_dashboard', 'retry_failed_sync',
                     'manually_resolve_sync', 'ignore_sync_exception',
-                    'view_reconciliation_reports', 'export_accounting_reports',
+                     'view_reconciliation_reports', 'export_accounting_reports',
                     'view_branch_reports', 'export_reports', 'view_multi_branch_dashboard', 'view_reports',
-                    'view_sales_history', 'view_sale_details', 'export_sales_history'
+                    'view_sales_history', 'view_sale_details', 'export_sales_history',
+                    'reports.cashier-accountability.view', 'reports.cashier-accountability.export',
+                    'reports.shift-summary.view', 'reports.shift-summary.export',
+                    'procurement.suppliers.view',
+                    'procurement.purchase-orders.view', 'procurement.purchase-orders.export',
+                    'procurement.receiving.view', 'procurement.receiving.export',
+                    'procurement.returns.view',
+                    
+                    // Epic 27 Accountant permissions
+                    'view_inventory_reports', 'audit_inventory'
                 ],
             ],
         ];

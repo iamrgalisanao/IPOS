@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Branch;
+use App\Services\POS\EJournalExportService;
 use App\Services\Tax\ComplianceCsvExportService;
 use App\Services\Tax\ComplianceExportPackageService;
 use App\Services\Tax\SalesTaxReportingQueryService;
@@ -16,7 +17,8 @@ class TaxReportingController extends Controller
     public function __construct(
         protected SalesTaxReportingQueryService $queryService,
         protected ComplianceExportPackageService $packageService,
-        protected ComplianceCsvExportService $csvService
+        protected ComplianceCsvExportService $csvService,
+        protected EJournalExportService $ejournalService
     ) {}
 
     public function index(Request $request): Response
@@ -70,12 +72,37 @@ class TaxReportingController extends Controller
             ->header('Content-Disposition', 'attachment; filename="'.$filename.'"');
     }
 
+    public function exportEJournal(Request $request): \Illuminate\Http\Response
+    {
+        $filters = $this->filters($request);
+        $resolvedBranchId = $this->resolveBranchScope($request, $filters['branch_id']);
+        $tenantId = app(TenantContext::class)->getTenantId() ?? (string) $request->user()->tenant_id;
+
+        $journalContent = $this->ejournalService->export([
+            'date_from' => $filters['date_from'],
+            'date_to' => $filters['date_to'],
+            'branch_id' => $resolvedBranchId,
+            'sales_machine_profile_id' => $filters['sales_machine_profile_id'],
+        ]);
+
+        $filename = sprintf(
+            'ipos-electronic-journal-%s-to-%s.txt',
+            $filters['date_from'],
+            $filters['date_to']
+        );
+
+        return response($journalContent)
+            ->header('Content-Type', 'text/plain')
+            ->header('Content-Disposition', 'attachment; filename="'.$filename.'"');
+    }
+
     protected function filters(Request $request): array
     {
         $validated = $request->validate([
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
             'branch_id' => ['nullable', 'string'],
+            'sales_machine_profile_id' => ['nullable', 'string'],
         ]);
 
         $today = now()->toDateString();
@@ -86,6 +113,7 @@ class TaxReportingController extends Controller
             'date_from' => $dateFrom,
             'date_to' => $dateTo,
             'branch_id' => $validated['branch_id'] ?? null,
+            'sales_machine_profile_id' => $validated['sales_machine_profile_id'] ?? null,
         ];
     }
 

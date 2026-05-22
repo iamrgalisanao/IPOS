@@ -51,3 +51,18 @@ Route::middleware(['tenant', 'branch'])->get('/branch-test', function () {
         'branch_name' => app(\App\Services\BranchContext::class)->getBranch()->name,
     ];
 });
+
+// Epic 28 Phase 2 — Offline Sync Stub (Story 28.6)
+// Returns 503 until reconciliation engine is implemented (Story 28.7+).
+Route::middleware(['auth:sanctum', 'tenant', 'branch', 'permission:create_sale'])
+    ->post('/pos/offline-sync', [\App\Http\Controllers\POS\OfflineSyncController::class, 'sync'])
+    ->name('pos.offline-sync');
+
+// Epic 30 — System Admin Operational Dashboard (Slice B)
+Route::middleware(['auth:sanctum', 'platform.admin'])
+    ->prefix('system-admin/dashboard')
+    ->name('api.system-admin.dashboard.')
+    ->group(function () {
+        Route::get('/summary', [\App\Http\Controllers\SystemAdmin\SystemAdminDashboardController::class, 'summary'])
+            ->name('summary');
+    });

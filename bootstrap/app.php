@@ -33,9 +33,16 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'tenant' => \App\Http\Middleware\IdentifyTenantContext::class,
             'branch' => \App\Http\Middleware\IdentifyBranchContext::class,
+            'platform.admin' => \App\Http\Middleware\EnsurePlatformAdmin::class,
             'support.assisted' => \App\Http\Middleware\IdentifySupportAssistedContext::class,
             'permission' => \App\Http\Middleware\CheckPermission::class,
+            'subscription.feature' => \App\Http\Middleware\EnforceSubscriptionGate::class,
         ]);
+
+        $middleware->prependToPriorityList(
+            \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            \App\Http\Middleware\IdentifyTenantContext::class
+        );
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

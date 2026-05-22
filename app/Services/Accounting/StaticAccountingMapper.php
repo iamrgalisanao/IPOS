@@ -37,4 +37,9 @@ class StaticAccountingMapper implements AccountingMapperInterface
     {
         return $posCustomerId ? 'CUST_' . substr($posCustomerId, 0, 8) : 'CUST_DEFAULT';
     }
+
+    public function mapSupplier(?string $posSupplierId): ?string
+    {
+        return $posSupplierId ? 'SUPPLIER_' . substr($posSupplierId, 0, 8) : 'SUPPLIER_DEFAULT';
+    }
 }

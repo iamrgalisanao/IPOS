@@ -30,6 +30,19 @@ trait HasRoles
     }
 
     /**
+     * Check if the user has any of the specific permissions.
+     */
+    public function hasAnyPermission(array $permissions): bool
+    {
+        foreach ($permissions as $permission) {
+            if ($this->hasPermission($permission)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Securely assign a role to the user.
      */
     public function assignRole(Role $role): void

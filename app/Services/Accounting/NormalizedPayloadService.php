@@ -32,6 +32,7 @@ class NormalizedPayloadService
             'sale_paid' => array_merge($base, $this->normalizeSalePaid($payload)),
             'sale_voided' => array_merge($base, $this->normalizeSaleVoided($payload)),
             'sale_refunded' => array_merge($base, $this->normalizeSaleRefunded($payload)),
+            'supplier_return_posted' => array_merge($base, $this->normalizeSupplierReturnPosted($payload)),
             default => throw new \InvalidArgumentException("Unknown event type: {$record->event_type}")
         };
     }
@@ -111,6 +112,29 @@ class NormalizedPayloadService
                 'payment_method_id' => $rev['payment_method_id'],
                 'mapped_payment_method' => $this->mapper->mapPaymentMethod($rev['payment_method_id']),
                 'amount' => $rev['amount'],
+            ])->toArray(),
+        ];
+    }
+
+    protected function normalizeSupplierReturnPosted(array $payload): array
+    {
+        return [
+            'header' => [
+                'document_type' => 'vendor_credit',
+                'document_number' => $payload['document_number'],
+                'currency' => 'PHP',
+                'total' => $payload['total_amount'],
+                'supplier_id' => $payload['supplier_id'],
+                'mapped_supplier_id' => $this->mapper->mapSupplier($payload['supplier_id']),
+            ],
+            'lines' => collect($payload['lines'] ?? [])->map(fn($line) => [
+                'line_type' => 'item',
+                'product_id' => $line['product_id'] ?? null,
+                'mapped_item_id' => $this->mapper->mapProduct($line['product_id'] ?? null),
+                'description' => $line['product_name'] ?? 'Item',
+                'quantity' => $line['quantity'],
+                'unit_price' => $line['unit_cost'],
+                'line_total' => $line['line_total'],
             ])->toArray(),
         ];
     }

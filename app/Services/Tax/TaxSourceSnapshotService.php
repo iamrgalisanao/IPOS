@@ -53,6 +53,7 @@ class TaxSourceSnapshotService
                 SaleItem::taxSources(),
                 SaleItem::TAX_SOURCE_UNKNOWN,
             ),
+            'is_discountable' => (bool) ($item['is_discountable'] ?? false),
         ];
     }
 

@@ -25,6 +25,12 @@ class ReceiptService
             'receipt_reference'   => $sale->sale_number ?: $sale->client_request_uuid,
             'created_at'          => $sale->created_at->toDateTimeString(),
             'cashier_name'        => $sale->user ? $sale->user->name : 'N/A',
+            'receipt_print_count' => (int) $sale->receipt_print_count,
+            'last_reprint_reason' => $sale->last_reprint_reason,
+            'is_reprint'          => $sale->receipt_print_count > 1,
+            'reprint_watermark'   => $sale->receipt_print_count > 1 ? '*** REPRINT / DUPLICATE ***' : null,
+            'is_training_mode'    => (bool) $sale->is_training_mode,
+            'training_watermark'  => $sale->is_training_mode ? '*** TRAINING MODE - NOT A VALID INVOICE ***' : null,
 
             'tenant' => [
                 'business_name'                => $sale->tenant->name,

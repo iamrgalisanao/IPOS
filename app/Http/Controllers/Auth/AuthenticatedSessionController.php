@@ -33,6 +33,10 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
+        if ($request->user()?->isPlatformSupport()) {
+            return redirect()->route('system-admin.tenants.index');
+        }
+
         return redirect()->intended(route('dashboard', absolute: false));
     }
 

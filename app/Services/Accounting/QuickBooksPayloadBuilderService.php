@@ -31,6 +31,7 @@ class QuickBooksPayloadBuilderService
                 'sale_paid' => $this->buildSalesReceipt($normalized),
                 'sale_refunded' => $this->buildRefundReceipt($normalized),
                 'sale_voided' => $this->buildVoidCommand($normalized),
+                'supplier_return_posted' => $this->buildVendorCredit($normalized),
                 default => throw new InvalidArgumentException("Unsupported QuickBooks event type: {$record->event_type}"),
             };
         } finally {
@@ -218,5 +219,38 @@ class QuickBooksPayloadBuilderService
     protected function quantity(string|int|float|null $value): float
     {
         return round((float) $value, 4);
+    }
+
+    protected function buildVendorCredit(array $normalized): array
+    {
+        return [
+            'provider' => 'quickbooks',
+            'entity' => 'VendorCredit',
+            'operation' => 'create',
+            'idempotency_key' => $this->idempotencyKey($normalized),
+            'tenant_id' => $normalized['context']['tenant_id'],
+            'branch_id' => $normalized['context']['branch_id'],
+            'payload' => array_filter([
+                'DocNumber' => $normalized['header']['document_number'],
+                'CurrencyRef' => ['value' => $normalized['header']['currency']],
+                'TotalAmt' => $this->money($normalized['header']['total']),
+                'VendorRef' => ['value' => $this->requireMapped($normalized['header']['mapped_supplier_id'], 'supplier')],
+                'Line' => $this->vendorCreditLines($normalized),
+                'PrivateNote' => 'IPOS supplier return ' . $normalized['event']['source_id'],
+            ]),
+        ];
+    }
+
+    protected function vendorCreditLines(array $normalized): array
+    {
+        return collect($normalized['lines'])->map(fn(array $line) => [
+            'DetailType' => 'ItemBasedExpenseLineDetail',
+            'Amount' => $this->money($line['line_total']),
+            'ItemBasedExpenseLineDetail' => [
+                'ItemRef' => ['value' => $this->requireMapped($line['mapped_item_id'], 'item')],
+                'Qty' => $this->quantity($line['quantity']),
+                'UnitPrice' => $this->money($line['unit_price']),
+            ],
+        ])->values()->all();
     }
 }

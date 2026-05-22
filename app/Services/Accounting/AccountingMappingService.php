@@ -19,6 +19,7 @@ class AccountingMappingService implements AccountingMapperInterface
     public const TYPE_PAYMENT_METHOD = 'payment_method';
     public const TYPE_PRODUCT = 'product';
     public const TYPE_CUSTOMER = 'customer';
+    public const TYPE_SUPPLIER = 'supplier';
 
     public function __construct(
         protected TenantContext $tenantContext,
@@ -39,6 +40,7 @@ class AccountingMappingService implements AccountingMapperInterface
             self::TYPE_PAYMENT_METHOD,
             self::TYPE_PRODUCT,
             self::TYPE_CUSTOMER,
+            self::TYPE_SUPPLIER,
         ];
     }
 
@@ -186,6 +188,15 @@ class AccountingMappingService implements AccountingMapperInterface
         }
 
         return $this->resolveExternalId(self::TYPE_CUSTOMER, 'customer', $posCustomerId);
+    }
+
+    public function mapSupplier(?string $posSupplierId): ?string
+    {
+        if (blank($posSupplierId)) {
+            return null;
+        }
+
+        return $this->resolveExternalId(self::TYPE_SUPPLIER, 'supplier', $posSupplierId);
     }
 
     public function resolveExternalId(

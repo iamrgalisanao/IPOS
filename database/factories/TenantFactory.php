@@ -20,7 +20,9 @@ class TenantFactory extends Factory
         return [
             'name' => $this->faker->company(),
             'status' => 'active',
-            'subscription_metadata' => [],
+            'subscription_metadata' => [
+                'plan' => 'enterprise',
+            ],
         ];
     }
 }

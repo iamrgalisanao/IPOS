@@ -93,11 +93,11 @@ class PaymentController extends Controller
     {
         $message = $e->getMessage();
         
-        if (str_contains($message, 'Insufficient stock') || str_contains($message, 'Inventory record not found')) {
+        if (str_contains($message, 'Insufficient stock') || str_contains($message, 'Inventory record not found') || str_contains($message, 'No active unit conversion rule found')) {
             return response()->json([
                 'message' => 'Payment could not be completed because one or more items no longer have enough stock at this branch.',
                 'errors' => [
-                    'inventory' => ['Payment could not be completed because one or more items no longer have enough stock at this branch.']
+                    'inventory' => [$message]
                 ]
             ], 422);
         }

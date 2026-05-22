@@ -28,4 +28,9 @@ interface AccountingMapperInterface
      * Map POS customer UUID to accounting customer identifier.
      */
     public function mapCustomer(?string $posCustomerId): ?string;
+
+    /**
+     * Map POS supplier UUID to accounting vendor/supplier identifier.
+     */
+    public function mapSupplier(?string $posSupplierId): ?string;
 }

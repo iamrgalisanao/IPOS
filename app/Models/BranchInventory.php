@@ -17,14 +17,23 @@ class BranchInventory extends Model
         'branch_id',
         'product_id',
         'current_stock',
+        'average_cost',
         'reorder_level',
+        'par_level',
+        'lead_time_days',
+        'safety_stock_buffer',
         'status',
     ];
 
     protected $casts = [
         'current_stock' => 'decimal:4',
+        'average_cost' => 'decimal:4',
         'reorder_level' => 'decimal:4',
+        'par_level' => 'decimal:4',
+        'lead_time_days' => 'integer',
+        'safety_stock_buffer' => 'decimal:4',
     ];
+
 
     public function branch(): BelongsTo
     {

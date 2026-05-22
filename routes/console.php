@@ -35,3 +35,9 @@ Artisan::command('accounting:process-outbox {--limit=50} {--sync : Process inlin
 })->purpose('Queue eligible accounting outbox records for tenant-scoped processing');
 
 Schedule::command('accounting:process-outbox --limit=50')->everyMinute();
+
+Schedule::command('ipos:generate-replenishment-drafts')
+    ->dailyAt('02:00')
+    ->onOneServer()
+    ->runInBackground();
+

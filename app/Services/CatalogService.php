@@ -95,6 +95,7 @@ class CatalogService
 
         $query = Product::with(['category', 'taxCategory'])
             ->active()
+            ->where('is_sellable', true)
             ->where('tenant_id', $tenantId);
 
         // Filter by category if provided
@@ -120,6 +121,9 @@ class CatalogService
             // Instead, we Eager Load the inventory for the specific branch.
             $query->with(['branchInventories' => function ($q) use ($branchId) {
                 $q->where('branch_id', $branchId);
+            }]);
+            $query->with(['branchProductPricings' => function ($q) use ($branchId) {
+                $q->where('branch_id', $branchId)->where('status', 'active');
             }]);
         }
 
@@ -147,6 +151,9 @@ class CatalogService
             $query->with(['branchInventories' => function ($q) use ($branchId) {
                 $q->where('branch_id', $branchId);
             }]);
+            $query->with(['branchProductPricings' => function ($q) use ($branchId) {
+                $q->where('branch_id', $branchId)->where('status', 'active');
+            }]);
         }
 
         return $query->get()->map(function (Product $product) {
@@ -169,7 +176,7 @@ class CatalogService
             'barcode' => $product->barcode,
             'unit_of_measure' => $product->unit_of_measure,
             'category_name' => $product->category?->name,
-            'selling_price' => (float) $product->selling_price,
+            'selling_price' => (float) ($product->branchProductPricings->first()?->selling_price ?? $product->selling_price),
             'tax_category_id' => $product->tax_category_id,
             'tax_type' => $tax ? $tax->tax_type : null,
             'tax_rate' => $tax ? (float) $tax->rate : 0.0,

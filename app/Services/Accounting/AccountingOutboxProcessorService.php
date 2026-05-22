@@ -116,6 +116,10 @@ class AccountingOutboxProcessorService
         $message = strtolower($e->getMessage());
 
         return match (true) {
+            str_contains($message, '429'),
+            str_contains($message, 'rate limit'),
+            str_contains($message, 'too many requests') => 'rate_limit',
+
             str_contains($message, '401'),
             str_contains($message, '403'),
             str_contains($message, 'auth'),
@@ -126,10 +130,6 @@ class AccountingOutboxProcessorService
             str_contains($message, 'mapping'),
             str_contains($message, 'unknown event'),
             str_contains($message, 'undefined array key') => 'mapping',
-
-            str_contains($message, '429'),
-            str_contains($message, 'rate limit'),
-            str_contains($message, 'too many requests') => 'rate_limit',
 
             str_contains($message, 'timeout'),
             str_contains($message, 'connection'),

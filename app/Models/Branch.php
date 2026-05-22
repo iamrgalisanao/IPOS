@@ -13,6 +13,31 @@ class Branch extends Model
 {
     use HasFactory, HasUuids, BelongsToTenant;
 
+    protected static function booted()
+    {
+        parent::booted();
+
+        static::creating(function ($branch) {
+            $tenant = $branch->tenant;
+            if (!$tenant && $branch->tenant_id) {
+                $tenant = Tenant::find($branch->tenant_id);
+            }
+            if (!$tenant) {
+                $tenant = app(\App\Services\TenantContext::class)->getTenant();
+            }
+
+            if ($tenant) {
+                // Ensure branch limit is not exceeded on new creation
+                $currentCount = $tenant->branches()->count();
+                if (!$tenant->withinLimit('max_branches', $currentCount)) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'branch' => ['Branch limit exceeded for active subscription tier. Please upgrade.']
+                    ]);
+                }
+            }
+        });
+    }
+
     protected $fillable = [
         'tenant_id',
         'name',
@@ -23,6 +48,12 @@ class Branch extends Model
         'timezone',
         'receipt_prefix',
         'receipt_next_number',
+        'inventory_deduction_policy',
+        'offline_sales_enabled',
+    ];
+
+    protected $casts = [
+        'offline_sales_enabled' => 'boolean',
     ];
 
     /**
@@ -68,5 +99,13 @@ class Branch extends Model
     public function scopeActive($query)
     {
         return $query->where('status', 'active');
+    }
+
+    /**
+     * Expiry lots registered under this branch.
+     */
+    public function expiryLots(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(ExpiryLot::class);
     }
 }

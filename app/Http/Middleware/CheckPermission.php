@@ -16,9 +16,27 @@ class CheckPermission
     public function handle(Request $request, Closure $next, string $permission): Response
     {
         $user = $request->user();
+        if (!$user) {
+            abort(403, 'Unauthorized.');
+        }
 
-        if (!$user || !$user->hasPermission($permission)) {
-            abort(403, 'Unauthorized. Permission required: ' . $permission);
+        // Platform support users bypass permission checks (already verified by EnsurePlatformAdmin)
+        if ($user->isPlatformSupport()) {
+            return $next($request);
+        }
+
+        $permissions = explode('|', $permission);
+        $hasAccess = false;
+        
+        foreach ($permissions as $p) {
+            if ($user->hasPermission(trim($p))) {
+                $hasAccess = true;
+                break;
+            }
+        }
+
+        if (!$hasAccess) {
+            abort(403, 'Unauthorized. Permissions required: ' . implode(' or ', $permissions));
         }
 
         return $next($request);

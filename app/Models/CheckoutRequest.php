@@ -22,11 +22,13 @@ class CheckoutRequest extends Model
         'payload_hash',
         'validated_at',
         'last_seen_at',
+        'is_training_mode',
     ];
 
     protected $casts = [
         'validated_at' => 'datetime',
         'last_seen_at' => 'datetime',
+        'is_training_mode' => 'boolean',
     ];
 
     public function tenant(): BelongsTo
