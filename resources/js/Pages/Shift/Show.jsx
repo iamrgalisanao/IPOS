@@ -3,6 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link, router } from '@inertiajs/react';
 import CloseShiftModal from '@/Components/Shift/CloseShiftModal';
 import RecordCashEventModal from '@/Components/Shift/RecordCashEventModal';
+import PremiumDialog from '@/Components/PremiumDialog';
 import { 
     ArrowLeft, 
     Calendar, 
@@ -23,6 +24,7 @@ import {
 export default function ShiftShow({ auth, shift }) {
     const [showCloseModal, setShowCloseModal] = useState(false);
     const [showEventModal, setShowEventModal] = useState(false);
+    const [confirmOpen, setConfirmOpen] = useState(false);
 
     const formatCurrency = (val) => {
         return new Intl.NumberFormat('en-PH', {
@@ -55,9 +57,12 @@ export default function ShiftShow({ auth, shift }) {
     };
 
     const handleApprove = () => {
-        if (confirm('Are you sure you want to approve and finalize this shift?')) {
-            router.post(route('shifts.approve', shift.id));
-        }
+        setConfirmOpen(true);
+    };
+
+    const handleConfirmApprove = () => {
+        router.post(route('shifts.approve', shift.id));
+        setConfirmOpen(false);
     };
 
     return (
@@ -100,7 +105,7 @@ export default function ShiftShow({ auth, shift }) {
                             </Link>
                         )}
                         
-                        {shift.status === 'closed' && auth.user.permissions.includes('approve_shift') && (
+                        {shift.status === 'closed' && auth.permissions.includes('approve_shift') && (
                             <button
                                 onClick={handleApprove}
                                 className="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-xl font-bold text-white text-sm uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
@@ -185,7 +190,7 @@ export default function ShiftShow({ auth, shift }) {
                                         Cash Drawer Events
                                     </h4>
                                     <div className="flex items-center gap-3">
-                                        {shift.status === 'open' && auth.user.permissions.includes('manage_cash_drawer') && (
+                                        {shift.status === 'open' && auth.permissions.includes('manage_cash_drawer') && (
                                             <button
                                                 onClick={() => setShowEventModal(true)}
                                                 className="text-xs font-bold text-indigo-600 hover:text-indigo-700 uppercase tracking-wider"
@@ -252,7 +257,7 @@ export default function ShiftShow({ auth, shift }) {
                                                 <div className="max-h-64 overflow-y-auto space-y-3 pr-2 scrollbar-thin scrollbar-thumb-gray-200">
                                                     {shift.sale_payments.map((p) => (
                                                         <div key={p.id} className="flex justify-between items-center text-xs">
-                                                            <span className="text-gray-600 font-mono">#{p.sale?.order_number || p.sale_id.split('-')[0]}</span>
+                                                            <span className="text-gray-600 font-mono">#{p.sale?.sale_number || p.sale_id.split('-')[0]}</span>
                                                             <span className="font-semibold text-gray-800">{formatCurrency(p.amount)}</span>
                                                         </div>
                                                     ))}
@@ -353,6 +358,15 @@ export default function ShiftShow({ auth, shift }) {
                     </div>
                 </div>
             </div>
+            <PremiumDialog
+                isOpen={confirmOpen}
+                type="success"
+                title="Approve & Finalize Shift"
+                message="Are you sure you want to approve and finalize this shift? This will permanently post the calculated variance and commit the audit drawer logs."
+                confirmLabel="Approve Shift"
+                onConfirm={handleConfirmApprove}
+                onCancel={() => setConfirmOpen(false)}
+            />
         </AuthenticatedLayout>
     );
 }

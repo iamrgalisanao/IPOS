@@ -14,6 +14,7 @@ const iconMap = {
     uncertain: Search,
     retry_available: RefreshCw,
     confirmed: CheckCircle2,
+    offline_captured: CheckCircle2,
     failed: AlertTriangle,
 };
 

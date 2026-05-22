@@ -1,10 +1,10 @@
 import React from 'react';
 import { Plus, PackageSearch, AlertCircle } from 'lucide-react';
 
-export default function ProductGrid({ products, loading, onSelect, activeLayout, isSearchActive }) {
+export default function ProductGrid({ products, loading, onSelect, activeLayout, isSearchActive, cart = [], gridColsClass = "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" }) {
     if (loading && products.length === 0) {
         return (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            <div className={`grid ${gridColsClass} gap-4`}>
                 {[...Array(10)].map((_, i) => (
                     <div key={i} className="bg-slate-900 border border-slate-800 rounded-2xl h-36 animate-pulse">
                         <div className="h-16 bg-slate-800 rounded-t-2xl"></div>
@@ -54,11 +54,16 @@ export default function ProductGrid({ products, loading, onSelect, activeLayout,
                         );
                     }
 
+                    const pId = product.id || product.product_id;
+                    const cartItem = cart.find(i => (i.id || i.product_id) === pId);
+                    const qtyInCart = cartItem ? cartItem.quantity : 0;
+
                     return (
                         <ProductCard 
                             key={product.product_id}
                             product={product}
                             onSelect={onSelect}
+                            qtyInCart={qtyInCart}
                             style={{
                                 gridColumnStart: tile.x + 1,
                                 gridRowStart: tile.y + 1,
@@ -81,25 +86,38 @@ export default function ProductGrid({ products, loading, onSelect, activeLayout,
     }
 
     return (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-            {products.map((product, index) => (
-                <ProductCard 
-                    key={product.product_id || `product-${index}`}
-                    product={product}
-                    onSelect={onSelect}
-                />
-            ))}
+        <div className={`grid ${gridColsClass} gap-4`}>
+            {products.map((product, index) => {
+                const pId = product.id || product.product_id;
+                const cartItem = cart.find(i => (i.id || i.product_id) === pId);
+                const qtyInCart = cartItem ? cartItem.quantity : 0;
+                return (
+                    <ProductCard 
+                        key={product.product_id || `product-${index}`}
+                        product={product}
+                        onSelect={onSelect}
+                        qtyInCart={qtyInCart}
+                    />
+                );
+            })}
         </div>
     );
 }
 
-function ProductCard({ product, onSelect, style = {} }) {
+function ProductCard({ product, onSelect, qtyInCart = 0, style = {} }) {
     return (
         <button
             onClick={() => onSelect(product)}
             style={style}
-            className="group flex flex-col bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden hover:border-indigo-500/50 hover:shadow-xl hover:shadow-indigo-500/10 transition-all text-left relative active:scale-95 h-36"
+            className="group flex flex-col bg-slate-900/35 backdrop-blur-md border border-white/5 rounded-2xl overflow-hidden hover:border-indigo-500/50 hover:bg-slate-900/55 hover:shadow-xl hover:shadow-indigo-500/10 transition-all text-left relative active:scale-95 h-36"
         >
+            {/* Quantity Badge for instant visual feedback */}
+            {qtyInCart > 0 && (
+                <div className="absolute top-2 left-2 bg-indigo-600 text-white text-[10px] font-black w-6 h-6 rounded-full flex items-center justify-center border border-indigo-400 shadow-lg animate-in zoom-in-50 duration-200 z-10">
+                    {qtyInCart}
+                </div>
+            )}
+
             {/* Stock Badge */}
             {product.is_inventory_tracked && (
                 <div className={`absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold z-10 ${
@@ -112,8 +130,8 @@ function ProductCard({ product, onSelect, style = {} }) {
             )}
 
             {/* Placeholder for Product Image */}
-            <div className="h-14 bg-slate-800 flex items-center justify-center group-hover:bg-slate-700 transition-colors shrink-0">
-                <span className="text-xl font-bold opacity-40">{product.display_name.charAt(0)}</span>
+            <div className="h-14 bg-slate-800/30 flex items-center justify-center group-hover:bg-slate-700/40 transition-colors shrink-0 border-b border-slate-800/40">
+                <span className="text-xl font-bold opacity-30 group-hover:opacity-50 transition-opacity">{product.display_name.charAt(0)}</span>
             </div>
 
             <div className="p-2.5 flex-1 flex flex-col justify-between overflow-hidden">

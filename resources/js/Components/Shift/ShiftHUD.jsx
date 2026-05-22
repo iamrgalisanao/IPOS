@@ -9,10 +9,11 @@ import {
     FileText, 
     LogOut,
     Eye,
-    EyeOff
+    EyeOff,
+    Lock
 } from 'lucide-react';
 
-export default function ShiftHUD({ shift, onRecordEvent, onCloseShift }) {
+export default function ShiftHUD({ shift, onRecordEvent, onCloseShift, onLockTerminal }) {
     const [duration, setDuration] = useState('');
     const [showActions, setShowActions] = useState(false);
     const [showFinancials, setShowFinancials] = useState(false);
@@ -37,7 +38,7 @@ export default function ShiftHUD({ shift, onRecordEvent, onCloseShift }) {
         return () => clearInterval(timer);
     }, [shift?.opened_at]);
 
-    if (!shift) {
+    if (!shift || !shift.id) {
         return (
             <div className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 px-4 py-2 flex items-center justify-between">
                 <div className="flex items-center gap-3 text-slate-400">
@@ -146,13 +147,26 @@ export default function ShiftHUD({ shift, onRecordEvent, onCloseShift }) {
                             Record Cash Event
                         </button>
                         
-                        <Link
-                            href={route('shifts.show', shift.id)}
-                            className="w-full flex items-center gap-3 px-4 py-2 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                        {shift?.id && (
+                            <Link
+                                href={route('shifts.show', shift.id)}
+                                className="w-full flex items-center gap-3 px-4 py-2 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                            >
+                                <FileText className="w-4 h-4 text-indigo-400" />
+                                View Summary
+                            </Link>
+                        )}
+
+                        <button
+                            onClick={() => {
+                                onLockTerminal();
+                                setShowActions(false);
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-2 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors border-t border-slate-850"
                         >
-                            <FileText className="w-4 h-4 text-indigo-400" />
-                            View Summary
-                        </Link>
+                            <Lock className="w-4 h-4 text-amber-400" />
+                            Lock Terminal
+                        </button>
 
                         <div className="my-1 border-t border-slate-800"></div>
 

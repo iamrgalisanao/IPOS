@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Head, useForm, Link } from '@inertiajs/react';
+import PremiumDialog from '@/Components/PremiumDialog';
 import { 
     Layout, 
     Save, 
@@ -24,6 +25,8 @@ export default function Show({ layout, registry, history }) {
     const [isDesignMode, setIsDesignMode] = useState(layout.status === 'draft');
     const [activeSelection, setActiveSelection] = useState(null);
     const [successMessage, setSuccessMessage] = useState('');
+    const [rollbackConfirmOpen, setRollbackConfirmOpen] = useState(false);
+    const [pendingRollbackBranchId, setPendingRollbackBranchId] = useState(null);
 
     const { data, setData, put, processing, errors, recentlySuccessful } = useForm({
         name: layout.name,
@@ -112,12 +115,19 @@ export default function Show({ layout, registry, history }) {
     };
 
     const handleRollback = (branchId) => {
-        if (confirm('Are you sure you want to rollback and reactivate this layout version for this branch?')) {
+        setPendingRollbackBranchId(branchId);
+        setRollbackConfirmOpen(true);
+    };
+
+    const handleConfirmRollback = () => {
+        if (pendingRollbackBranchId) {
             rollbackForm.post(route('admin.pos-layouts.rollback', { 
                 posLayout: layout.id,
-                branch_id: branchId 
+                branch_id: pendingRollbackBranchId 
             }));
         }
+        setRollbackConfirmOpen(false);
+        setPendingRollbackBranchId(null);
     };
 
     const toggleBranch = (id) => {
@@ -503,6 +513,20 @@ export default function Show({ layout, registry, history }) {
                         </div>
                     </div>
                 </div>
+            )}
+            {rollbackConfirmOpen && (
+                <PremiumDialog
+                    isOpen={rollbackConfirmOpen}
+                    type="warning"
+                    title="Rollback Branch POS Layout"
+                    message="Are you sure you want to rollback and reactivate this layout version for this branch? This will replace the branch's active layout immediately."
+                    confirmLabel="Rollback Layout"
+                    onConfirm={handleConfirmRollback}
+                    onCancel={() => {
+                        setRollbackConfirmOpen(false);
+                        setPendingRollbackBranchId(null);
+                    }}
+                />
             )}
         </div>
     );

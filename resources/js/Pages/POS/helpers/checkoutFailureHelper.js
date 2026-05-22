@@ -58,6 +58,11 @@ export const getGuardianPresentation = (kind) => {
             title: 'Sale Confirmed',
             announcement: 'Sale Confirmed',
         },
+        offline_captured: {
+            tone: 'amber',
+            title: 'Offline Transaction Captured',
+            announcement: 'Offline Transaction Captured',
+        },
         failed: {
             tone: 'red',
             title: 'Submission Failed',
