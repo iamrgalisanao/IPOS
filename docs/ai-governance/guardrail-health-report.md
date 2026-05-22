@@ -1,3 +1,34 @@
+## Guardrail Health Report - 2026-05-22 (G-002 Refresh After Epics 29-31)
+
+- **Current Stage**: Post-Epic 31 governance alignment refresh.
+- **Active Focus**: Confirming that roadmap, task ledger, closure evidence, full-suite quality posture, and deferred-scope boundaries remain synchronized after Epic 29, Epic 30, Epic 31, and G-066 closure.
+- **Evidence References**:
+  - `docs/validation/epic-29-platform-tenant-provisioning-closure-report.md`
+  - `docs/validation/epic-30-system-admin-tenant-operations-compliance-intelligence-closure-report.md`
+  - `docs/validation/epic-31-product-catalog-and-inventory-admin-ux-completion-closure-report.md`
+  - `docs/validation/g-066-full-suite-residual-quality-follow-up-closure.md`
+  - `docs/validation/sync-discovery-2026-05-22.md`
+- **Latest Full Suite Baseline**: 1351 passed / 0 failed / 0 risky / 0 incomplete / 6237 assertions.
+
+---
+
+## Post-Epic 31 Guardrail Refresh Note (2026-05-22)
+
+**Findings & Validation:**
+- **Epic 29 Tenant Provisioning Closure**: System Admin provisioning, feature-gate visibility/enforcement hardening, branch/owner setup, sales machine compliance registration, controlled offline pilot provisioning, and tenant readiness review are implemented and locally validated.
+- **Epic 29 Residual Boundary**: Optional full POS shell gating remains deferred as a non-blocking future enhancement. No billing automation, subscription engine rebuild, offline sync/posting changes, or BIR certification claim is introduced.
+- **Epic 30 System Admin Intelligence Closure**: Compliance detail drill-down, read-only dashboard summaries, and advisory urgency intelligence are implemented and locally validated.
+- **Epic 30 Deferred Boundary**: Story 30.4 persona-based views and Story 30.5 hardware readiness tracking remain planning-locked and deferred. No persona enforcement, hardware enforcement, POS blocking, auto-remediation, auto-suspension, billing change, or offline/tax engine change is approved.
+- **Epic 31 Catalog and Inventory Admin UX Closure**: Product create/edit UX, branch pricing/availability surfaces, read-only inventory visibility, recipe admin UX, and catalog export/template/preview hardening are implemented and locally validated.
+- **Epic 31 Import Boundary**: Catalog import remains validation-first only. Actual import writes, bulk create/update behavior, background import jobs, and import write-path behavior remain locked and require a separate planning lock before any future implementation.
+- **Full-Suite Residual Cleanup (G-066)**: Prior risky/incomplete test residuals are closed. The latest full-suite baseline is clean.
+- **Sync Discovery Alignment**: The 2026-05-22 sync discovery found the workspace aligned with Epic 31 closure posture and confirmed no hidden catalog import write-path expansion.
+
+> [!NOTE]
+> This refresh confirms the current guardrail posture after the latest roadmap/governance closures. It does not approve deferred work. Future execution for POS shell gating, persona-based views, hardware readiness, catalog import writes, pilot go-live enablement, or production credential reinjection must proceed through their own explicit approval paths.
+
+---
+
 # Guardrail Health Report - 2026-05-15 (Post-Epic 14 CSV Baseline)
 
 This report assesses current guardrail health for the IPOS repository using the documented `guardrail-audit` workflow and the repo-defined `sync-discovery` skill.

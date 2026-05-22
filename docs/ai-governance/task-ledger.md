@@ -1,12 +1,12 @@
 # Task Ledger
 
-Last updated: 2026-05-13
+Last updated: 2026-05-22
 
 ## Active Governance Tasks
  
  | ID | Task | Status | Evidence | Next Action |
  | :--- | :--- | :--- | :--- | :--- |
- | G-002 | Maintain formal guardrail audit outputs | In Progress | `docs/ai-governance/guardrail-health-report.md`, `_bmad-output/implementation-artifacts/guardrail-health-summary.md` | Refresh after Epic 14 closure |
+ | G-002 | Maintain formal guardrail audit outputs | Current After Epic 31 Refresh | `docs/ai-governance/guardrail-health-report.md`, `_bmad-output/implementation-artifacts/guardrail-health-summary.md`, `docs/validation/sync-discovery-2026-05-22.md`, `docs/validation/g-066-full-suite-residual-quality-follow-up-closure.md` | Refreshed after Epic 29, Epic 30, Epic 31, and G-066 closure. Next refresh after new roadmap/governance closure, production reinjection, or pilot enablement evidence. |
  | G-009 | Rotate previously committed MCP and Hermes credentials | Partially Resolved | `docs/ai-governance/g-009-credential-reinjection-plan.md`, `app/Console/Commands/Security/InjectCredentialsCommand.php`, `app/Services/Security/CredentialManagementService.php` | Phase B CLI Tool implemented. Local operational workflow verified via mail_provider trial. Perform actual reinjection/validation for target environment before final release |
  | G-017 | Close release-readiness blockers after Epic 13/14 | Resolved | `docs/roadmap/validated-implementation-roadmap.md`, `docs/ai-governance/release-readiness-checklist.md`, `docs/ai-governance/release-decision.md` | Hand off to human owner for production reinjection and deployment sign-off |
  | G-019 | Execute Epic 15: Sales & Transaction History | In Progress | `epic-15-implementation-plan.md`, `SalesHistoryQueryService.php`, `SalesHistoryController.php`, `SalesHistoryQueryTest.php` | Slice A: Completed — Validated; Slice B: Completed Early — Accepted as Baseline; Slice C: Completed Early — Accepted as Baseline; Slice D: Completed — Validated. **Governance Note**: Scope drift and Slice D closure review successfully completed. |
