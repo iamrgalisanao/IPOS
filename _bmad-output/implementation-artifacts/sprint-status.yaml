@@ -1,0 +1,55 @@
+generated: 2026-05-20 12:00
+last_updated: 2026-05-20 19:05
+project: IPOS
+project_key: IPOS
+tracking_system: file-system
+story_location: "_bmad-output/planning-artifacts"
+
+development_status:
+  epic-1: done
+  epic-2: done
+  epic-3: done
+  epic-4: done
+  epic-5: done
+  epic-6: done
+  epic-7: done
+  epic-8: done
+  epic-9: done
+  epic-10: done
+  epic-11: done
+  epic-12: done
+  epic-13: done
+  epic-14: done
+  epic-15: done
+  epic-16: done
+  epic-17: done
+  epic-20: done
+  epic-21: backlog
+  epic-22: done
+  epic-23: done
+  epic-25: done
+  epic-26: done
+  epic-27: done
+  epic-28: done
+
+  14-4-training-mode-isolation: done
+  14-5-electronic-journal-exporter-internal-hashes: done
+
+  21-1-cross-branch-financial-aggregations: backlog
+  21-2-performance-metric-visualization-dashboard: backlog
+
+  28-1-pos-cache-bootstrap-api-endpoint: done
+  28-2-client-indexeddb-caching-services: done
+  28-3-connectivity-state-checkout-guard-ui: done
+  28-4-cart-draft-persistence-restore: done
+  28-5-settings-terminal-sequence-registry-admin-controls: done
+  28-6-offline-import-schema-reconciliation-foundation: done
+  28-7-offline-sync-validation-reconciliation-service: done
+  28-8-offline-import-server-recalculation: done
+  28-9-offline-import-posting-readiness-admin-conflict-review: done
+  28-10-offline-import-official-posting-reconciliation: done
+  28-11-pos-offline-transaction-queue-sync-ux: done
+
+  epic-14-retrospective: optional
+  epic-21-retrospective: optional
+  epic-28-retrospective: optional

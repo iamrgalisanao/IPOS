@@ -1,0 +1,449 @@
+
+  [39;41;1m FAIL [39;49;22m[39m Tests\Feature\SystemAdmin\TenantProvisioningTest[39m
+  [31;1m⨯[39;22m[90m [39m[90mplatform admin can view tenant provisioning index[39m[90m                   [39m [90m1.04s[39m  
+  [31;1m⨯[39;22m[90m [39m[90mtenant user cannot access system admin tenant provisioning index[39m[90m    [39m [90m0.06s[39m  
+  [32;1m✓[39;22m[90m [39m[90mplatform admin can create tenant with plan and feature overrides[39m[90m    [39m [90m0.02s[39m  
+  [32;1m✓[39;22m[90m [39m[90mplatform admin can update tenant profile status and plan[39m[90m            [39m [90m0.02s[39m  
+  [31;1m⨯[39;22m[90m [39m[90mindex includes readiness and feature gate coverage summary[39m[90m          [39m [90m0.27s[39m  
+  [31;1m⨯[39;22m[90m [39m[90mreadiness marks machine profile missing when not registered[39m[90m         [39m [90m0.27s[39m  
+  [31m────────────────────────────────────────────────────────────────────────────[39m  
+  [41;1m FAILED [49;22m [1mTests\Feature\SystemAdmin\TenantProvisioningTest[22m [90m>[39m platform admin…   
+[39;1m  Expected response status code [200] but received 500.
+Failed asserting that 500 is identical to 200.
+
+The following exception occurred during the last request:
+
+Illuminate\Foundation\ViteException: Unable to locate file in Vite manifest: resources/js/Pages/SystemAdmin/Tenants/Index.jsx. in /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Vite.php:1042
+Stack trace:
+#0 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Vite.php(404): Illuminate\Foundation\Vite->chunk(Array, 'resources/js/Pa...')
+#1 /Users/teamsolo/Documents/Dev/IPOS/storage/framework/views/7be5316eac18ef57a16b4076ba24ed45.php(19): Illuminate\Foundation\Vite->__invoke(Object(Illuminate\Support\Collection))
+#2 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Filesystem/Filesystem.php(123): require('/Users/teamsolo...')
+#3 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Filesystem/Filesystem.php(124): Illuminate\Filesystem\Filesystem::{closure:Illuminate\Filesystem\Filesystem::getRequire():120}()
+#4 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/View/Engines/PhpEngine.php(57): Illuminate\Filesystem\Filesystem->getRequire('/Users/teamsolo...', Array)
+#5 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/View/Engines/CompilerEngine.php(76): Illuminate\View\Engines\PhpEngine->evaluatePath('/Users/teamsolo...', Array)
+#6 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/View/View.php(208): Illuminate\View\Engines\CompilerEngine->get('/Users/teamsolo...', Array)
+#7 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/View/View.php(191): Illuminate\View\View->getContents()
+#8 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/View/View.php(160): Illuminate\View\View->renderContents()
+#9 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Http/Response.php(78): Illuminate\View\View->render()
+#10 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Http/Response.php(34): Illuminate\Http\Response->setContent(Object(Illuminate\View\View))
+#11 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/ResponseFactory.php(61): Illuminate\Http\Response->__construct(Object(Illuminate\View\View), 200, Array)
+#12 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/ResponseFactory.php(91): Illuminate\Routing\ResponseFactory->make(Object(Illuminate\View\View), 200, Array)
+#13 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Support/Facades/Facade.php(363): Illuminate\Routing\ResponseFactory->view('app', Array)
+#14 /Users/teamsolo/Documents/Dev/IPOS/vendor/inertiajs/inertia-laravel/src/Response.php(219): Illuminate\Support\Facades\Facade::__callStatic('view', Array)
+#15 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Router.php(921): Inertia\Response->toResponse(Object(Illuminate\Http\Request))
+#16 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Router.php(906): Illuminate\Routing\Router::toResponse(Object(Illuminate\Http\Request), Object(Inertia\Response))
+#17 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Router.php(821): Illuminate\Routing\Router->prepareResponse(Object(Illuminate\Http\Request), Object(Inertia\Response))
+#18 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(180): Illuminate\Routing\Router->{closure:Illuminate\Routing\Router::runRouteWithinStack():821}(Object(Illuminate\Http\Request))
+#19 /Users/teamsolo/Documents/Dev/IPOS/app/Http/Middleware/EnsurePlatformAdmin.php(19): Illuminate\Pipeline\Pipeline->{closure:Illuminate\Pipeline\Pipeline::prepareDestination():178}(Object(Illuminate\Http\Request))
+#20 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): App\Http\Middleware\EnsurePlatformAdmin->handle(Object(Illuminate\Http\Request), Object(Closure))
+#21 /Users/teamsolo/Documents/Dev/IPOS/app/Http/Middleware/AddSecurityHeaders.php(13): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#22 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): App\Http\Middleware\AddSecurityHeaders->handle(Object(Illuminate\Http\Request), Object(Closure))
+#23 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Http/Middleware/AddLinkHeadersForPreloadedAssets.php(32): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#24 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets->handle(Object(Illuminate\Http\Request), Object(Closure))
+#25 /Users/teamsolo/Documents/Dev/IPOS/vendor/inertiajs/inertia-laravel/src/Middleware.php(122): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#26 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Inertia\Middleware->handle(Object(Illuminate\Http\Request), Object(Closure))
+#27 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Middleware/SubstituteBindings.php(52): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#28 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Routing\Middleware\SubstituteBindings->handle(Object(Illuminate\Http\Request), Object(Closure))
+#29 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Auth/Middleware/Authenticate.php(63): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#30 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Auth\Middleware\Authenticate->handle(Object(Illuminate\Http\Request), Object(Closure))
+#31 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/PreventRequestForgery.php(104): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#32 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Foundation\Http\Middleware\PreventRequestForgery->handle(Object(Illuminate\Http\Request), Object(Closure))
+#33 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/View/Middleware/ShareErrorsFromSession.php(48): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#34 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\View\Middleware\ShareErrorsFromSession->handle(Object(Illuminate\Http\Request), Object(Closure))
+#35 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Session/Middleware/StartSession.php(120): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#36 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Session/Middleware/StartSession.php(63): Illuminate\Session\Middleware\StartSession->handleStatefulRequest(Object(Illuminate\Http\Request), Object(Illuminate\Session\Store), Object(Closure))
+#37 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Session\Middleware\StartSession->handle(Object(Illuminate\Http\Request), Object(Closure))
+#38 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Cookie/Middleware/AddQueuedCookiesToResponse.php(36): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#39 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse->handle(Object(Illuminate\Http\Request), Object(Closure))
+#40 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Cookie/Middleware/EncryptCookies.php(74): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#41 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Cookie\Middleware\EncryptCookies->handle(Object(Illuminate\Http\Request), Object(Closure))
+#42 /Users/teamsolo/Documents/Dev/IPOS/app/Http/Middleware/AttachRequestCorrelation.php(28): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#43 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): App\Http\Middleware\AttachRequestCorrelation->handle(Object(Illuminate\Http\Request), Object(Closure))
+#44 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(137): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#45 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Router.php(821): Illuminate\Pipeline\Pipeline->then(Object(Closure))
+#46 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Router.php(800): Illuminate\Routing\Router->runRouteWithinStack(Object(Illuminate\Routing\Route), Object(Illuminate\Http\Request))
+#47 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Router.php(764): Illuminate\Routing\Router->runRoute(Object(Illuminate\Http\Request), Object(Illuminate\Routing\Route))
+#48 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Router.php(753): Illuminate\Routing\Router->dispatchToRoute(Object(Illuminate\Http\Request))
+#49 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php(200): Illuminate\Routing\Router->dispatch(Object(Illuminate\Http\Request))
+#50 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(180): Illuminate\Foundation\Http\Kernel->{closure:Illuminate\Foundation\Http\Kernel::dispatchToRouter():197}(Object(Illuminate\Http\Request))
+#51 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TransformsRequest.php(21): Illuminate\Pipeline\Pipeline->{closure:Illuminate\Pipeline\Pipeline::prepareDestination():178}(Object(Illuminate\Http\Request))
+#52 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/ConvertEmptyStringsToNull.php(31): Illuminate\Foundation\Http\Middleware\TransformsRequest->handle(Object(Illuminate\Http\Request), Object(Closure))
+#53 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull->handle(Object(Illuminate\Http\Request), Object(Closure))
+#54 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TransformsRequest.php(21): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#55 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TrimStrings.php(51): Illuminate\Foundation\Http\Middleware\TransformsRequest->handle(Object(Illuminate\Http\Request), Object(Closure))
+#56 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Foundation\Http\Middleware\TrimStrings->handle(Object(Illuminate\Http\Request), Object(Closure))
+#57 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Http/Middleware/ValidatePostSize.php(27): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#58 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Http\Middleware\ValidatePostSize->handle(Object(Illuminate\Http\Request), Object(Closure))
+#59 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/PreventRequestsDuringMaintenance.php(109): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#60 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Foundation\Http\Middleware\PreventRequestsDuringMaintenance->handle(Object(Illuminate\Http\Request), Object(Closure))
+#61 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Http/Middleware/HandleCors.php(61): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#62 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Http\Middleware\HandleCors->handle(Object(Illuminate\Http\Request), Object(Closure))
+#63 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Http/Middleware/TrustProxies.php(58): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#64 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Http\Middleware\TrustProxies->handle(Object(Illuminate\Http\Request), Object(Closure))
+#65 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/InvokeDeferredCallbacks.php(22): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#66 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Foundation\Http\Middleware\InvokeDeferredCallbacks->handle(Object(Illuminate\Http\Request), Object(Closure))
+#67 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Http/Middleware/ValidatePathEncoding.php(28): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#68 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Http\Middleware\ValidatePathEncoding->handle(Object(Illuminate\Http\Request), Object(Closure))
+#69 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(137): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#70 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php(175): Illuminate\Pipeline\Pipeline->then(Object(Closure))
+#71 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php(144): Illuminate\Foundation\Http\Kernel->sendRequestThroughRouter(Object(Illuminate\Http\Request))
+#72 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php(607): Illuminate\Foundation\Http\Kernel->handle(Object(Illuminate\Http\Request))
+#73 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php(368): Illuminate\Foundation\Testing\TestCase->call('GET', '/system-admin/t...', Array, Array, Array, Array)
+#74 /Users/teamsolo/Documents/Dev/IPOS/tests/Feature/SystemAdmin/TenantProvisioningTest.php(24): Illuminate\Foundation\Testing\TestCase->get('/system-admin/t...')
+#75 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/Framework/TestCase.php(1310): Tests\Feature\SystemAdmin\TenantProvisioningTest->test_platform_admin_can_view_tenant_provisioning_index()
+#76 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/Framework/TestCase.php(1344): PHPUnit\Framework\TestCase->invokeTestMethod('test_platform_a...', Array)
+#77 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/Framework/TestCase.php(520): PHPUnit\Framework\TestCase->runTest()
+#78 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/Framework/TestRunner/TestRunner.php(99): PHPUnit\Framework\TestCase->runBare()
+#79 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/Framework/TestCase.php(360): PHPUnit\Framework\TestRunner->run(Object(Tests\Feature\SystemAdmin\TenantProvisioningTest))
+#80 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/Framework/TestSuite.php(374): PHPUnit\Framework\TestCase->run()
+#81 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/TextUI/TestRunner.php(64): PHPUnit\Framework\TestSuite->run()
+#82 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/TextUI/Application.php(229): PHPUnit\TextUI\TestRunner->run(Object(PHPUnit\TextUI\Configuration\Configuration), Object(PHPUnit\Runner\ResultCache\DefaultResultCache), Object(PHPUnit\Framework\TestSuite))
+#83 /Users/teamsolo/Documents/Dev/IPOS/vendor/pestphp/pest/src/Kernel.php(117): PHPUnit\TextUI\Application->run(Array)
+#84 /Users/teamsolo/Documents/Dev/IPOS/vendor/pestphp/pest/bin/pest(207): Pest\Kernel->handle(Array, Array)
+#85 /Users/teamsolo/Documents/Dev/IPOS/vendor/pestphp/pest/bin/pest(215): {closure:/Users/teamsolo/Documents/Dev/IPOS/vendor/pestphp/pest/bin/pest:21}()
+#86 /Users/teamsolo/Documents/Dev/IPOS/vendor/bin/pest(119): include('/Users/teamsolo...')
+#87 {main}
+
+Next Illuminate\View\ViewException: Unable to locate file in Vite manifest: resources/js/Pages/SystemAdmin/Tenants/Index.jsx. (View: /Users/teamsolo/Documents/Dev/IPOS/resources/views/app.blade.php) in /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Vite.php:1042
+Stack trace:
+#0 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/View/Engines/PhpEngine.php(59): Illuminate\View\Engines\CompilerEngine->handleViewException(Object(Illuminate\Foundation\ViteException), 2)
+#1 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/View/Engines/CompilerEngine.php(76): Illuminate\View\Engines\PhpEngine->evaluatePath('/Users/teamsolo...', Array)
+#2 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/View/View.php(208): Illuminate\View\Engines\CompilerEngine->get('/Users/teamsolo...', Array)
+#3 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/View/View.php(191): Illuminate\View\View->getContents()
+#4 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/View/View.php(160): Illuminate\View\View->renderContents()
+#5 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Http/Response.php(78): Illuminate\View\View->render()
+#6 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Http/Response.php(34): Illuminate\Http\Response->setContent(Object(Illuminate\View\View))
+#7 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/ResponseFactory.php(61): Illuminate\Http\Response->__construct(Object(Illuminate\View\View), 200, Array)
+#8 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/ResponseFactory.php(91): Illuminate\Routing\ResponseFactory->make(Object(Illuminate\View\View), 200, Array)
+#9 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Support/Facades/Facade.php(363): Illuminate\Routing\ResponseFactory->view('app', Array)
+#10 /Users/teamsolo/Documents/Dev/IPOS/vendor/inertiajs/inertia-laravel/src/Response.php(219): Illuminate\Support\Facades\Facade::__callStatic('view', Array)
+#11 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Router.php(921): Inertia\Response->toResponse(Object(Illuminate\Http\Request))
+#12 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Router.php(906): Illuminate\Routing\Router::toResponse(Object(Illuminate\Http\Request), Object(Inertia\Response))
+#13 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Router.php(821): Illuminate\Routing\Router->prepareResponse(Object(Illuminate\Http\Request), Object(Inertia\Response))
+#14 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(180): Illuminate\Routing\Router->{closure:Illuminate\Routing\Router::runRouteWithinStack():821}(Object(Illuminate\Http\Request))
+#15 /Users/teamsolo/Documents/Dev/IPOS/app/Http/Middleware/EnsurePlatformAdmin.php(19): Illuminate\Pipeline\Pipeline->{closure:Illuminate\Pipeline\Pipeline::prepareDestination():178}(Object(Illuminate\Http\Request))
+#16 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): App\Http\Middleware\EnsurePlatformAdmin->handle(Object(Illuminate\Http\Request), Object(Closure))
+#17 /Users/teamsolo/Documents/Dev/IPOS/app/Http/Middleware/AddSecurityHeaders.php(13): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#18 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): App\Http\Middleware\AddSecurityHeaders->handle(Object(Illuminate\Http\Request), Object(Closure))
+#19 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Http/Middleware/AddLinkHeadersForPreloadedAssets.php(32): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#20 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets->handle(Object(Illuminate\Http\Request), Object(Closure))
+#21 /Users/teamsolo/Documents/Dev/IPOS/vendor/inertiajs/inertia-laravel/src/Middleware.php(122): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#22 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Inertia\Middleware->handle(Object(Illuminate\Http\Request), Object(Closure))
+#23 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Middleware/SubstituteBindings.php(52): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#24 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Routing\Middleware\SubstituteBindings->handle(Object(Illuminate\Http\Request), Object(Closure))
+#25 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Auth/Middleware/Authenticate.php(63): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#26 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Auth\Middleware\Authenticate->handle(Object(Illuminate\Http\Request), Object(Closure))
+#27 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/PreventRequestForgery.php(104): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#28 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Foundation\Http\Middleware\PreventRequestForgery->handle(Object(Illuminate\Http\Request), Object(Closure))
+#29 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/View/Middleware/ShareErrorsFromSession.php(48): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#30 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\View\Middleware\ShareErrorsFromSession->handle(Object(Illuminate\Http\Request), Object(Closure))
+#31 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Session/Middleware/StartSession.php(120): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#32 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Session/Middleware/StartSession.php(63): Illuminate\Session\Middleware\StartSession->handleStatefulRequest(Object(Illuminate\Http\Request), Object(Illuminate\Session\Store), Object(Closure))
+#33 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Session\Middleware\StartSession->handle(Object(Illuminate\Http\Request), Object(Closure))
+#34 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Cookie/Middleware/AddQueuedCookiesToResponse.php(36): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#35 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse->handle(Object(Illuminate\Http\Request), Object(Closure))
+#36 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Cookie/Middleware/EncryptCookies.php(74): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#37 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Cookie\Middleware\EncryptCookies->handle(Object(Illuminate\Http\Request), Object(Closure))
+#38 /Users/teamsolo/Documents/Dev/IPOS/app/Http/Middleware/AttachRequestCorrelation.php(28): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#39 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): App\Http\Middleware\AttachRequestCorrelation->handle(Object(Illuminate\Http\Request), Object(Closure))
+#40 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(137): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#41 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Router.php(821): Illuminate\Pipeline\Pipeline->then(Object(Closure))
+#42 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Router.php(800): Illuminate\Routing\Router->runRouteWithinStack(Object(Illuminate\Routing\Route), Object(Illuminate\Http\Request))
+#43 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Router.php(764): Illuminate\Routing\Router->runRoute(Object(Illuminate\Http\Request), Object(Illuminate\Routing\Route))
+#44 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Router.php(753): Illuminate\Routing\Router->dispatchToRoute(Object(Illuminate\Http\Request))
+#45 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php(200): Illuminate\Routing\Router->dispatch(Object(Illuminate\Http\Request))
+#46 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(180): Illuminate\Foundation\Http\Kernel->{closure:Illuminate\Foundation\Http\Kernel::dispatchToRouter():197}(Object(Illuminate\Http\Request))
+#47 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TransformsRequest.php(21): Illuminate\Pipeline\Pipeline->{closure:Illuminate\Pipeline\Pipeline::prepareDestination():178}(Object(Illuminate\Http\Request))
+#48 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/ConvertEmptyStringsToNull.php(31): Illuminate\Foundation\Http\Middleware\TransformsRequest->handle(Object(Illuminate\Http\Request), Object(Closure))
+#49 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull->handle(Object(Illuminate\Http\Request), Object(Closure))
+#50 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TransformsRequest.php(21): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#51 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TrimStrings.php(51): Illuminate\Foundation\Http\Middleware\TransformsRequest->handle(Object(Illuminate\Http\Request), Object(Closure))
+#52 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Foundation\Http\Middleware\TrimStrings->handle(Object(Illuminate\Http\Request), Object(Closure))
+#53 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Http/Middleware/ValidatePostSize.php(27): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#54 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Http\Middleware\ValidatePostSize->handle(Object(Illuminate\Http\Request), Object(Closure))
+#55 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/PreventRequestsDuringMaintenance.php(109): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#56 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Foundation\Http\Middleware\PreventRequestsDuringMaintenance->handle(Object(Illuminate\Http\Request), Object(Closure))
+#57 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Http/Middleware/HandleCors.php(61): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#58 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Http\Middleware\HandleCors->handle(Object(Illuminate\Http\Request), Object(Closure))
+#59 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Http/Middleware/TrustProxies.php(58): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#60 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Http\Middleware\TrustProxies->handle(Object(Illuminate\Http\Request), Object(Closure))
+#61 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/InvokeDeferredCallbacks.php(22): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#62 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Foundation\Http\Middleware\InvokeDeferredCallbacks->handle(Object(Illuminate\Http\Request), Object(Closure))
+#63 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Http/Middleware/ValidatePathEncoding.php(28): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#64 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Http\Middleware\ValidatePathEncoding->handle(Object(Illuminate\Http\Request), Object(Closure))
+#65 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(137): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#66 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php(175): Illuminate\Pipeline\Pipeline->then(Object(Closure))
+#67 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php(144): Illuminate\Foundation\Http\Kernel->sendRequestThroughRouter(Object(Illuminate\Http\Request))
+#68 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php(607): Illuminate\Foundation\Http\Kernel->handle(Object(Illuminate\Http\Request))
+#69 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php(368): Illuminate\Foundation\Testing\TestCase->call('GET', '/system-admin/t...', Array, Array, Array, Array)
+#70 /Users/teamsolo/Documents/Dev/IPOS/tests/Feature/SystemAdmin/TenantProvisioningTest.php(24): Illuminate\Foundation\Testing\TestCase->get('/system-admin/t...')
+#71 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/Framework/TestCase.php(1310): Tests\Feature\SystemAdmin\TenantProvisioningTest->test_platform_admin_can_view_tenant_provisioning_index()
+#72 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/Framework/TestCase.php(1344): PHPUnit\Framework\TestCase->invokeTestMethod('test_platform_a...', Array)
+#73 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/Framework/TestCase.php(520): PHPUnit\Framework\TestCase->runTest()
+#74 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/Framework/TestRunner/TestRunner.php(99): PHPUnit\Framework\TestCase->runBare()
+#75 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/Framework/TestCase.php(360): PHPUnit\Framework\TestRunner->run(Object(Tests\Feature\SystemAdmin\TenantProvisioningTest))
+#76 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/Framework/TestSuite.php(374): PHPUnit\Framework\TestCase->run()
+#77 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/TextUI/TestRunner.php(64): PHPUnit\Framework\TestSuite->run()
+#78 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/TextUI/Application.php(229): PHPUnit\TextUI\TestRunner->run(Object(PHPUnit\TextUI\Configuration\Configuration), Object(PHPUnit\Runner\ResultCache\DefaultResultCache), Object(PHPUnit\Framework\TestSuite))
+#79 /Users/teamsolo/Documents/Dev/IPOS/vendor/pestphp/pest/src/Kernel.php(117): PHPUnit\TextUI\Application->run(Array)
+#80 /Users/teamsolo/Documents/Dev/IPOS/vendor/pestphp/pest/bin/pest(207): Pest\Kernel->handle(Array, Array)
+#81 /Users/teamsolo/Documents/Dev/IPOS/vendor/pestphp/pest/bin/pest(215): {closure:/Users/teamsolo/Documents/Dev/IPOS/vendor/pestphp/pest/bin/pest:21}()
+#82 /Users/teamsolo/Documents/Dev/IPOS/vendor/bin/pest(119): include('/Users/teamsolo...')
+#83 {main}
+
+----------------------------------------------------------------------------------
+
+Unable to locate file in Vite manifest: resources/js/Pages/SystemAdmin/Tenants/Index.jsx. (View: /Users/teamsolo/Documents/Dev/IPOS/resources/views/app.blade.php)[39;22m
+
+  at [32mtests/Feature/SystemAdmin/TenantProvisioningTest.php[39m:[32m26[39m
+     22▕         Tenant::factory()->count(2)->create();
+     23▕ 
+     24▕         $response = $this->actingAs($platformAdmin)->get('/system-admin/tenants');
+     25▕ 
+  ➜  26▕         $response->assertOk();
+     27▕         $response->assertInertia(fn (Assert $page) => $page
+     28▕             ->component('SystemAdmin/Tenants/Index')
+     29▕             ->has('tenants.data')
+     30▕             ->has('plans')
+
+  [31m────────────────────────────────────────────────────────────────────────────[39m  
+  [41;1m FAILED [49;22m [1mTests\Feature\SystemAdmin\TenantProvisioningTes[22m… [41;1m RuntimeException [49;22m  
+[39;1m  Tenant context missing for scoped model creation: App\Models\User[39;22m
+
+  at [32mapp/Traits/BelongsToTenant.php[39m:[32m38[39m
+     34▕                 // if they are not strictly tenant-scoped (have no tenant_id set yet).
+     35▕                 if (method_exists($model, 'isIdentityModel') && $model->isIdentityModel() && !$model->tenant_id) {
+     36▕                     return;
+     37▕                 }
+  ➜  38▕                 throw new \RuntimeException('Tenant context missing for scoped model creation: ' . get_class($model));
+     39▕             }
+     40▕ 
+     41▕             $contextTenantId = $tenantContext->getTenantId();
+     42▕
+
+  [33m1   [39m[39;1mapp/Traits/BelongsToTenant.php[39;22m:[39;1m38[39;22m
+      [2m+12 vendor frames [22m
+  [33m14  [39m[39;1mtests/Feature/SystemAdmin/TenantProvisioningTest.php[39;22m:[39;1m41[39;22m
+
+  [31m────────────────────────────────────────────────────────────────────────────[39m  
+  [41;1m FAILED [49;22m [1mTests\Feature\SystemAdmin\TenantProvisioningTest[22m [90m>[39m index includes…   
+[39;1m  Expected response status code [200] but received 500.
+Failed asserting that 500 is identical to 200.
+
+The following exception occurred during the last request:
+
+Illuminate\Foundation\ViteException: Unable to locate file in Vite manifest: resources/js/Pages/SystemAdmin/Tenants/Index.jsx. in /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Vite.php:1042
+Stack trace:
+#0 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Vite.php(404): Illuminate\Foundation\Vite->chunk(Array, 'resources/js/Pa...')
+#1 /Users/teamsolo/Documents/Dev/IPOS/storage/framework/views/7be5316eac18ef57a16b4076ba24ed45.php(19): Illuminate\Foundation\Vite->__invoke(Object(Illuminate\Support\Collection))
+#2 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Filesystem/Filesystem.php(123): require('/Users/teamsolo...')
+#3 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Filesystem/Filesystem.php(124): Illuminate\Filesystem\Filesystem::{closure:Illuminate\Filesystem\Filesystem::getRequire():120}()
+#4 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/View/Engines/PhpEngine.php(57): Illuminate\Filesystem\Filesystem->getRequire('/Users/teamsolo...', Array)
+#5 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/View/Engines/CompilerEngine.php(76): Illuminate\View\Engines\PhpEngine->evaluatePath('/Users/teamsolo...', Array)
+#6 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/View/View.php(208): Illuminate\View\Engines\CompilerEngine->get('/Users/teamsolo...', Array)
+#7 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/View/View.php(191): Illuminate\View\View->getContents()
+#8 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/View/View.php(160): Illuminate\View\View->renderContents()
+#9 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Http/Response.php(78): Illuminate\View\View->render()
+#10 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Http/Response.php(34): Illuminate\Http\Response->setContent(Object(Illuminate\View\View))
+#11 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/ResponseFactory.php(61): Illuminate\Http\Response->__construct(Object(Illuminate\View\View), 200, Array)
+#12 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/ResponseFactory.php(91): Illuminate\Routing\ResponseFactory->make(Object(Illuminate\View\View), 200, Array)
+#13 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Support/Facades/Facade.php(363): Illuminate\Routing\ResponseFactory->view('app', Array)
+#14 /Users/teamsolo/Documents/Dev/IPOS/vendor/inertiajs/inertia-laravel/src/Response.php(219): Illuminate\Support\Facades\Facade::__callStatic('view', Array)
+#15 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Router.php(921): Inertia\Response->toResponse(Object(Illuminate\Http\Request))
+#16 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Router.php(906): Illuminate\Routing\Router::toResponse(Object(Illuminate\Http\Request), Object(Inertia\Response))
+#17 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Router.php(821): Illuminate\Routing\Router->prepareResponse(Object(Illuminate\Http\Request), Object(Inertia\Response))
+#18 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(180): Illuminate\Routing\Router->{closure:Illuminate\Routing\Router::runRouteWithinStack():821}(Object(Illuminate\Http\Request))
+#19 /Users/teamsolo/Documents/Dev/IPOS/app/Http/Middleware/EnsurePlatformAdmin.php(19): Illuminate\Pipeline\Pipeline->{closure:Illuminate\Pipeline\Pipeline::prepareDestination():178}(Object(Illuminate\Http\Request))
+#20 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): App\Http\Middleware\EnsurePlatformAdmin->handle(Object(Illuminate\Http\Request), Object(Closure))
+#21 /Users/teamsolo/Documents/Dev/IPOS/app/Http/Middleware/AddSecurityHeaders.php(13): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#22 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): App\Http\Middleware\AddSecurityHeaders->handle(Object(Illuminate\Http\Request), Object(Closure))
+#23 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Http/Middleware/AddLinkHeadersForPreloadedAssets.php(32): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#24 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets->handle(Object(Illuminate\Http\Request), Object(Closure))
+#25 /Users/teamsolo/Documents/Dev/IPOS/vendor/inertiajs/inertia-laravel/src/Middleware.php(122): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#26 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Inertia\Middleware->handle(Object(Illuminate\Http\Request), Object(Closure))
+#27 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Middleware/SubstituteBindings.php(52): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#28 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Routing\Middleware\SubstituteBindings->handle(Object(Illuminate\Http\Request), Object(Closure))
+#29 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Auth/Middleware/Authenticate.php(63): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#30 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Auth\Middleware\Authenticate->handle(Object(Illuminate\Http\Request), Object(Closure))
+#31 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/PreventRequestForgery.php(104): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#32 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Foundation\Http\Middleware\PreventRequestForgery->handle(Object(Illuminate\Http\Request), Object(Closure))
+#33 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/View/Middleware/ShareErrorsFromSession.php(48): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#34 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\View\Middleware\ShareErrorsFromSession->handle(Object(Illuminate\Http\Request), Object(Closure))
+#35 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Session/Middleware/StartSession.php(120): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#36 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Session/Middleware/StartSession.php(63): Illuminate\Session\Middleware\StartSession->handleStatefulRequest(Object(Illuminate\Http\Request), Object(Illuminate\Session\Store), Object(Closure))
+#37 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Session\Middleware\StartSession->handle(Object(Illuminate\Http\Request), Object(Closure))
+#38 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Cookie/Middleware/AddQueuedCookiesToResponse.php(36): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#39 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse->handle(Object(Illuminate\Http\Request), Object(Closure))
+#40 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Cookie/Middleware/EncryptCookies.php(74): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#41 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Cookie\Middleware\EncryptCookies->handle(Object(Illuminate\Http\Request), Object(Closure))
+#42 /Users/teamsolo/Documents/Dev/IPOS/app/Http/Middleware/AttachRequestCorrelation.php(28): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#43 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): App\Http\Middleware\AttachRequestCorrelation->handle(Object(Illuminate\Http\Request), Object(Closure))
+#44 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(137): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#45 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Router.php(821): Illuminate\Pipeline\Pipeline->then(Object(Closure))
+#46 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Router.php(800): Illuminate\Routing\Router->runRouteWithinStack(Object(Illuminate\Routing\Route), Object(Illuminate\Http\Request))
+#47 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Router.php(764): Illuminate\Routing\Router->runRoute(Object(Illuminate\Http\Request), Object(Illuminate\Routing\Route))
+#48 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Router.php(753): Illuminate\Routing\Router->dispatchToRoute(Object(Illuminate\Http\Request))
+#49 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php(200): Illuminate\Routing\Router->dispatch(Object(Illuminate\Http\Request))
+#50 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(180): Illuminate\Foundation\Http\Kernel->{closure:Illuminate\Foundation\Http\Kernel::dispatchToRouter():197}(Object(Illuminate\Http\Request))
+#51 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TransformsRequest.php(21): Illuminate\Pipeline\Pipeline->{closure:Illuminate\Pipeline\Pipeline::prepareDestination():178}(Object(Illuminate\Http\Request))
+#52 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/ConvertEmptyStringsToNull.php(31): Illuminate\Foundation\Http\Middleware\TransformsRequest->handle(Object(Illuminate\Http\Request), Object(Closure))
+#53 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull->handle(Object(Illuminate\Http\Request), Object(Closure))
+#54 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TransformsRequest.php(21): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#55 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TrimStrings.php(51): Illuminate\Foundation\Http\Middleware\TransformsRequest->handle(Object(Illuminate\Http\Request), Object(Closure))
+#56 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Foundation\Http\Middleware\TrimStrings->handle(Object(Illuminate\Http\Request), Object(Closure))
+#57 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Http/Middleware/ValidatePostSize.php(27): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#58 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Http\Middleware\ValidatePostSize->handle(Object(Illuminate\Http\Request), Object(Closure))
+#59 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/PreventRequestsDuringMaintenance.php(109): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#60 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Foundation\Http\Middleware\PreventRequestsDuringMaintenance->handle(Object(Illuminate\Http\Request), Object(Closure))
+#61 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Http/Middleware/HandleCors.php(61): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#62 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Http\Middleware\HandleCors->handle(Object(Illuminate\Http\Request), Object(Closure))
+#63 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Http/Middleware/TrustProxies.php(58): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#64 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Http\Middleware\TrustProxies->handle(Object(Illuminate\Http\Request), Object(Closure))
+#65 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/InvokeDeferredCallbacks.php(22): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#66 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Foundation\Http\Middleware\InvokeDeferredCallbacks->handle(Object(Illuminate\Http\Request), Object(Closure))
+#67 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Http/Middleware/ValidatePathEncoding.php(28): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#68 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Http\Middleware\ValidatePathEncoding->handle(Object(Illuminate\Http\Request), Object(Closure))
+#69 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(137): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#70 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php(175): Illuminate\Pipeline\Pipeline->then(Object(Closure))
+#71 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php(144): Illuminate\Foundation\Http\Kernel->sendRequestThroughRouter(Object(Illuminate\Http\Request))
+#72 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php(607): Illuminate\Foundation\Http\Kernel->handle(Object(Illuminate\Http\Request))
+#73 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php(368): Illuminate\Foundation\Testing\TestCase->call('GET', '/system-admin/t...', Array, Array, Array, Array)
+#74 /Users/teamsolo/Documents/Dev/IPOS/tests/Feature/SystemAdmin/TenantProvisioningTest.php(115): Illuminate\Foundation\Testing\TestCase->get('/system-admin/t...')
+#75 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/Framework/TestCase.php(1310): Tests\Feature\SystemAdmin\TenantProvisioningTest->test_index_includes_readiness_and_feature_gate_coverage_summary()
+#76 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/Framework/TestCase.php(1344): PHPUnit\Framework\TestCase->invokeTestMethod('test_index_incl...', Array)
+#77 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/Framework/TestCase.php(520): PHPUnit\Framework\TestCase->runTest()
+#78 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/Framework/TestRunner/TestRunner.php(99): PHPUnit\Framework\TestCase->runBare()
+#79 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/Framework/TestCase.php(360): PHPUnit\Framework\TestRunner->run(Object(Tests\Feature\SystemAdmin\TenantProvisioningTest))
+#80 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/Framework/TestSuite.php(374): PHPUnit\Framework\TestCase->run()
+#81 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/TextUI/TestRunner.php(64): PHPUnit\Framework\TestSuite->run()
+#82 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/TextUI/Application.php(229): PHPUnit\TextUI\TestRunner->run(Object(PHPUnit\TextUI\Configuration\Configuration), Object(PHPUnit\Runner\ResultCache\DefaultResultCache), Object(PHPUnit\Framework\TestSuite))
+#83 /Users/teamsolo/Documents/Dev/IPOS/vendor/pestphp/pest/src/Kernel.php(117): PHPUnit\TextUI\Application->run(Array)
+#84 /Users/teamsolo/Documents/Dev/IPOS/vendor/pestphp/pest/bin/pest(207): Pest\Kernel->handle(Array, Array)
+#85 /Users/teamsolo/Documents/Dev/IPOS/vendor/pestphp/pest/bin/pest(215): {closure:/Users/teamsolo/Documents/Dev/IPOS/vendor/pestphp/pest/bin/pest:21}()
+#86 /Users/teamsolo/Documents/Dev/IPOS/vendor/bin/pest(119): include('/Users/teamsolo...')
+#87 {main}
+
+Next Illuminate\View\ViewException: Unable to locate file in Vite manifest: resources/js/Pages/SystemAdmin/Tenants/Index.jsx. (View: /Users/teamsolo/Documents/Dev/IPOS/resources/views/app.blade.php) in /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Vite.php:1042
+Stack trace:
+#0 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/View/Engines/PhpEngine.php(59): Illuminate\View\Engines\CompilerEngine->handleViewException(Object(Illuminate\Foundation\ViteException), 2)
+#1 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/View/Engines/CompilerEngine.php(76): Illuminate\View\Engines\PhpEngine->evaluatePath('/Users/teamsolo...', Array)
+#2 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/View/View.php(208): Illuminate\View\Engines\CompilerEngine->get('/Users/teamsolo...', Array)
+#3 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/View/View.php(191): Illuminate\View\View->getContents()
+#4 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/View/View.php(160): Illuminate\View\View->renderContents()
+#5 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Http/Response.php(78): Illuminate\View\View->render()
+#6 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Http/Response.php(34): Illuminate\Http\Response->setContent(Object(Illuminate\View\View))
+#7 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/ResponseFactory.php(61): Illuminate\Http\Response->__construct(Object(Illuminate\View\View), 200, Array)
+#8 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/ResponseFactory.php(91): Illuminate\Routing\ResponseFactory->make(Object(Illuminate\View\View), 200, Array)
+#9 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Support/Facades/Facade.php(363): Illuminate\Routing\ResponseFactory->view('app', Array)
+#10 /Users/teamsolo/Documents/Dev/IPOS/vendor/inertiajs/inertia-laravel/src/Response.php(219): Illuminate\Support\Facades\Facade::__callStatic('view', Array)
+#11 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Router.php(921): Inertia\Response->toResponse(Object(Illuminate\Http\Request))
+#12 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Router.php(906): Illuminate\Routing\Router::toResponse(Object(Illuminate\Http\Request), Object(Inertia\Response))
+#13 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Router.php(821): Illuminate\Routing\Router->prepareResponse(Object(Illuminate\Http\Request), Object(Inertia\Response))
+#14 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(180): Illuminate\Routing\Router->{closure:Illuminate\Routing\Router::runRouteWithinStack():821}(Object(Illuminate\Http\Request))
+#15 /Users/teamsolo/Documents/Dev/IPOS/app/Http/Middleware/EnsurePlatformAdmin.php(19): Illuminate\Pipeline\Pipeline->{closure:Illuminate\Pipeline\Pipeline::prepareDestination():178}(Object(Illuminate\Http\Request))
+#16 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): App\Http\Middleware\EnsurePlatformAdmin->handle(Object(Illuminate\Http\Request), Object(Closure))
+#17 /Users/teamsolo/Documents/Dev/IPOS/app/Http/Middleware/AddSecurityHeaders.php(13): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#18 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): App\Http\Middleware\AddSecurityHeaders->handle(Object(Illuminate\Http\Request), Object(Closure))
+#19 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Http/Middleware/AddLinkHeadersForPreloadedAssets.php(32): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#20 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets->handle(Object(Illuminate\Http\Request), Object(Closure))
+#21 /Users/teamsolo/Documents/Dev/IPOS/vendor/inertiajs/inertia-laravel/src/Middleware.php(122): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#22 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Inertia\Middleware->handle(Object(Illuminate\Http\Request), Object(Closure))
+#23 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Middleware/SubstituteBindings.php(52): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#24 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Routing\Middleware\SubstituteBindings->handle(Object(Illuminate\Http\Request), Object(Closure))
+#25 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Auth/Middleware/Authenticate.php(63): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#26 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Auth\Middleware\Authenticate->handle(Object(Illuminate\Http\Request), Object(Closure))
+#27 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/PreventRequestForgery.php(104): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#28 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Foundation\Http\Middleware\PreventRequestForgery->handle(Object(Illuminate\Http\Request), Object(Closure))
+#29 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/View/Middleware/ShareErrorsFromSession.php(48): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#30 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\View\Middleware\ShareErrorsFromSession->handle(Object(Illuminate\Http\Request), Object(Closure))
+#31 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Session/Middleware/StartSession.php(120): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#32 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Session/Middleware/StartSession.php(63): Illuminate\Session\Middleware\StartSession->handleStatefulRequest(Object(Illuminate\Http\Request), Object(Illuminate\Session\Store), Object(Closure))
+#33 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Session\Middleware\StartSession->handle(Object(Illuminate\Http\Request), Object(Closure))
+#34 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Cookie/Middleware/AddQueuedCookiesToResponse.php(36): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#35 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse->handle(Object(Illuminate\Http\Request), Object(Closure))
+#36 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Cookie/Middleware/EncryptCookies.php(74): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#37 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Cookie\Middleware\EncryptCookies->handle(Object(Illuminate\Http\Request), Object(Closure))
+#38 /Users/teamsolo/Documents/Dev/IPOS/app/Http/Middleware/AttachRequestCorrelation.php(28): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#39 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): App\Http\Middleware\AttachRequestCorrelation->handle(Object(Illuminate\Http\Request), Object(Closure))
+#40 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(137): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#41 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Router.php(821): Illuminate\Pipeline\Pipeline->then(Object(Closure))
+#42 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Router.php(800): Illuminate\Routing\Router->runRouteWithinStack(Object(Illuminate\Routing\Route), Object(Illuminate\Http\Request))
+#43 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Router.php(764): Illuminate\Routing\Router->runRoute(Object(Illuminate\Http\Request), Object(Illuminate\Routing\Route))
+#44 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Routing/Router.php(753): Illuminate\Routing\Router->dispatchToRoute(Object(Illuminate\Http\Request))
+#45 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php(200): Illuminate\Routing\Router->dispatch(Object(Illuminate\Http\Request))
+#46 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(180): Illuminate\Foundation\Http\Kernel->{closure:Illuminate\Foundation\Http\Kernel::dispatchToRouter():197}(Object(Illuminate\Http\Request))
+#47 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TransformsRequest.php(21): Illuminate\Pipeline\Pipeline->{closure:Illuminate\Pipeline\Pipeline::prepareDestination():178}(Object(Illuminate\Http\Request))
+#48 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/ConvertEmptyStringsToNull.php(31): Illuminate\Foundation\Http\Middleware\TransformsRequest->handle(Object(Illuminate\Http\Request), Object(Closure))
+#49 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull->handle(Object(Illuminate\Http\Request), Object(Closure))
+#50 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TransformsRequest.php(21): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#51 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TrimStrings.php(51): Illuminate\Foundation\Http\Middleware\TransformsRequest->handle(Object(Illuminate\Http\Request), Object(Closure))
+#52 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Foundation\Http\Middleware\TrimStrings->handle(Object(Illuminate\Http\Request), Object(Closure))
+#53 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Http/Middleware/ValidatePostSize.php(27): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#54 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Http\Middleware\ValidatePostSize->handle(Object(Illuminate\Http\Request), Object(Closure))
+#55 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/PreventRequestsDuringMaintenance.php(109): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#56 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Foundation\Http\Middleware\PreventRequestsDuringMaintenance->handle(Object(Illuminate\Http\Request), Object(Closure))
+#57 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Http/Middleware/HandleCors.php(61): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#58 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Http\Middleware\HandleCors->handle(Object(Illuminate\Http\Request), Object(Closure))
+#59 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Http/Middleware/TrustProxies.php(58): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#60 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Http\Middleware\TrustProxies->handle(Object(Illuminate\Http\Request), Object(Closure))
+#61 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/InvokeDeferredCallbacks.php(22): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#62 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Foundation\Http\Middleware\InvokeDeferredCallbacks->handle(Object(Illuminate\Http\Request), Object(Closure))
+#63 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Http/Middleware/ValidatePathEncoding.php(28): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#64 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\Http\Middleware\ValidatePathEncoding->handle(Object(Illuminate\Http\Request), Object(Closure))
+#65 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(137): Illuminate\Pipeline\Pipeline->{closure:{closure:Illuminate\Pipeline\Pipeline::carry():194}:195}(Object(Illuminate\Http\Request))
+#66 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php(175): Illuminate\Pipeline\Pipeline->then(Object(Closure))
+#67 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php(144): Illuminate\Foundation\Http\Kernel->sendRequestThroughRouter(Object(Illuminate\Http\Request))
+#68 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php(607): Illuminate\Foundation\Http\Kernel->handle(Object(Illuminate\Http\Request))
+#69 /Users/teamsolo/Documents/Dev/IPOS/vendor/laravel/framework/src/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php(368): Illuminate\Foundation\Testing\TestCase->call('GET', '/system-admin/t...', Array, Array, Array, Array)
+#70 /Users/teamsolo/Documents/Dev/IPOS/tests/Feature/SystemAdmin/TenantProvisioningTest.php(115): Illuminate\Foundation\Testing\TestCase->get('/system-admin/t...')
+#71 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/Framework/TestCase.php(1310): Tests\Feature\SystemAdmin\TenantProvisioningTest->test_index_includes_readiness_and_feature_gate_coverage_summary()
+#72 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/Framework/TestCase.php(1344): PHPUnit\Framework\TestCase->invokeTestMethod('test_index_incl...', Array)
+#73 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/Framework/TestCase.php(520): PHPUnit\Framework\TestCase->runTest()
+#74 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/Framework/TestRunner/TestRunner.php(99): PHPUnit\Framework\TestCase->runBare()
+#75 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/Framework/TestCase.php(360): PHPUnit\Framework\TestRunner->run(Object(Tests\Feature\SystemAdmin\TenantProvisioningTest))
+#76 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/Framework/TestSuite.php(374): PHPUnit\Framework\TestCase->run()
+#77 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/TextUI/TestRunner.php(64): PHPUnit\Framework\TestSuite->run()
+#78 /Users/teamsolo/Documents/Dev/IPOS/vendor/phpunit/phpunit/src/TextUI/Application.php(229): PHPUnit\TextUI\TestRunner->run(Object(PHPUnit\TextUI\Configuration\Configuration), Object(PHPUnit\Runner\ResultCache\DefaultResultCache), Object(PHPUnit\Framework\TestSuite))
+#79 /Users/teamsolo/Documents/Dev/IPOS/vendor/pestphp/pest/src/Kernel.php(117): PHPUnit\TextUI\Application->run(Array)
+#80 /Users/teamsolo/Documents/Dev/IPOS/vendor/pestphp/pest/bin/pest(207): Pest\Kernel->handle(Array, Array)
+#81 /Users/teamsolo/Documents/Dev/IPOS/vendor/pestphp/pest/bin/pest(215): {closure:/Users/teamsolo/Documents/Dev/IPOS/vendor/pestphp/pest/bin/pest:21}()
+#82 /Users/teamsolo/Documents/Dev/IPOS/vendor/bin/pest(119): include('/Users/teamsolo...')
+#83 {main}
+
+----------------------------------------------------------------------------------
+
+Unable to locate file in Vite manifest: resources/js/Pages/SystemAdmin/Tenants/Index.jsx. (View: /Users/teamsolo/Documents/Dev/IPOS/resources/views/app.blade.php)[39;22m
+
+  at [32mtests/Feature/SystemAdmin/TenantProvisioningTest.php[39m:[32m117[39m
+    113▕         app(TenantContext::class)->clear();
+    114▕ 
+    115▕         $response = $this->actingAs($platformAdmin)->get('/system-admin/tenants');
+    116▕ 
+  ➜ 117▕         $response->assertOk();
+    118▕         $response->assertInertia(fn (Assert $page) => $page
+    119▕             ->has('tenants.data', 1)
+    120▕             ->where('tenants.data.0.id', $tenant->id)
+    121▕             ->has('tenants.data.0.readiness.missing')
+
+  [31m────────────────────────────────────────────────────────────────────────────[39m  
+  [41;1m FAILED [49;22m [1mTests\Feature\SystemAdmin\TenantProvisionin[22m… [41;1m AssertionFailedError [49;22m  
+[39;1m  Not a valid Inertia response.[39;22m
+
+  at [32mvendor/inertiajs/inertia-laravel/src/Testing/AssertableInertia.php[39m:[32m84[39m
+     80▕             PHPUnit::assertArrayHasKey('version', $page);
+     81▕             PHPUnit::assertArrayHasKey('encryptHistory', $page);
+     82▕             PHPUnit::assertArrayHasKey('clearHistory', $page);
+     83▕         } catch (AssertionFailedError $e) {
+  ➜  84▕             PHPUnit::fail('Not a valid Inertia response.');
+     85▕         }
+     86▕ 
+     87▕         $instance = static::fromArray($page['props']);
+     88▕         $instance->component = $page['component'];
+
+      [2m+3 vendor frames [22m
+  [33m4   [39m[39;1mtests/Feature/SystemAdmin/TenantProvisioningTest.php[39;22m:[39;1m140[39;22m
+
+
+  [90mTests:[39m    [31;1m4 failed[39;22m[90m,[39m[39m [39m[32;1m2 passed[39;22m[90m (16 assertions)[39m
+  [90mDuration:[39m [39m1.78s[39m
+
