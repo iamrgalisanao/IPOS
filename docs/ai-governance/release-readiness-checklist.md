@@ -1,6 +1,6 @@
 # Release Readiness Checklist
 
-Last updated: 2026-05-13
+Last updated: 2026-05-17
 Status: In Progress
 
 ## Purpose
@@ -97,3 +97,29 @@ Status: **Partially Resolved — Technical readiness complete; local operational
 ## Recommended Next Action
 
 Execute credential rotation as the next bounded release-readiness task, then refresh the governance artifacts and re-run the regression baseline.
+
+## Product Catalog Readiness
+
+- **Status**: Foundation Complete.
+- **Note**: Self-service product CRUD UI is deferred.
+- **Go-live Requirement**: Release requires either:
+  1. Technical catalog import/migration (Developer-led), or
+  2. Back-Office Product Catalog CRUD implementation before non-technical end-user rollout.
+
+## Tax Compliance Hardening Readiness
+
+- **Status**: Complete — Validated (Slices A-E)
+- **Note**: Tax category setup, VAT-inclusive checkout computation, product advisory margin preview, and tax reporting/export alignment are fully validated.
+- **Go-live Requirement (Statutory Discount Caveat)**: SC/PWD transaction-level discount computation is not yet implemented (it is deferred to a future statutory discount slice); line-level discount eligibility flags are fully preserved in checkout snapshots.
+
+## Cashier Accountability & Shift Report Export Readiness
+
+- **Status**: Complete — Validated (Stories 17.1-17.5)
+- **Note**: Cashier Accountability and Shift Report Export is validated as read-only, permission-gated, branch/tenant isolated, export-safe, and audit-logged.
+- **Go-live Requirement (Future Mutation Workflows Caveat)**: Any future adjustment/reopening workflow must remain outside Epic 17 and must go through separate approval and settlement-lock controls. No shift mutation, settlement mutation, inventory mutation, payment mutation, or accounting outbox mutation is introduced by this epic. All 35 tests / 141 assertions passed successfully.
+
+## Supplier & Purchase Receiving Readiness
+
+- **Status**: Complete — Validated (Stories 20.1-20.7)
+- **Note**: Supplier & Purchase Receiving is validated as tenant-isolated, branch-scoped, RBAC-gated, CSV-safe, audit-logged, and capable of atomic inventory ingestion with branch-level WAC valuation.
+- **Go-live Requirement (Future Inbound Workflows Caveat)**: Accounts payable, supplier returns/RMA, auto-reorder, and mandatory perishable enforcement remain future scope and are not part of Epic 20. Capturing lot and expiry fields is fully supported, but mandatory perishable enforcement remains deferred pending product/category perishability metadata enhancements. All 48 tests / 263 assertions in the full procurement feature suite passed successfully, and production compilation (`npm run build`) completed successfully.

@@ -1,12 +1,13 @@
 ---
-stepsCompleted: [1, 2, 3, 4, 5, 6]
+stepsCompleted: [1, 2, 3, 4, 5, 6, 7]
 inputDocuments:
   - "prd.md"
   - "implementation-readiness-report-2026-05-10.md"
+  - "epic-28-offline-resilient-pos-architecture-plan.md"
 workflowType: 'architecture'
 project_name: 'IPOS'
 user_name: 'Teamsolo'
-date: '2026-05-10'
+date: '2026-05-19'
 ---
 
 # Architecture Decision Document
@@ -132,6 +133,15 @@ NFRs drive a focus on **Performance** (sub-200ms catalog search) and **Resilienc
 - **Testing**: Monthly restore drills.
 - **Risks**: Backup corruption if not validated.
 
+### ADR-011: Offline-Tolerant POS Shell & Compliance Boundary
+- **Context**: High-velocity POS requires offline resilient catalog browsing and cart persistence, but offline checkout introduces severe compliance risks under BIR regulations (duplicate sequence numbers, untrusted local GCT/Z-reads).
+- **Decision**: Keep POS and Admin in a bounded monorepo. Keep Admin 100% online. POS shell will run offline-tolerant features (IndexedDB catalog lookup, cached price rules, cart draft persistence) but block checkout offline. Official checkout, invoicing, GCT, Z-reading, and e-journaling remain server-side and online-only.
+- **Alternatives**: Full local-first offline checkout (High compliance risk, difficult browser-only tamper-free storage); completely decoupled codebases (High sync/duplicate model overhead).
+- **Consequences**: Complete compliance containment. Zero duplicate numbering or local GCT manipulation risk. 
+- **Implementation**: `IndexedDB` caching for products/rules, connection state hooks, and client-side checkout block guards.
+- **Testing**: Block payments offline; force checkout failure if config hashes mismatch.
+- **Risks**: Config/pricing drift (Mitigated by server-side tax rule version hash verification on checkout).
+
 ---
 
 ## System Architecture Summary
@@ -149,10 +159,11 @@ IPOS is a decoupled SaaS platform where a high-velocity React POS communicates w
 - **QuickBooks API Latency**: Slow QBO responses could cause the accounting queue to back up.
 - **Monetary Rounding Drift**: Mismatches between React-calculated taxes and Laravel-calculated taxes (Backend is the absolute source of truth).
 - **Data Volume**: High growth in append-only logs (`inventory_movements`, `audit_logs`) will eventually require table partitioning.
+- **Tax/Config Drift**: Stale client caches could display outdated tax/price rates before server validation.
 
 ---
 
 ## Next Steps
-1. **UX Design**: Define Zero-Loss Cart UI states and Dashboards.
-2. **Epic Breakdown**: Convert ADRs and PRD to implementation stories.
-3. **Bootstrap**: Initialize Laravel/React environment with Tenancy context.
+1. **POS Cache Bootstrap API**: Build service returning complete products, pricing, and tax rules with hash version.
+2. **Connectivity & Caching Components**: Setup IndexedDB catalog caching and frontend connectivity state wrappers.
+3. **Story Spec Authoring**: Author story specifications for Epic 28 Phase 1.
