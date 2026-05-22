@@ -403,4 +403,67 @@ class ReceiptTest extends TestCase
             ]
         ]);
     }
+
+    /**
+     * Test reprint authorization flow:
+     * 1. First retrieval increments print count to 1 (mutation silent regarding sales items but updates print metadata).
+     * 2. Second retrieval without reason fails with 422.
+     * 3. Second retrieval with reason succeeds, increments count, writes reprint audit log, and returns watermarks.
+     */
+    public function test_it_authorizes_and_logs_receipt_reprints(): void
+    {
+        $sale = Sale::create([
+            'tenant_id'           => $this->tenant->id,
+            'branch_id'           => $this->branch->id,
+            'user_id'             => $this->user->id,
+            'client_request_uuid' => (string) Str::uuid(),
+            'total'               => 100,
+            'status'              => 'completed',
+            'receipt_print_count' => 0,
+        ]);
+
+        // First print retrieval
+        $response = $this->getWithContext('pos.sales.receipt', ['sale_id' => $sale->id]);
+        $response->assertStatus(200);
+        $response->assertJson([
+            'receipt_print_count' => 1,
+            'is_reprint'          => false,
+        ]);
+
+        $this->assertEquals(1, $sale->refresh()->receipt_print_count);
+
+        // Attempt second print without reprint_reason parameter (should fail)
+        $response = $this->getWithContext('pos.sales.receipt', ['sale_id' => $sale->id]);
+        $response->assertStatus(422);
+        $response->assertJson([
+            'error'   => 'REPRINT_REASON_REQUIRED',
+            'message' => 'A reprint reason is required for subsequent receipt prints.',
+        ]);
+
+        // Attempt second print with reprint_reason
+        $response = $this->getWithContext('pos.sales.receipt', [
+            'sale_id'        => $sale->id,
+            'reprint_reason' => 'Customer request for copy',
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJson([
+            'receipt_print_count'  => 2,
+            'is_reprint'           => true,
+            'reprint_watermark'    => '*** REPRINT / DUPLICATE ***',
+            'last_reprint_reason'  => 'Customer request for copy',
+        ]);
+
+        $this->assertEquals(2, $sale->refresh()->receipt_print_count);
+
+        // Verify reprint audit log is written
+        $this->assertDatabaseHas('audit_logs', [
+            'tenant_id'      => $this->tenant->id,
+            'branch_id'      => $this->branch->id,
+            'actor_user_id'  => $this->user->id,
+            'action'         => 'receipt_reprint',
+            'auditable_type' => Sale::class,
+            'auditable_id'   => $sale->id,
+        ]);
+    }
 }

@@ -6,8 +6,10 @@ use App\Models\Branch;
 use App\Models\PosLayout;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Services\POS\PosLayoutPublishService;
 use App\Services\POS\PosLayoutSchemaValidator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -181,12 +183,45 @@ class PosLayoutSchemaTest extends TestCase
 
     public function test_only_one_active_layout_per_branch_is_allowed()
     {
-        // Documented limitation: SQLite does not strictly enforce the partial unique index
-        // CREATE UNIQUE INDEX active_branch_pos_layout ON branch_pos_layout (branch_id) WHERE is_active = true
-        // If testing on Postgres, this would throw a QueryException.
-        // For now, we will simulate the Service-level check that must be built in Slice E.
-        
-        $this->markTestIncomplete('This will be enforced at the Service layer in Slice E, as SQLite does not natively support partial unique indices in the same way as Postgres.');
+        $tenant = Tenant::factory()->create();
+        app(\App\Services\TenantContext::class)->setTenant($tenant);
+
+        $branch = Branch::factory()->create(['tenant_id' => $tenant->id]);
+        $publisher = User::factory()->create(['tenant_id' => $tenant->id]);
+
+        $firstLayout = PosLayout::create([
+            'tenant_id' => $tenant->id,
+            'name' => 'Morning Layout',
+            'schema' => ['grid' => ['rows' => 4, 'columns' => 4], 'tiles' => []],
+            'status' => PosLayout::STATUS_DRAFT,
+        ]);
+
+        $secondLayout = PosLayout::create([
+            'tenant_id' => $tenant->id,
+            'name' => 'Evening Layout',
+            'schema' => ['grid' => ['rows' => 4, 'columns' => 4], 'tiles' => []],
+            'status' => PosLayout::STATUS_DRAFT,
+        ]);
+
+        $publishService = app(PosLayoutPublishService::class);
+
+        $publishService->publish($firstLayout, [$branch->id], $publisher);
+        $publishService->publish($secondLayout, [$branch->id], $publisher);
+
+        $activeRows = DB::table('branch_pos_layout')
+            ->where('branch_id', $branch->id)
+            ->where('is_active', true)
+            ->get();
+
+        $this->assertCount(1, $activeRows);
+        $this->assertSame($secondLayout->id, $activeRows->first()->pos_layout_id);
+        $this->assertDatabaseHas('branch_pos_layout', [
+            'branch_id' => $branch->id,
+            'pos_layout_id' => $firstLayout->id,
+            'is_active' => false,
+        ]);
+
+        app(\App\Services\TenantContext::class)->clear();
     }
 
     public function test_rbac_permissions_are_seeded()

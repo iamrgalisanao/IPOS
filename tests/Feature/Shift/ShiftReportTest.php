@@ -148,7 +148,7 @@ class ShiftReportTest extends TestCase
             ->withHeaders(['X-Tenant-ID' => $tenantA->id])
             ->get(route('shifts.z-report', $shiftB->id));
 
-        $response->assertStatus(403);
+        $response->assertStatus(404);
     }
 
     public function test_report_aggregates_sales_from_payments()

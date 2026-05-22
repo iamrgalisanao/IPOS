@@ -157,7 +157,7 @@ class ShiftClosingTest extends TestCase
                 $this->shiftService->submitClosingCount($this->shift, $this->cashier, $amount);
                 $this->fail("Should have rejected: {$amount}");
             } catch (\InvalidArgumentException $e) {
-                // Expected
+                $this->assertSame('Counted cash amount must be non-negative.', $e->getMessage());
             }
         }
     }
@@ -241,5 +241,23 @@ class ShiftClosingTest extends TestCase
 
         $this->assertEquals($initialOutboxCount, \DB::table('accounting_outbox')->count());
         $this->assertEquals($initialSaleCount, \DB::table('sales')->count());
+    }
+
+    /** Test HTTP Route shifts.submit-closing */
+    public function test_cashier_can_submit_closing_via_http_endpoint(): void
+    {
+        $response = $this->actingAs($this->cashier)
+            ->withHeaders([
+                'X-Tenant-ID' => $this->tenant->id,
+                'X-Branch-ID' => $this->branch->id,
+            ])
+            ->post(route('shifts.submit-closing', $this->shift->id), [
+                'actual_cash' => '1000.00',
+                'closing_denominations' => ['1000' => 1],
+                'closing_notes' => 'Some notes',
+            ]);
+
+        $response->assertRedirect(route('shifts.show', $this->shift->id));
+        $this->assertEquals(Shift::STATUS_CLOSING_SUBMITTED, $this->shift->fresh()->status);
     }
 }

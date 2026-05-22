@@ -172,4 +172,21 @@ class ShiftApprovalTest extends TestCase
         $this->assertEquals($initialOutboxCount, \DB::table('accounting_outbox')->count());
         $this->assertEquals($initialSaleCount, \DB::table('sales')->count());
     }
+
+    /** Test HTTP Route shifts.approve */
+    public function test_manager_can_approve_shift_via_http_endpoint(): void
+    {
+        $response = $this->actingAs($this->manager)
+            ->withHeaders([
+                'X-Tenant-ID' => $this->tenant->id,
+                'X-Branch-ID' => $this->branch->id,
+            ])
+            ->post(route('shifts.approve', $this->shift->id), [
+                'manager_notes' => 'Some approval notes',
+            ]);
+
+        $response->assertRedirect();
+        $this->assertEquals(Shift::STATUS_APPROVED, $this->shift->fresh()->status);
+        $this->assertEquals('Some approval notes', $this->shift->fresh()->manager_notes);
+    }
 }

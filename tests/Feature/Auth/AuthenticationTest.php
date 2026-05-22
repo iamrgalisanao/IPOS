@@ -20,6 +20,20 @@ test('users can authenticate using the login screen', function () {
     $response->assertRedirect(route('dashboard', absolute: false));
 });
 
+test('platform support users are redirected to system admin tenants after login', function () {
+    $user = User::factory()->platformSupport()->create();
+
+    $response = $this
+        ->withSession(['url.intended' => route('dashboard', absolute: false)])
+        ->post('/login', [
+        'email' => $user->email,
+        'password' => 'password',
+        ]);
+
+    $this->assertAuthenticated();
+    $response->assertRedirect(route('system-admin.tenants.index', absolute: false));
+});
+
 test('users can not authenticate with invalid password', function () {
     $user = User::factory()->create();
 

@@ -137,7 +137,13 @@ class PaymentRecordingTest extends TestCase
     /** #3: Payment recording requires active BranchContext */
     public function test_it_requires_branch_context(): void
     {
-        $response = $this->actingAs($this->user)
+        $userWithoutBranch = User::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'status' => 'active',
+        ]);
+        $userWithoutBranch->assignRole(Role::where('name', 'Cashier')->first());
+
+        $response = $this->actingAs($userWithoutBranch)
             ->withHeader('X-Tenant-ID', $this->tenant->id)
             ->postJson(route('pos.sales.payments', ['sale_id' => $this->sale->id]), []);
         $response->assertStatus(403);

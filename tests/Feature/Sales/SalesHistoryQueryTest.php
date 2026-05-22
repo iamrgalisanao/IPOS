@@ -160,8 +160,7 @@ class SalesHistoryQueryTest extends TestCase
     public function test_search_by_sale_number_works(): void
     {
         app(TenantContext::class)->setTenant($this->tenant);
-        $sale = $this->createSale($this->branchA, '100.00');
-        $sale->update(['sale_number' => 'ABC-123']);
+        $this->createSale($this->branchA, '100.00', null, 'paid', null, 'ABC-123');
 
         $results = $this->queryService->query($this->admin, ['search' => 'ABC-123']);
 
@@ -195,14 +194,14 @@ class SalesHistoryQueryTest extends TestCase
         $this->assertEquals('100.0000', $results->items()[2]->total);
     }
 
-    protected function createSale(Branch $branch, string $total, ?string $createdAt = null, string $status = 'paid', ?string $uuid = null): Sale
+    protected function createSale(Branch $branch, string $total, ?string $createdAt = null, string $status = 'paid', ?string $uuid = null, ?string $saleNumber = null): Sale
     {
         $data = [
             'tenant_id' => $branch->tenant_id,
             'branch_id' => $branch->id,
             'user_id' => $this->admin->id,
             'client_request_uuid' => $uuid ?? Str::uuid()->toString(),
-            'sale_number' => 'SALE-' . strtoupper(Str::random(8)),
+            'sale_number' => $saleNumber ?? 'SALE-' . strtoupper(Str::random(8)),
             'status' => $status,
             'total' => $total,
             'confirmed_at' => $createdAt, // Set confirmed_at for easier testing of ordering/filtering

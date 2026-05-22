@@ -10,6 +10,8 @@ use App\Models\BranchInventory;
 use App\Models\InventoryMovement;
 use App\Models\TaxCategory;
 use App\Models\User;
+use App\Services\Catalog\CatalogCsvExportService;
+use App\Services\Catalog\CatalogImportPreviewService;
 use App\Services\TenantContext;
 use App\Services\BranchContext;
 use App\Services\CatalogService;
@@ -304,6 +306,74 @@ class CatalogInventoryIsolationTest extends TestCase
         }
 
         app(BranchContext::class)->clear();
+        app(TenantContext::class)->clear();
+    }
+
+    /** @test */
+    public function test_catalog_csv_export_remains_tenant_isolated(): void
+    {
+        $tenantA = Tenant::factory()->create(['status' => 'active']);
+        $tenantB = Tenant::factory()->create(['status' => 'active']);
+
+        app(TenantContext::class)->setTenant($tenantA);
+        $categoryA = ProductCategory::create(['name' => 'Tenant A Category', 'code' => 'TA']);
+        Product::create([
+            'product_category_id' => $categoryA->id,
+            'name' => 'Tenant A Product',
+            'sku' => 'TA-001',
+            'selling_price' => 100,
+            'status' => 'active',
+        ]);
+        $actorA = User::factory()->create(['tenant_id' => $tenantA->id, 'name' => 'Tenant A Exporter']);
+        app(TenantContext::class)->clear();
+
+        app(TenantContext::class)->setTenant($tenantB);
+        $categoryB = ProductCategory::create(['name' => 'Tenant B Category', 'code' => 'TB']);
+        Product::create([
+            'product_category_id' => $categoryB->id,
+            'name' => 'Tenant B Product',
+            'sku' => 'TB-001',
+            'selling_price' => 200,
+            'status' => 'active',
+        ]);
+        app(TenantContext::class)->clear();
+
+        app(TenantContext::class)->setTenant($tenantA);
+        $service = app(CatalogCsvExportService::class);
+        $productCsv = $service->exportProducts(Product::with('category')->get(), $actorA);
+        $categoryCsv = $service->exportCategories(ProductCategory::query()->get(), $actorA);
+
+        $this->assertStringContainsString('Tenant A Product', $productCsv);
+        $this->assertStringNotContainsString('Tenant B Product', $productCsv);
+        $this->assertStringContainsString('Tenant A Category', $categoryCsv);
+        $this->assertStringNotContainsString('Tenant B Category', $categoryCsv);
+
+        app(TenantContext::class)->clear();
+    }
+
+    /** @test */
+    public function test_catalog_import_preview_reference_checks_remain_tenant_isolated(): void
+    {
+        $tenantA = Tenant::factory()->create(['status' => 'active']);
+        $tenantB = Tenant::factory()->create(['status' => 'active']);
+
+        app(TenantContext::class)->setTenant($tenantA);
+        ProductCategory::create(['name' => 'Tenant A Category', 'code' => 'A-CAT', 'status' => 'active']);
+        TaxCategory::create(['code' => 'A-TAX', 'name' => 'Tenant A Tax', 'tax_type' => 'vatable', 'rate' => 12, 'status' => 'active']);
+        app(TenantContext::class)->clear();
+
+        app(TenantContext::class)->setTenant($tenantB);
+        $csv = implode("\n", [
+            'name,sku,category_code,unit_of_measure,selling_price,status,product_type,is_sellable,is_inventory_tracked,is_taxable,is_discountable,tax_category_code',
+            'Tenant B Preview,TB-001,A-CAT,piece,10.0000,active,finished_good,true,true,true,true,A-TAX',
+        ]);
+
+        $file = \Illuminate\Http\UploadedFile::fake()->createWithContent('products.csv', $csv);
+        $preview = app(CatalogImportPreviewService::class)->previewProducts($file);
+
+        $this->assertContains('category_code does not match an existing category in the current tenant.', $preview['rows'][0]['errors']);
+        $this->assertContains('tax_category_code does not match an existing tax category in the current tenant.', $preview['rows'][0]['errors']);
+
         app(TenantContext::class)->clear();
     }
 

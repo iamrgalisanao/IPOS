@@ -53,9 +53,9 @@ class ProductionConfigurationGuardTest extends TestCase
         config()->set('session.secure', false);
         config()->set('session.http_only', false);
 
-        $this->expectNotToPerformAssertions();
-
         app(ProductionConfigurationGuard::class)->assertSafeConfiguration();
+
+        $this->assertTrue(true);
     }
 
     public function test_testing_environment_is_exempt(): void
@@ -65,8 +65,8 @@ class ProductionConfigurationGuardTest extends TestCase
         config()->set('session.secure', false);
         config()->set('session.http_only', false);
 
-        $this->expectNotToPerformAssertions();
-
         app(ProductionConfigurationGuard::class)->assertSafeConfiguration();
+
+        $this->assertTrue(true);
     }
 }

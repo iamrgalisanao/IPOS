@@ -183,4 +183,102 @@ class ShiftHUDTest extends TestCase
         // Ensure shiftB is NOT in the active monitor
         $this->assertFalse(collect($activeShifts)->contains('id', $shiftB->id));
     }
+
+    public function test_cashier_can_unlock_terminal_with_correct_password()
+    {
+        $this->cashier->update(['password' => bcrypt('correct-password')]);
+
+        $response = $this->actingAs($this->cashier)
+            ->withHeaders([
+                'X-Tenant-ID' => $this->tenant->id,
+                'X-Branch-ID' => $this->branch->id,
+            ])
+            ->postJson(route('pos.unlock'), [
+                'password' => 'correct-password',
+            ]);
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'message' => 'Terminal unlocked.',
+            ]);
+    }
+
+    public function test_cashier_cannot_unlock_terminal_with_incorrect_password()
+    {
+        $this->cashier->update(['password' => bcrypt('correct-password')]);
+
+        $response = $this->actingAs($this->cashier)
+            ->withHeaders([
+                'X-Tenant-ID' => $this->tenant->id,
+                'X-Branch-ID' => $this->branch->id,
+            ])
+            ->postJson(route('pos.unlock'), [
+                'password' => 'wrong-password',
+            ]);
+
+        $response->assertStatus(422)
+            ->assertJson([
+                'success' => false,
+                'message' => 'Invalid password.',
+            ]);
+    }
+
+    public function test_manager_can_bypass_unlock_cashier_terminal()
+    {
+        $this->manager->update(['password' => bcrypt('manager-password')]);
+
+        // Shift belongs to cashier
+        $shift = Shift::create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branch->id,
+            'cashier_id' => $this->cashier->id,
+            'opened_by' => $this->cashier->id,
+            'status' => Shift::STATUS_OPEN,
+            'opened_at' => now(),
+            'opening_cash_amount' => 1000.00,
+        ]);
+
+        // Cashier is logged in, but manager bypass password is submitted
+        $response = $this->actingAs($this->cashier)
+            ->withHeaders([
+                'X-Tenant-ID' => $this->tenant->id,
+                'X-Branch-ID' => $this->branch->id,
+            ])
+            ->postJson(route('pos.unlock'), [
+                'password' => 'manager-password',
+            ]);
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'manager_bypass' => true,
+                'manager_name' => $this->manager->name,
+            ]);
+    }
+
+    public function test_non_manager_cannot_bypass_unlock_cashier_terminal()
+    {
+        $otherCashier = User::factory()->create(['tenant_id' => $this->tenant->id]);
+        $cashierRole = \App\Models\Role::where('name', 'Cashier')->first();
+        $otherCashier->assignRole($cashierRole);
+        $otherCashier->update(['password' => bcrypt('other-password')]);
+
+        // Cashier A is logged in, but other cashier's password is submitted
+        $response = $this->actingAs($this->cashier)
+            ->withHeaders([
+                'X-Tenant-ID' => $this->tenant->id,
+                'X-Branch-ID' => $this->branch->id,
+            ])
+            ->postJson(route('pos.unlock'), [
+                'password' => 'other-password',
+            ]);
+
+        $response->assertStatus(422)
+            ->assertJson([
+                'success' => false,
+                'message' => 'Invalid password.',
+            ]);
+    }
 }
+

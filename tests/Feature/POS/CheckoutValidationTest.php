@@ -120,8 +120,10 @@ class CheckoutValidationTest extends TestCase
     // =========================================================================
     public function test_checkout_validation_requires_tenant_context(): void
     {
+        $cashierWithoutTenant = User::factory()->create(['tenant_id' => null]);
+
         // Send request without any tenant header — middleware should block
-        $response = $this->actingAs($this->cashier)
+        $response = $this->actingAs($cashierWithoutTenant)
             ->postJson(route('pos.checkout.validate'), $this->validPayload());
         // Tenant middleware returns 403 when tenant context is missing
         $response->assertStatus(403);
@@ -132,8 +134,11 @@ class CheckoutValidationTest extends TestCase
     // =========================================================================
     public function test_checkout_validation_requires_branch_context(): void
     {
+        $cashierWithoutBranch = User::factory()->create(['tenant_id' => $this->tenant->id]);
+        $cashierWithoutBranch->assignRole(Role::where('name', 'Cashier')->first());
+
         // Send tenant header but NO branch header — branch middleware should block
-        $response = $this->actingAs($this->cashier)
+        $response = $this->actingAs($cashierWithoutBranch)
             ->withHeader('X-Tenant-ID', $this->tenant->id)
             ->postJson(route('pos.checkout.validate'), $this->validPayload());
         $response->assertStatus(403);

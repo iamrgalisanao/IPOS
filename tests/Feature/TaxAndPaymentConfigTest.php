@@ -214,7 +214,7 @@ class TaxAndPaymentConfigTest extends TestCase
         app(ConfigurationService::class)->seedDefaults($tenantA);
 
         app(TenantContext::class)->setTenant($tenantA);
-        $this->assertCount(2, TaxCategory::all());
+        $this->assertCount(4, TaxCategory::all());
         $this->assertCount(2, PaymentMethod::all());
         $this->assertEquals('VAT', TaxCategory::where('is_default', true)->first()->code);
         $this->assertEquals('CASH', PaymentMethod::where('is_default', true)->first()->code);
@@ -240,6 +240,95 @@ class TaxAndPaymentConfigTest extends TestCase
         $this->assertCount(2, PaymentMethod::all());
         $this->assertTrue(PaymentMethod::where('code', 'CASH')->first()->is_default);
         $this->assertTrue(PaymentMethod::where('code', 'GCASH')->first()->reference_required);
+
+        app(TenantContext::class)->clear();
+    }
+
+    /** @test */
+    public function test_canonical_tax_category_helpers_and_seeding(): void
+    {
+        $tenant = Tenant::factory()->create(['status' => 'active']);
+        app(TenantContext::class)->setTenant($tenant);
+
+        // Seeding canonical categories via seedDefaults
+        app(ConfigurationService::class)->seedDefaults($tenant);
+        app(TenantContext::class)->setTenant($tenant);
+
+        $this->assertCount(4, TaxCategory::all());
+
+        // Validate canonical tax categories existence and properties
+        $vat = TaxCategory::where('tax_type', 'vatable')->firstOrFail();
+        $exempt = TaxCategory::where('tax_type', 'exempt')->firstOrFail();
+        $zeroRated = TaxCategory::where('tax_type', 'zero-rated')->firstOrFail();
+        $nonVat = TaxCategory::where('tax_type', 'non-vat')->firstOrFail();
+
+        $this->assertEquals('VAT', $vat->code);
+        $this->assertEquals(12.00, $vat->rate);
+        $this->assertTrue($vat->is_default);
+
+        $this->assertEquals('EXEMPT', $exempt->code);
+        $this->assertEquals(0.00, $exempt->rate);
+        $this->assertFalse($exempt->is_default);
+
+        $this->assertEquals('ZERO-RATED', $zeroRated->code);
+        $this->assertEquals(0.00, $zeroRated->rate);
+        $this->assertFalse($zeroRated->is_default);
+
+        $this->assertEquals('NON-VAT', $nonVat->code);
+        $this->assertEquals(0.00, $nonVat->rate);
+        $this->assertFalse($nonVat->is_default);
+
+        // Validate safe model helpers
+        $this->assertTrue($vat->isVatable());
+        $this->assertFalse($vat->isExempt());
+        $this->assertFalse($vat->isZeroRated());
+        $this->assertFalse($vat->isNonVat());
+        $this->assertTrue($vat->isVatBearing());
+        $this->assertEquals('VAT', $vat->birCode());
+        $this->assertEquals('VATable Sale', $vat->displayLabel());
+
+        $this->assertFalse($exempt->isVatable());
+        $this->assertTrue($exempt->isExempt());
+        $this->assertFalse($exempt->isZeroRated());
+        $this->assertFalse($exempt->isNonVat());
+        $this->assertFalse($exempt->isVatBearing());
+        $this->assertEquals('EXM', $exempt->birCode());
+        $this->assertEquals('VAT-Exempt Sale', $exempt->displayLabel());
+
+        $this->assertFalse($zeroRated->isVatable());
+        $this->assertFalse($zeroRated->isExempt());
+        $this->assertTrue($zeroRated->isZeroRated());
+        $this->assertFalse($zeroRated->isNonVat());
+        $this->assertFalse($zeroRated->isVatBearing());
+        $this->assertEquals('ZRO', $zeroRated->birCode());
+        $this->assertEquals('Zero-Rated Sale', $zeroRated->displayLabel());
+
+        $this->assertFalse($nonVat->isVatable());
+        $this->assertFalse($nonVat->isExempt());
+        $this->assertFalse($nonVat->isZeroRated());
+        $this->assertTrue($nonVat->isNonVat());
+        $this->assertFalse($nonVat->isVatBearing());
+        $this->assertEquals('NONVAT', $nonVat->birCode());
+        $this->assertEquals('Non-VAT Sale', $nonVat->displayLabel());
+
+        // Test idempotency
+        app(ConfigurationService::class)->seedDefaults($tenant);
+        app(TenantContext::class)->setTenant($tenant);
+        $this->assertCount(4, TaxCategory::all());
+
+        // Test product reference to a canonical tax category
+        $cat = \App\Models\ProductCategory::create(['name' => 'Meals', 'code' => 'MEAL']);
+        $product = \App\Models\Product::create([
+            'product_category_id' => $cat->id,
+            'tax_category_id' => $vat->id,
+            'name' => 'Hot Latte',
+            'sku' => 'SKU-LATTE',
+            'selling_price' => 150.00,
+            'status' => 'active',
+        ]);
+
+        $this->assertEquals($vat->id, $product->taxCategory->id);
+        $this->assertTrue($product->taxCategory->isVatable());
 
         app(TenantContext::class)->clear();
     }

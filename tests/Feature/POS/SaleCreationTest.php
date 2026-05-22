@@ -107,7 +107,9 @@ class SaleCreationTest extends TestCase
     // =========================================================================
     public function test_sale_creation_requires_tenant_context(): void
     {
-        $this->actingAs($this->cashier)
+        $noTenantUser = User::factory()->create(['tenant_id' => null]);
+        
+        $this->actingAs($noTenantUser)
             ->postJson(route('pos.checkout.create-sale'), $this->validPayload())
             ->assertStatus(403);
     }
@@ -117,7 +119,10 @@ class SaleCreationTest extends TestCase
     // =========================================================================
     public function test_sale_creation_requires_branch_context(): void
     {
-        $this->actingAs($this->cashier)
+        $unassignedCashier = User::factory()->create(['tenant_id' => $this->tenant->id]);
+        $unassignedCashier->assignRole(Role::where('name', 'Cashier')->first());
+
+        $this->actingAs($unassignedCashier)
             ->withHeader('X-Tenant-ID', $this->tenant->id)
             ->postJson(route('pos.checkout.create-sale'), $this->validPayload())
             ->assertStatus(403);

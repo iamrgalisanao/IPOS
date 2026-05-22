@@ -70,6 +70,7 @@ class AccountingIntegrationFailureObservabilityTest extends TestCase
 
         $outbox = $this->createOutbox();
         app(RequestCorrelation::class)->set('retry-correlation-123');
+        config()->set('services.quickbooks.api_base_url', 'https://quickbooks.test');
 
         Http::fake([
             'quickbooks.test/*' => Http::response([
@@ -97,14 +98,14 @@ class AccountingIntegrationFailureObservabilityTest extends TestCase
             'provider' => 'quickbooks',
             'operation' => 'create',
             'entity' => 'SalesReceipt',
-        ]));
+        ]), 'Unsafe sync failure context: ' . json_encode($syncFailure[1], JSON_THROW_ON_ERROR));
         $this->assertContains($syncFailure[1]['error_category'] ?? null, ['auth', 'rate_limit', 'validation', 'provider', 'system']);
 
         $this->assertTrue($this->assertSafeFailureContext($retryScheduled[1], $outbox, [
             'correlation_id' => 'retry-correlation-123',
             'attempt_count' => 1,
             'error_category' => $syncFailure[1]['error_category'] ?? null,
-        ]));
+        ]), 'Unsafe retry scheduled context: ' . json_encode($retryScheduled[1], JSON_THROW_ON_ERROR));
         $this->assertTrue(filled($retryScheduled[1]['next_attempt_at'] ?? null));
 
         Http::assertSentCount(1);

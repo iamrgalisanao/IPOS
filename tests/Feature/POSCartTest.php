@@ -19,20 +19,34 @@ class POSCartTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected Tenant $tenant;
+    protected Branch $branch;
+    protected \App\Models\User $user;
+
     protected function setUp(): void
     {
         parent::setUp();
         app(TenantContext::class)->clear();
         app(BranchContext::class)->clear();
+
+        $this->tenant = Tenant::factory()->create(['status' => 'active']);
+        app(TenantContext::class)->setTenant($this->tenant);
+
+        $this->branch = Branch::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'status' => 'active'
+        ]);
+
+        $this->user = \App\Models\User::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'status' => 'active'
+        ]);
+        $this->user->assignToBranch($this->branch);
     }
 
     /** @test */
     public function test_pos_search_returns_accounting_silent_payload(): void
     {
-        $tenant = Tenant::factory()->create(['status' => 'active']);
-        app(TenantContext::class)->setTenant($tenant);
-        $user = \App\Models\User::factory()->create(['tenant_id' => $tenant->id]);
-        
         $cat = ProductCategory::create(['name' => 'Food', 'code' => 'F']);
         Product::create([
             'product_category_id' => $cat->id,
@@ -42,8 +56,8 @@ class POSCartTest extends TestCase
             'cost_price' => 5, // SENSITIVE
         ]);
 
-        $response = $this->actingAs($user)
-            ->withHeader('X-Tenant-ID', $tenant->id)
+        $response = $this->actingAs($this->user)
+            ->withHeader('X-Tenant-ID', $this->tenant->id)
             ->get(route('pos.search', ['q' => 'Burger']));
             
         $response->assertStatus(200);
@@ -63,12 +77,10 @@ class POSCartTest extends TestCase
     /** @test */
     public function test_pos_ui_loads_with_tenant_context(): void
     {
-        $tenant = Tenant::factory()->create(['name' => 'Juan Shop', 'status' => 'active']);
-        app(TenantContext::class)->setTenant($tenant);
-        $user = \App\Models\User::factory()->create(['tenant_id' => $tenant->id]);
+        $this->tenant->update(['name' => 'Juan Shop']);
 
-        $response = $this->actingAs($user)
-            ->withHeader('X-Tenant-ID', $tenant->id)
+        $response = $this->actingAs($this->user)
+            ->withHeader('X-Tenant-ID', $this->tenant->id)
             ->get(route('pos.index'));
             
         $response->assertStatus(200);
@@ -78,14 +90,11 @@ class POSCartTest extends TestCase
     /** @test */
     public function test_pos_ui_provisions_default_payment_methods_when_missing(): void
     {
-        $tenant = Tenant::factory()->create(['name' => 'Juan Shop', 'status' => 'active']);
-        app(TenantContext::class)->setTenant($tenant);
-        $user = \App\Models\User::factory()->create(['tenant_id' => $tenant->id]);
-
+        $this->tenant->update(['name' => 'Juan Shop']);
         $this->assertCount(0, PaymentMethod::all());
 
-        $response = $this->actingAs($user)
-            ->withHeader('X-Tenant-ID', $tenant->id)
+        $response = $this->actingAs($this->user)
+            ->withHeader('X-Tenant-ID', $this->tenant->id)
             ->get(route('pos.index'));
 
         $response->assertStatus(200);
@@ -97,12 +106,12 @@ class POSCartTest extends TestCase
         );
 
         $this->assertDatabaseHas('payment_methods', [
-            'tenant_id' => $tenant->id,
+            'tenant_id' => $this->tenant->id,
             'code' => 'CASH',
             'status' => 'active',
         ]);
         $this->assertDatabaseHas('payment_methods', [
-            'tenant_id' => $tenant->id,
+            'tenant_id' => $this->tenant->id,
             'code' => 'GCASH',
             'status' => 'active',
         ]);
@@ -111,21 +120,20 @@ class POSCartTest extends TestCase
     /** @test */
     public function test_pos_ui_only_returns_active_payment_methods_for_current_tenant(): void
     {
-        $tenant = Tenant::factory()->create(['status' => 'active']);
         $otherTenant = Tenant::factory()->create(['status' => 'active']);
-        app(TenantContext::class)->setTenant($tenant);
-        $user = \App\Models\User::factory()->create(['tenant_id' => $tenant->id]);
 
         PaymentMethod::create(['code' => 'CARD', 'name' => 'Card', 'type' => 'card', 'status' => 'active']);
         PaymentMethod::create(['code' => 'OLD', 'name' => 'Old Method', 'type' => 'other', 'status' => 'inactive']);
 
+        app(TenantContext::class)->clear();
         app(TenantContext::class)->setTenant($otherTenant);
         PaymentMethod::create(['code' => 'FOREIGN', 'name' => 'Foreign Method', 'type' => 'cash', 'status' => 'active']);
 
-        app(TenantContext::class)->setTenant($tenant);
+        app(TenantContext::class)->clear();
+        app(TenantContext::class)->setTenant($this->tenant);
 
-        $response = $this->actingAs($user)
-            ->withHeader('X-Tenant-ID', $tenant->id)
+        $response = $this->actingAs($this->user)
+            ->withHeader('X-Tenant-ID', $this->tenant->id)
             ->get(route('pos.index'));
 
         $response->assertStatus(200);
@@ -141,10 +149,6 @@ class POSCartTest extends TestCase
     /** @test */
     public function test_pos_search_respects_category_filter(): void
     {
-        $tenant = Tenant::factory()->create(['status' => 'active']);
-        app(TenantContext::class)->setTenant($tenant);
-        $user = \App\Models\User::factory()->create(['tenant_id' => $tenant->id]);
-        
         $c1 = ProductCategory::create(['name' => 'Drinks', 'code' => 'D']);
         $c2 = ProductCategory::create(['name' => 'Food', 'code' => 'F']);
         
@@ -152,8 +156,8 @@ class POSCartTest extends TestCase
         Product::create(['product_category_id' => $c2->id, 'name' => 'Pizza', 'sku' => 'P1', 'selling_price' => 15]);
 
         // Filter by Drinks
-        $response = $this->actingAs($user)
-            ->withHeader('X-Tenant-ID', $tenant->id)
+        $response = $this->actingAs($this->user)
+            ->withHeader('X-Tenant-ID', $this->tenant->id)
             ->get(route('pos.search', ['category_id' => $c1->id]));
             
         $this->assertCount(1, $response->json());

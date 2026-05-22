@@ -259,4 +259,9 @@ class MissingProductMapper implements AccountingMapperInterface
     {
         return 'CUSTOMER';
     }
+
+    public function mapSupplier(?string $posSupplierId): ?string
+    {
+        return null;
+    }
 }

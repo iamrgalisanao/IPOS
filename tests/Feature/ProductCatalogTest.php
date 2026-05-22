@@ -5,6 +5,9 @@ namespace Tests\Feature;
 use App\Models\Tenant;
 use App\Models\ProductCategory;
 use App\Models\Product;
+use App\Models\User;
+use App\Services\Catalog\CatalogCsvExportService;
+use App\Services\Catalog\CatalogImportPreviewService;
 use App\Services\TenantContext;
 use App\Services\CatalogService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -222,5 +225,117 @@ class ProductCatalogTest extends TestCase
         } catch (\RuntimeException $e) {
             $this->assertEquals('Cannot create product without active TenantContext.', $e->getMessage());
         }
+    }
+
+    /** @test */
+    public function test_catalog_csv_export_sanitizes_formula_like_product_and_category_values(): void
+    {
+        $tenant = Tenant::factory()->create(['status' => 'active']);
+        app(TenantContext::class)->setTenant($tenant);
+
+        $category = ProductCategory::create([
+            'name' => '=Danger Category',
+            'code' => '@CAT',
+            'status' => 'active',
+        ]);
+
+        Product::create([
+            'product_category_id' => $category->id,
+            'name' => '=Danger Product',
+            'sku' => '+SKU-001',
+            'barcode' => '-BAR-001',
+            'description' => '@Injected description',
+            'selling_price' => 99.99,
+            'status' => 'active',
+        ]);
+
+        $actor = User::factory()->create(['tenant_id' => $tenant->id, 'name' => '@Exporter']);
+        $service = app(CatalogCsvExportService::class);
+
+        $productCsv = $service->exportProducts(Product::with('category')->get(), $actor);
+        $categoryCsv = $service->exportCategories(ProductCategory::query()->get(), $actor);
+
+        $this->assertStringContainsString("'=Danger Product", $productCsv);
+        $this->assertStringContainsString("'+SKU-001", $productCsv);
+        $this->assertStringContainsString("'-BAR-001", $productCsv);
+        $this->assertStringContainsString("'@Injected description", $productCsv);
+        $this->assertStringContainsString("'@Exporter", $productCsv);
+
+        $this->assertStringContainsString("'=Danger Category", $categoryCsv);
+        $this->assertStringContainsString("'@CAT", $categoryCsv);
+
+        app(TenantContext::class)->clear();
+    }
+
+    /** @test */
+    public function test_product_import_preview_reports_duplicates_and_reference_failures_without_writes(): void
+    {
+        $tenant = Tenant::factory()->create(['status' => 'active']);
+        app(TenantContext::class)->setTenant($tenant);
+
+        ProductCategory::create(['name' => 'Beverages', 'code' => 'BEV', 'status' => 'active']);
+        ProductCategory::create(['name' => 'Inactive Category', 'code' => 'OLD', 'status' => 'inactive']);
+        Product::create([
+            'product_category_id' => ProductCategory::where('code', 'BEV')->first()->id,
+            'name' => 'Existing Product',
+            'sku' => 'SKU-EXISTING',
+            'barcode' => 'BAR-EXISTING',
+            'selling_price' => 100,
+            'status' => 'active',
+        ]);
+
+        $csv = implode("\n", [
+            'name,sku,category_code,unit_of_measure,selling_price,status,product_type,is_sellable,is_inventory_tracked,is_taxable,is_discountable,barcode,tax_category_code',
+            'Preview One,SKU-EXISTING,OLD,piece,abc,active,finished_good,true,true,true,true,BAR-EXISTING,UNKNOWN',
+            'Preview Two,SKU-NEW,MISSING,piece,10.0000,active,invalid_type,true,true,true,true,,',
+            'Preview Three,SKU-NEW,BEV,piece,12.0000,active,finished_good,true,true,true,true,,',
+        ]);
+
+        $file = \Illuminate\Http\UploadedFile::fake()->createWithContent('products.csv', $csv);
+        $preview = app(CatalogImportPreviewService::class)->previewProducts($file);
+
+        $this->assertEquals(3, $preview['summary']['total_rows']);
+        $this->assertEquals(0, $preview['summary']['valid_rows']);
+        $this->assertEquals(3, $preview['summary']['invalid_rows']);
+        $this->assertContains('selling_price must be numeric.', $preview['rows'][0]['errors']);
+        $this->assertContains('category_code references an inactive category.', $preview['rows'][0]['errors']);
+        $this->assertContains('sku already exists in the current tenant catalog.', $preview['rows'][0]['errors']);
+        $this->assertContains('barcode already exists in the current tenant catalog.', $preview['rows'][0]['errors']);
+        $this->assertContains('tax_category_code does not match an existing tax category in the current tenant.', $preview['rows'][0]['errors']);
+        $this->assertContains('category_code does not match an existing category in the current tenant.', $preview['rows'][1]['errors']);
+        $this->assertContains('product_type must be finished_good, raw_material, or semi_finished.', $preview['rows'][1]['errors']);
+        $this->assertContains('sku is duplicated within the uploaded file.', $preview['rows'][2]['errors']);
+
+        $this->assertCount(1, Product::all());
+        app(TenantContext::class)->clear();
+    }
+
+    /** @test */
+    public function test_category_import_preview_reports_duplicate_codes_without_writes(): void
+    {
+        $tenant = Tenant::factory()->create(['status' => 'active']);
+        app(TenantContext::class)->setTenant($tenant);
+
+        ProductCategory::create(['name' => 'Existing', 'code' => 'CAT1', 'status' => 'active']);
+
+        $csv = implode("\n", [
+            'name,code,status,description',
+            'Imported One,CAT1,active,Existing duplicate',
+            'Imported Two,CAT2,invalid_status,Bad status',
+            'Imported Three,CAT2,active,Duplicate in file',
+        ]);
+
+        $file = \Illuminate\Http\UploadedFile::fake()->createWithContent('categories.csv', $csv);
+        $preview = app(CatalogImportPreviewService::class)->previewCategories($file);
+
+        $this->assertEquals(3, $preview['summary']['total_rows']);
+        $this->assertEquals(0, $preview['summary']['valid_rows']);
+        $this->assertEquals(3, $preview['summary']['invalid_rows']);
+        $this->assertContains('code already exists in the current tenant catalog.', $preview['rows'][0]['errors']);
+        $this->assertContains('status must be active or inactive.', $preview['rows'][1]['errors']);
+        $this->assertContains('code is duplicated within the uploaded file.', $preview['rows'][2]['errors']);
+
+        $this->assertCount(1, ProductCategory::all());
+        app(TenantContext::class)->clear();
     }
 }

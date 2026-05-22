@@ -33,7 +33,7 @@ class BranchContextResolutionTest extends TestCase
             ->getJson('/api/branch-test');
 
         $response->assertStatus(403)
-            ->assertJsonPath('message', 'Branch context missing.');
+            ->assertJsonPath('message', 'Branch context missing. Please select a branch from the dashboard.');
     }
 
     /** @test */

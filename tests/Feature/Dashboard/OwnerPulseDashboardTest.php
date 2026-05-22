@@ -80,7 +80,7 @@ class OwnerPulseDashboardTest extends TestCase
 
         $response = $this->get('/dashboard');
 
-        $response->assertStatus(403);
+        $response->assertRedirect(route('pos.index'));
     }
 
     public function test_dashboard_renders_metrics_correctly(): void

@@ -48,7 +48,10 @@ class QuickBooksConnectionManagementTest extends TestCase
             'services.quickbooks.api_base_url' => 'https://sandbox-quickbooks.api.intuit.test',
         ]);
 
-        $this->tenant = Tenant::factory()->create(['status' => 'active']);
+        $this->tenant = Tenant::factory()->create([
+            'status' => 'active',
+            'subscription_metadata' => ['plan' => 'enterprise']
+        ]);
         app(RbacSeeder::class)->seedForTenant($this->tenant);
 
         app(TenantContext::class)->setTenant($this->tenant);
@@ -109,7 +112,10 @@ class QuickBooksConnectionManagementTest extends TestCase
 
     public function test_tenant_cannot_view_another_tenants_connection(): void
     {
-        $tenantB = Tenant::factory()->create(['status' => 'active']);
+        $tenantB = Tenant::factory()->create([
+            'status' => 'active',
+            'subscription_metadata' => ['plan' => 'enterprise']
+        ]);
         app(RbacSeeder::class)->seedForTenant($tenantB);
 
         app(TenantContext::class)->setTenant($tenantB);
@@ -138,7 +144,10 @@ class QuickBooksConnectionManagementTest extends TestCase
 
     public function test_tenant_cannot_disconnect_another_tenants_connection(): void
     {
-        $tenantB = Tenant::factory()->create(['status' => 'active']);
+        $tenantB = Tenant::factory()->create([
+            'status' => 'active',
+            'subscription_metadata' => ['plan' => 'enterprise']
+        ]);
         app(RbacSeeder::class)->seedForTenant($tenantB);
 
         app(TenantContext::class)->setTenant($tenantB);
@@ -182,7 +191,10 @@ class QuickBooksConnectionManagementTest extends TestCase
 
     public function test_oauth_state_is_tenant_bound(): void
     {
-        $tenantB = Tenant::factory()->create(['status' => 'active']);
+        $tenantB = Tenant::factory()->create([
+            'status' => 'active',
+            'subscription_metadata' => ['plan' => 'enterprise']
+        ]);
         app(RbacSeeder::class)->seedForTenant($tenantB);
 
         app(TenantContext::class)->setTenant($tenantB);
