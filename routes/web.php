@@ -631,6 +631,10 @@ Route::middleware(['auth', 'tenant'])->group(function () {
             ->name('inventory.reports.variance-logs.index');
         Route::get('/inventory/reports/variance-logs/export', [\App\Http\Controllers\Inventory\VarianceLogController::class, 'export'])
             ->name('inventory.reports.variance-logs.export');
+        Route::get('/inventory/reports/product-composition', [\App\Http\Controllers\Inventory\ProductCompositionReportController::class, 'index'])
+            ->name('inventory.reports.product-composition.index');
+        Route::get('/inventory/reports/product-composition/export', [\App\Http\Controllers\Inventory\ProductCompositionReportController::class, 'export'])
+            ->name('inventory.reports.product-composition.export');
     });
 });
 

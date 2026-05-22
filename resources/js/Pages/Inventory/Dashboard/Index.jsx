@@ -402,6 +402,16 @@ export default function Index({
                                 </Link>
                             )}
 
+                            {canViewVariance && (
+                                <Link href={route('inventory.reports.product-composition.index')} className="group flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 hover:bg-indigo-50 hover:border-indigo-200 transition-all">
+                                    <span className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-700">
+                                        <Boxes size={14} className="text-slate-500 group-hover:text-indigo-600" />
+                                        Product Composition
+                                    </span>
+                                    <ArrowRight size={14} className="text-slate-400 group-hover:text-indigo-600" />
+                                </Link>
+                            )}
+
                             {canViewUnitConversions && (
                                 <Link href={route('inventory.unit-conversions.index')} className="group flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 hover:bg-indigo-50 hover:border-indigo-200 transition-all">
                                     <span className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-700">

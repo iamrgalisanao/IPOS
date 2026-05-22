@@ -6,6 +6,7 @@ use App\Models\Branch;
 use App\Models\Product;
 use App\Models\BranchInventory;
 use App\Models\InventoryMovement;
+use App\Services\Inventory\UnitConversionResolver;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -16,12 +17,18 @@ class InventoryService
     protected AuditLogger $auditLogger;
     protected TenantContext $tenantContext;
     protected BranchContext $branchContext;
+    protected UnitConversionResolver $unitConversionResolver;
 
-    public function __construct(AuditLogger $auditLogger, TenantContext $tenantContext, BranchContext $branchContext)
-    {
+    public function __construct(
+        AuditLogger $auditLogger,
+        TenantContext $tenantContext,
+        BranchContext $branchContext,
+        UnitConversionResolver $unitConversionResolver
+    ) {
         $this->auditLogger = $auditLogger;
         $this->tenantContext = $tenantContext;
         $this->branchContext = $branchContext;
+        $this->unitConversionResolver = $unitConversionResolver;
     }
 
     /**
@@ -346,53 +353,13 @@ class InventoryService
      */
     protected function convertUnit(float $quantity, string $fromUnit, string $toUnit, ?string $productId = null): float
     {
-        if ($fromUnit === $toUnit) {
-            return $quantity;
-        }
-
-        $tenant = $this->tenantContext->getTenant();
-        if ($tenant) {
-            // 1. Check Product-Specific Active Conversion
-            if ($productId) {
-                $conversion = \App\Models\UnitConversion::where('tenant_id', $tenant->id)
-                    ->where('product_id', $productId)
-                    ->where('from_unit', $fromUnit)
-                    ->where('to_unit', $toUnit)
-                    ->where('is_active', true)
-                    ->first();
-                if ($conversion) {
-                    return $quantity * (float) $conversion->conversion_factor;
-                }
-            }
-
-            // 2. Check Global Tenant Active Conversion
-            $conversion = \App\Models\UnitConversion::where('tenant_id', $tenant->id)
-                ->whereNull('product_id')
-                ->where('from_unit', $fromUnit)
-                ->where('to_unit', $toUnit)
-                ->where('is_active', true)
-                ->first();
-            if ($conversion) {
-                return $quantity * (float) $conversion->conversion_factor;
-            }
-        }
-
-        // 3. Fallback to standard metric conversions
-        $factors = [
-            'kg' => 1,
-            'gram' => 0.001,
-            'liter' => 1,
-            'ml' => 0.001,
-            'piece' => 1,
-        ];
-
-        if (isset($factors[$fromUnit]) && isset($factors[$toUnit])) {
-            $baseQuantity = $quantity * $factors[$fromUnit];
-            return $baseQuantity / $factors[$toUnit];
-        }
-
-        // If no conversion is possible, throw an error
-        throw new \RuntimeException("No active unit conversion rule found from {$fromUnit} to {$toUnit}" . ($productId ? " for product ID {$productId}" : "") . ".");
+        return (float) $this->unitConversionResolver->convert(
+            quantity: $quantity,
+            fromUnit: $fromUnit,
+            toUnit: $toUnit,
+            productId: $productId,
+            strict: true
+        )['value'];
     }
 
     /**
