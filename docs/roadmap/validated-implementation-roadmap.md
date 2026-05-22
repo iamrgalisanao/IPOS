@@ -901,6 +901,7 @@ covered by earlier implementation tracks.
 - 31.4 Inventory Overview and Stock Visibility Dashboard
 - 31.5 Recipe / Ingredient Admin Management UI
 - 31.6 Catalog Import/Export and Audit Hardening
+- 31.7 All-Products Ingredient Composition Report (post-closure extension)
 
 **Planning and Closure Artifacts:**
 - [epic-31-product-catalog-and-inventory-admin-ux-completion-scope-lock.md](../../_bmad-output/planning-artifacts/epic-31-product-catalog-and-inventory-admin-ux-completion-scope-lock.md)
@@ -928,7 +929,34 @@ covered by earlier implementation tracks.
 - [story-31.6-slice-b-import-template-and-validation-strategy-scope-lock.md](../../_bmad-output/planning-artifacts/story-31.6-slice-b-import-template-and-validation-strategy-scope-lock.md)
 - [story-31.6-slice-b-import-template-and-validation-strategy-closure.md](../validation/story-31.6-slice-b-import-template-and-validation-strategy-closure.md)
 - [story-31.6-catalog-import-export-audit-hardening-closure.md](../validation/story-31.6-catalog-import-export-audit-hardening-closure.md)
+- [story-31.7-all-products-ingredient-composition-report-implementation-spec.md](story-31.7-all-products-ingredient-composition-report-implementation-spec.md)
+- [story-31.7-all-products-ingredient-composition-report-closure.md](../validation/story-31.7-all-products-ingredient-composition-report-closure.md)
 - [epic-31-product-catalog-and-inventory-admin-ux-completion-closure-report.md](../validation/epic-31-product-catalog-and-inventory-admin-ux-completion-closure-report.md)
+
+**Story 31.7 Completed Scope:**
+- Story 31.7 All-Products Ingredient Composition Report is implemented and
+  locally validated as a post-Epic-31 extension.
+- Added read-only product-to-ingredient composition reporting across sellable
+  products.
+- Added direct mode aligned with current POS deduction behavior and flattened
+  sub-recipe mode explicitly labeled planning-only.
+- Added branch-aware stock, reorder, cost, ingredient coverage, and parent
+  bottleneck coverage context.
+- Added cost-field masking for users without `audit_inventory`.
+- Added shared unit conversion resolver consumed by both reporting and
+  `InventoryService`, preserving strict checkout behavior.
+- Added CSV export with formula-injection hardening, stable branch columns, cost
+  masking, and configurable max-row ceiling.
+- Added Inventory Dashboard navigation entry for the report.
+- No recipe edit workflow, POS recursive deduction behavior, procurement
+  automation trigger, import write-path expansion, tax/accounting/subscription
+  engine change, tenant isolation change, or branch isolation change was
+  introduced.
+
+**Story 31.7 Validation Evidence:**
+- `php artisan test tests/Feature/Inventory/ProductCompositionReportTest.php tests/Unit/Inventory/UnitConversionResolverTest.php`: 14 passed / 129 assertions
+- `php artisan test tests/Feature/Inventory/UnitConversionManagementTest.php tests/Feature/POS/SaleCreationFefoTest.php tests/Feature/POS/InventoryDeductionPolicyTest.php tests/Feature/POS/SaleCreationTest.php`: 55 passed / 173 assertions
+- `npm run build`: passing
 
 **Story 31.6 Slice B Completed Scope:**
 - Story 31.6 Slice B Import Template and Validation Strategy is implemented and
