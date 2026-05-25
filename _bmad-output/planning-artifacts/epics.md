@@ -237,6 +237,11 @@
 - [x] Slice F Implementation: Pilot Enablement Pack [Implemented - Documentation Only]
 - [ ] Pilot Walkthrough Execution and Feedback Loop [Next]
 
+### Reporting Modernization Track (G-071) [In Progress]
+- [x] Planning Lock: Reporting Modernization [Created]
+- [ ] Planning Lock Review and Acceptance [Next]
+- [ ] Slice R1 Implementation: Sales Summary Report [Pending Acceptance]
+
 ### Epic 21: Branch Comparison Business Intelligence [Planned]
 - [ ] 21.1 Cross-Branch Financial Aggregations [Planned]
 - [ ] 21.2 Performance Metric Visualization Dashboard [Planned]
