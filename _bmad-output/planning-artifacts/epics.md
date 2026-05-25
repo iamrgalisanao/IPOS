@@ -246,7 +246,8 @@
 - [x] Slice R3 Implementation: Product Mix Report [Implemented & Locally Validated]
 - [x] Slice R4 Planning Lock: Sales by Hour and Weekday [Created]
 - [x] Slice R4 Implementation: Sales by Hour and Weekday [Implemented & Locally Validated]
-- [ ] Slice R5 Planning Lock: Inventory Visibility Report [Next]
+- [x] Slice R5 Planning Lock: Inventory Visibility Report [Created]
+- [ ] Slice R5 Implementation: Inventory Visibility Report [Pending Acceptance]
 
 ### Epic 21: Branch Comparison Business Intelligence [Planned]
 - [ ] 21.1 Cross-Branch Financial Aggregations [Planned]
