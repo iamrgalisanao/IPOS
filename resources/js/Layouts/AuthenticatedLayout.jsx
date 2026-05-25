@@ -1,7 +1,7 @@
 import ApplicationLogo from '@/Components/ApplicationLogo';
 import Dropdown from '@/Components/Dropdown';
 import { Link, usePage } from '@inertiajs/react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
     LayoutDashboard,
     Clock,
@@ -27,7 +27,9 @@ import {
 } from 'lucide-react';
 
 export default function AuthenticatedLayout({ header, children }) {
-    const user = usePage().props.auth.user;
+    const page = usePage();
+    const user = page.props.auth.user;
+    const sidebarNavRef = useRef(null);
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
         if (typeof window !== 'undefined') {
@@ -43,6 +45,31 @@ export default function AuthenticatedLayout({ header, children }) {
             return next;
         });
     };
+
+    const persistSidebarScroll = () => {
+        if (typeof window === 'undefined' || !sidebarNavRef.current) {
+            return;
+        }
+
+        localStorage.setItem('sidebar_scroll_top', String(sidebarNavRef.current.scrollTop));
+    };
+
+    useEffect(() => {
+        if (typeof window === 'undefined' || sidebarCollapsed || !sidebarNavRef.current) {
+            return;
+        }
+
+        const savedScrollTop = Number(localStorage.getItem('sidebar_scroll_top') || 0);
+        if (!Number.isFinite(savedScrollTop)) {
+            return;
+        }
+
+        requestAnimationFrame(() => {
+            if (sidebarNavRef.current) {
+                sidebarNavRef.current.scrollTop = savedScrollTop;
+            }
+        });
+    }, [page.url, sidebarCollapsed]);
 
     const permissions = usePage().props.auth?.permissions || [];
     const entitledFeatures = usePage().props.auth?.tenant?.subscription?.features || [];
@@ -225,7 +252,11 @@ export default function AuthenticatedLayout({ header, children }) {
                 </div>
 
                 <div className={`flex flex-col flex-grow ${sidebarCollapsed ? 'overflow-visible' : 'h-[calc(100vh-4rem)]'}`}>
-                    <nav className={`flex-1 ${sidebarCollapsed ? 'px-2 py-6 overflow-visible' : 'px-4 py-8 overflow-y-auto custom-scrollbar'} space-y-6`}>
+                    <nav
+                        ref={sidebarNavRef}
+                        onScroll={persistSidebarScroll}
+                        className={`flex-1 ${sidebarCollapsed ? 'px-2 py-6 overflow-visible' : 'px-4 py-8 overflow-y-auto custom-scrollbar'} space-y-6`}
+                    >
                         {navigationGroups.map((group) => (
                             <div key={group.label} className="transition-all duration-300">
                                 {!sidebarCollapsed ? (
@@ -240,6 +271,7 @@ export default function AuthenticatedLayout({ header, children }) {
                                         <Link
                                             key={item.name}
                                             href={item.href}
+                                            onMouseDown={persistSidebarScroll}
                                             className={`flex items-center ${
                                                 sidebarCollapsed ? 'justify-center px-0 py-3 rounded-xl' : 'gap-3 px-3 py-2.5 rounded-xl'
                                             } text-xs font-bold uppercase tracking-widest transition-all duration-300 relative group ${
