@@ -720,7 +720,7 @@ class RouteFeatureGateTest extends TestCase
     }
 
     /** @test */
-    public function test_pos_shell_search_active_shift_bootstrap_and_offline_sync_routes_remain_unchanged_for_sales_pos_gate(): void
+    public function test_pos_shell_search_active_shift_bootstrap_and_offline_sync_routes_are_gated_by_sales_pos_feature(): void
     {
         $tenant = Tenant::factory()->create([
             'status' => 'active',
@@ -750,14 +750,14 @@ class RouteFeatureGateTest extends TestCase
                 ->withHeader('X-Branch-ID', $branch->id)
                 ->{$request['method']}($request['uri']);
 
-            $this->assertNotEquals(403, $response->getStatusCode(), 'Unexpected 403 for ' . strtoupper($request['method']) . ' ' . $request['uri']);
+            $response->assertStatus(403);
         }
 
-        $this->assertNotContains('subscription.feature:sales.pos', Route::getRoutes()->getByName('pos.index')->gatherMiddleware());
-        $this->assertNotContains('subscription.feature:sales.pos', Route::getRoutes()->getByName('pos.search')->gatherMiddleware());
-        $this->assertNotContains('subscription.feature:sales.pos', Route::getRoutes()->getByName('pos.active-shift')->gatherMiddleware());
-        $this->assertNotContains('subscription.feature:sales.pos', Route::getRoutes()->getByName('pos.bootstrap-cache')->gatherMiddleware());
-        $this->assertNotContains('subscription.feature:sales.pos', Route::getRoutes()->getByName('pos.offline-sync')->gatherMiddleware());
+        $this->assertContains('subscription.feature:sales.pos', Route::getRoutes()->getByName('pos.index')->gatherMiddleware());
+        $this->assertContains('subscription.feature:sales.pos', Route::getRoutes()->getByName('pos.search')->gatherMiddleware());
+        $this->assertContains('subscription.feature:sales.pos', Route::getRoutes()->getByName('pos.active-shift')->gatherMiddleware());
+        $this->assertContains('subscription.feature:sales.pos', Route::getRoutes()->getByName('pos.bootstrap-cache')->gatherMiddleware());
+        $this->assertContains('subscription.feature:sales.pos', Route::getRoutes()->getByName('pos.offline-sync')->gatherMiddleware());
     }
 
     private function createOwnerAdminUserForTenant(Tenant $tenant): User

@@ -7,6 +7,7 @@ use App\Models\Branch;
 use App\Models\SalesMachineProfile;
 use App\Models\Tenant;
 use App\Models\User;
+use Illuminate\Routing\Route;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -142,7 +143,7 @@ class TenantProvisioningController extends Controller
 
     private function availablePlans(): array
     {
-        return config('subscriptions.tiers', []);
+        return (array) config('subscriptions.tiers', []);
     }
 
     private function isMachineProfileComplianceComplete(SalesMachineProfile $profile): bool
@@ -172,18 +173,49 @@ class TenantProvisioningController extends Controller
             ->sort()
             ->values();
 
-        $enforced = [
-            'quickbooks.sync' => 'route-gated',
-            'layout.custom' => 'route-gated',
-        ];
+        $routeFeatureCoverage = collect(app('router')->getRoutes())
+            ->filter(fn ($route): bool => $route instanceof Route)
+            ->reduce(function (array $coverage, Route $route): array {
+                $routeDescriptor = $route->getName() ?: strtoupper(implode('|', $route->methods())) . ' ' . $route->uri();
 
-        return $configured->map(function (string $flag) use ($enforced) {
+                foreach ($route->gatherMiddleware() as $middleware) {
+                    if (!str_starts_with($middleware, 'subscription.feature:')) {
+                        continue;
+                    }
+
+                    $flag = trim(substr($middleware, strlen('subscription.feature:')));
+
+                    if ($flag === '') {
+                        continue;
+                    }
+
+                    if (!array_key_exists($flag, $coverage)) {
+                        $coverage[$flag] = [
+                            'route_count' => 0,
+                            'routes' => [],
+                        ];
+                    }
+
+                    $coverage[$flag]['route_count']++;
+                    $coverage[$flag]['routes'][] = $routeDescriptor;
+                }
+
+                return $coverage;
+            }, []);
+
+        return $configured->map(function (string $flag) use ($routeFeatureCoverage) {
+            $coverage = $routeFeatureCoverage[$flag] ?? ['route_count' => 0, 'routes' => []];
+            $isEnforced = $coverage['route_count'] > 0;
+
             return [
                 'feature_flag' => $flag,
                 'config_exists' => true,
-                'middleware_enforced' => array_key_exists($flag, $enforced),
-                'enforcement_status' => $enforced[$flag] ?? 'partial_or_missing',
-                'notes' => $enforced[$flag] ?? 'Configured in plan matrix; explicit route gate coverage pending.',
+                'middleware_enforced' => $isEnforced,
+                'enforcement_status' => $isEnforced ? 'route-gated' : 'not-gated',
+                'route_count' => $coverage['route_count'],
+                'notes' => $isEnforced
+                    ? "Implemented on {$coverage['route_count']} route(s)."
+                    : 'Configured in plan matrix; explicit route gate coverage pending.',
             ];
         })->all();
     }

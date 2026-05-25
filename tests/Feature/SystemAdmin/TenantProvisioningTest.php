@@ -166,6 +166,23 @@ class TenantProvisioningTest extends TestCase
         );
     }
 
+    public function test_feature_coverage_marks_sales_pos_as_enforced_with_non_zero_routes(): void
+    {
+        $platformAdmin = User::factory()->platformSupport()->create();
+
+        $response = $this->actingAs($platformAdmin)->get('/system-admin/tenants');
+
+        $response->assertOk();
+
+        $props = $response->viewData('page')['props'];
+        $coverage = collect($props['featureCoverage'] ?? []);
+        $salesPos = $coverage->firstWhere('feature_flag', 'sales.pos');
+
+        $this->assertNotNull($salesPos, 'Expected sales.pos feature coverage row to be present.');
+        $this->assertTrue((bool) ($salesPos['middleware_enforced'] ?? false), 'Expected sales.pos to be middleware-enforced.');
+        $this->assertGreaterThan(0, (int) ($salesPos['route_count'] ?? 0), 'Expected sales.pos to have non-zero gated route count.');
+    }
+
     public function test_readiness_marks_machine_profile_missing_when_not_registered(): void
     {
         $platformAdmin = User::factory()->platformSupport()->create();

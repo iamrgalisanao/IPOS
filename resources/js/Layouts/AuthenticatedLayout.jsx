@@ -57,7 +57,7 @@ export default function AuthenticatedLayout({ header, children }) {
 
     // Dynamically filter Operations Items
     const operationsItems = [];
-    if (permissions.includes('access_pos')) {
+    if (permissions.includes('access_pos') && hasFeature('sales.pos')) {
         operationsItems.push({ name: 'POS Terminal', href: route('pos.index'), icon: LayoutDashboard, active: route().current('pos.*') });
     }
     if (permissions.includes('view_shift') || permissions.includes('open_shift') || permissions.includes('close_shift')) {

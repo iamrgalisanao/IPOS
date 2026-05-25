@@ -19,6 +19,14 @@ export default function TenantProvisioningIndex() {
         [featureCoverage]
     );
 
+    const coverageStats = useMemo(() => {
+        const total = featureCoverage.length;
+        const enforced = featureCoverage.filter((item) => item.middleware_enforced).length;
+        const pending = total - enforced;
+
+        return { total, enforced, pending };
+    }, [featureCoverage]);
+
     const createForm = useForm({
         name: '',
         status: 'trial',
@@ -109,6 +117,24 @@ export default function TenantProvisioningIndex() {
             <Head title="System Admin - Tenant Provisioning" />
 
             <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
+                <section className="grid gap-4 sm:grid-cols-3">
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Middleware Enforced</p>
+                        <p className="mt-2 text-2xl font-bold text-emerald-900">{coverageStats.enforced}</p>
+                        <p className="mt-1 text-xs text-emerald-700">Features currently route-gated</p>
+                    </div>
+                    <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Coverage Pending</p>
+                        <p className="mt-2 text-2xl font-bold text-amber-900">{coverageStats.pending}</p>
+                        <p className="mt-1 text-xs text-amber-700">Configured features without gates</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Configured Features</p>
+                        <p className="mt-2 text-2xl font-bold text-slate-900">{coverageStats.total}</p>
+                        <p className="mt-1 text-xs text-slate-600">Detected from plan matrix</p>
+                    </div>
+                </section>
+
                 <section className="rounded-lg border border-slate-200 bg-white p-5">
                     <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Search</h3>
 
@@ -301,23 +327,40 @@ export default function TenantProvisioningIndex() {
 
                 <section className="rounded-lg border border-slate-200 bg-white p-5">
                     <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Feature Gate Coverage</h3>
-                    <div className="mt-3 overflow-x-auto">
+                    <p className="mt-1 text-sm text-slate-500">
+                        Coverage is computed from live route middleware and subscription plan configuration.
+                    </p>
+                    <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200">
                         <table className="min-w-full text-sm">
-                            <thead>
-                                <tr className="text-left text-slate-500">
-                                    <th className="pb-2 pr-4">Feature</th>
-                                    <th className="pb-2 pr-4">Configured</th>
-                                    <th className="pb-2 pr-4">Middleware Enforced</th>
-                                    <th className="pb-2 pr-4">Notes</th>
+                            <thead className="bg-slate-50">
+                                <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
+                                    <th className="px-4 py-3">Feature</th>
+                                    <th className="px-4 py-3">Configured</th>
+                                    <th className="px-4 py-3">Middleware Enforced</th>
+                                    <th className="px-4 py-3">Routes</th>
+                                    <th className="px-4 py-3">Notes</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {featureCoverage.map((item) => (
-                                    <tr key={item.feature_flag} className="border-t border-slate-100 text-slate-700">
-                                        <td className="py-2 pr-4">{item.feature_flag}</td>
-                                        <td className="py-2 pr-4">{item.config_exists ? 'Yes' : 'No'}</td>
-                                        <td className="py-2 pr-4">{item.middleware_enforced ? 'Yes' : 'No'}</td>
-                                        <td className="py-2 pr-4">{item.notes ?? ''}</td>
+                                    <tr key={item.feature_flag} className="border-t border-slate-100 text-slate-700 even:bg-slate-50/40">
+                                        <td className="px-4 py-3 font-medium text-slate-900">{item.feature_flag}</td>
+                                        <td className="px-4 py-3">
+                                            <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${item.config_exists ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                                                {item.config_exists ? 'Yes' : 'No'}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${item.middleware_enforced ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                                {item.middleware_enforced ? 'Yes' : 'No'}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <span className="inline-flex rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
+                                                {item.route_count ?? 0}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-xs text-slate-600">{item.notes ?? ''}</td>
                                     </tr>
                                 ))}
                             </tbody>

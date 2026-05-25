@@ -54,7 +54,7 @@ Route::middleware(['tenant', 'branch'])->get('/branch-test', function () {
 
 // Epic 28 Phase 2 — Offline Sync Stub (Story 28.6)
 // Returns 503 until reconciliation engine is implemented (Story 28.7+).
-Route::middleware(['auth:sanctum', 'tenant', 'branch', 'permission:create_sale'])
+Route::middleware(['auth:sanctum', 'tenant', 'branch', 'permission:create_sale', 'subscription.feature:sales.pos'])
     ->post('/pos/offline-sync', [\App\Http\Controllers\POS\OfflineSyncController::class, 'sync'])
     ->name('pos.offline-sync');
 
