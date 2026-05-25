@@ -192,6 +192,12 @@ Planning lock:
 
 ### Slice E: Branch Movement Summary
 
+Status: Planning lock created; implementation pending acceptance
+
+Planning lock:
+
+`docs/implementation-plans/slice-e-branch-stock-movement-summary-planning-lock.md`
+
 1. Reuse existing inventory movement records.
 2. Add movement type filters and date range.
 3. Add branch-scoped summary totals.
@@ -219,6 +225,6 @@ Planning lock:
 
 ## 7. Recommended Next Action
 
-Create Slice E as a formal planning lock for the Branch Stock Movement Summary,
+Review and accept Slice E planning lock for the Branch Stock Movement Summary,
 then implement only after data sources, role boundaries, acceptance criteria,
 and non-goal boundaries are reviewed.
