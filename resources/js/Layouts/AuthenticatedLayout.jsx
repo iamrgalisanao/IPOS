@@ -69,6 +69,28 @@ export default function AuthenticatedLayout({ header, children }) {
 
     // Dynamically filter Catalog & Stock Items
     const catalogAndStockItems = [];
+    const hasInventoryHubAccess = [
+        'view_branch_inventory',
+        'inventory.stocktake.view',
+        'view_inventory_reports',
+        'audit_inventory',
+        'manage_products',
+        'manage_unit_conversions',
+        'procurement.suppliers.view',
+        'procurement.purchase-orders.view',
+        'procurement.receiving.view',
+        'procurement.returns.view',
+    ].some((permission) => permissions.includes(permission));
+
+    if (hasInventoryHubAccess) {
+        catalogAndStockItems.push({
+            name: 'Inventory Hub',
+            href: route('inventory.hub.index'),
+            icon: Layers,
+            active: route().current('inventory.hub.*'),
+        });
+    }
+
     if (permissions.includes('manage_products') && hasFeature('catalog.view')) {
         catalogAndStockItems.push({ name: 'Product Catalog', href: route('admin.products.index'), icon: Package, active: route().current('admin.products.*') || route().current('admin.product-categories.*') });
     }

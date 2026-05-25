@@ -407,6 +407,10 @@ Route::middleware(['auth', 'tenant'])->group(function () {
 
     // Inventory Routes
     Route::middleware(['branch'])->group(function () {
+        Route::get('/inventory/hub', [\App\Http\Controllers\Inventory\InventoryHubController::class, 'index'])
+             ->middleware('permission:view_branch_inventory|inventory.stocktake.view|view_inventory_reports|audit_inventory|manage_products|manage_unit_conversions|procurement.suppliers.view|procurement.purchase-orders.view|procurement.receiving.view|procurement.returns.view')
+             ->name('inventory.hub.index');
+
         Route::get('/inventory/dashboard', [InventoryDashboardController::class, 'index'])
              ->middleware('permission:view_branch_inventory|inventory.stocktake.view')
              ->name('inventory.dashboard.index');
