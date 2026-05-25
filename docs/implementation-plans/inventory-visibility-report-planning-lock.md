@@ -2,7 +2,9 @@
 
 ## 1. Status
 
-Draft - For review and governance sync.
+Implemented and locally validated.
+
+Closure evidence is recorded in `docs/validation/inventory-visibility-report-closure.md`.
 
 ## 2. Purpose
 
@@ -92,4 +94,32 @@ Confirmed for this planning lock task:
 
 ## 10. Next Gate
 
-After acceptance, proceed to R5 implementation: Inventory Visibility Report.
+Slice R5 implementation is complete and locally validated.
+
+## 11. Implementation Closure Evidence
+
+Implemented:
+
+1. New read-only route group:
+   - `inventory.reports.visibility.index`
+   - `inventory.reports.visibility.export`
+2. New controller:
+   - `app/Http/Controllers/Inventory/InventoryVisibilityReportController.php`
+3. New service:
+   - `app/Services/Inventory/InventoryVisibilityReportService.php`
+4. New Inertia page:
+   - `resources/js/Pages/Inventory/Visibility/Index.jsx`
+5. New focused tests:
+   - `tests/Feature/Inventory/InventoryVisibilityReportTest.php`
+
+Validation:
+
+1. `php artisan test tests/Feature/Inventory/InventoryVisibilityReportTest.php tests/Feature/Inventory/InventoryDashboardTest.php tests/Feature/Inventory/ProductCompositionReportTest.php tests/Feature/Inventory/VarianceLogAuditingTest.php`
+   - 29 tests passed.
+   - 353 assertions passed.
+2. `npm run build`
+   - passed.
+
+Closure report:
+
+1. `docs/validation/inventory-visibility-report-closure.md`

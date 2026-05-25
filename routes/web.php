@@ -658,6 +658,10 @@ Route::middleware(['auth', 'tenant'])->group(function () {
 
     // Variance audit logs reports
     Route::middleware(['permission:view_inventory_reports|audit_inventory'])->group(function () {
+        Route::get('/inventory/reports/visibility', [\App\Http\Controllers\Inventory\InventoryVisibilityReportController::class, 'index'])
+            ->name('inventory.reports.visibility.index');
+        Route::get('/inventory/reports/visibility/export', [\App\Http\Controllers\Inventory\InventoryVisibilityReportController::class, 'export'])
+            ->name('inventory.reports.visibility.export');
         Route::get('/inventory/reports/variance-logs', [\App\Http\Controllers\Inventory\VarianceLogController::class, 'index'])
             ->name('inventory.reports.variance-logs.index');
         Route::get('/inventory/reports/variance-logs/export', [\App\Http\Controllers\Inventory\VarianceLogController::class, 'export'])

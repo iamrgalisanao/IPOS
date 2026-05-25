@@ -194,6 +194,12 @@ export default function AuthenticatedLayout({ header, children }) {
     }
     if (permissions.includes('view_inventory_reports') || permissions.includes('audit_inventory')) {
         salesAndFinanceItems.push({
+            name: 'Inventory Visibility',
+            href: route('inventory.reports.visibility.index'),
+            icon: Package,
+            active: route().current('inventory.reports.visibility.*')
+        });
+        salesAndFinanceItems.push({
             name: 'Variance Logs',
             href: route('inventory.reports.variance-logs.index'),
             icon: AlertTriangle,
