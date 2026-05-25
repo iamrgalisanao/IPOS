@@ -1,8 +1,9 @@
 # Slice D Planning Lock: Low-Stock and Reorder Read-Only Dashboard
 
-Status: Proposed Scope Lock
+Status: Closed - Implemented & Locally Validated
 Date: 2026-05-25
 Parent Plan: `docs/roadmap/market-readiness-inventory-operations-priority-plan.md`
+Closure Evidence: `docs/validation/low-stock-reorder-dashboard-closure.md`
 
 ## 1. Purpose
 
@@ -107,8 +108,19 @@ Before implementation starts, confirm:
 4. Test targets are defined for permission and scope boundaries.
 5. Export decision (include/defer) is explicitly approved.
 
-## 11. Decision
+## 11. Closure Decision
 
-Slice D is ready for review as a planning lock.
+Slice D was implemented as a read-only extension of the existing Inventory
+Overview Dashboard.
 
-Implementation should begin only after this planning lock is accepted.
+Validation evidence:
+
+1. `php artisan test tests/Feature/Inventory/InventoryDashboardTest.php tests/Feature/Inventory/InventoryHubTest.php tests/Feature/Inventory/StocktakeReportTest.php` passed: 13 tests, 133 assertions.
+2. `npm run build` passed.
+
+Closure accepted with boundaries preserved:
+
+1. No stock mutation workflow was added.
+2. No procurement automation or auto-reorder behavior was introduced.
+3. No stocktake, accounting, tax, receipt, compliance, or offline engine behavior changed.
+4. Cost/value context remains gated by `audit_inventory`.

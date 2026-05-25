@@ -1,6 +1,6 @@
 # Market Readiness Inventory Operations Priority Plan
 
-Status: In Progress (Priority 2 Implemented Locally)
+Status: In Progress (Priority 3 Implemented Locally)
 Date: 2026-05-25
 
 ## 1. Purpose
@@ -89,6 +89,10 @@ Boundaries:
 
 ### Priority 3: Low-Stock and Reorder Dashboard
 
+Status:
+
+Implemented and locally validated on 2026-05-25.
+
 Objective:
 
 Expose low-stock, negative-stock, reorder level, and branch-level stock risk in
@@ -173,7 +177,7 @@ Status: Completed (local validation passed)
 
 ### Slice D: Low-Stock and Reorder Read-Only Dashboard
 
-Status: Planning lock created; implementation pending acceptance
+Status: Completed (local validation passed)
 
 Planning lock:
 
@@ -215,6 +219,6 @@ Planning lock:
 
 ## 7. Recommended Next Action
 
-Review and accept Slice D planning lock for the Low-Stock and Reorder
-Read-Only Dashboard, then implement only after data sources, role boundaries,
-acceptance criteria, and non-goal boundaries are reviewed.
+Create Slice E as a formal planning lock for the Branch Stock Movement Summary,
+then implement only after data sources, role boundaries, acceptance criteria,
+and non-goal boundaries are reviewed.
