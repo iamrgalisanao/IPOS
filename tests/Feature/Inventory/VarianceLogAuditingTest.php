@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\RbacSeeder;
 use App\Services\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class VarianceLogAuditingTest extends TestCase
@@ -70,6 +71,12 @@ class VarianceLogAuditingTest extends TestCase
             ->get(route('inventory.reports.variance-logs.index'));
 
         $response->assertOk();
+        $response->assertInertia(fn (Assert $page) => $page
+            ->component('Inventory/VarianceLogs/Index')
+            ->has('logs.data')
+            ->has('branches')
+            ->has('filters')
+        );
     }
 
     public function test_logs_are_immutable_and_cannot_be_updated_or_deleted(): void

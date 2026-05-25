@@ -5,6 +5,7 @@ import {
     AlertTriangle, 
     Search,
     Download,
+    Printer,
     Calendar,
     GitBranch,
     RefreshCw
@@ -50,6 +51,10 @@ export default function Index({ auth, logs, branches, filters }) {
         window.location.href = `${route('inventory.reports.variance-logs.export')}?${queryParams}`;
     };
 
+    const handlePrint = () => {
+        window.print();
+    };
+
     return (
         <AuthenticatedLayout
             user={auth.user}
@@ -59,22 +64,38 @@ export default function Index({ auth, logs, branches, filters }) {
                         <h2 className="font-extrabold text-2xl text-slate-800 leading-tight tracking-tight">Inventory Variance Logs</h2>
                         <p className="text-sm text-slate-500 font-medium mt-1">Audit log records of POS recipe inventory shortfalls under Soft-Negative policies.</p>
                     </div>
-                    <button
-                        onClick={handleExport}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-600/20 transition-all active:scale-95"
-                    >
-                        <Download size={18} />
-                        Export CSV
-                    </button>
+                    <div className="flex items-center gap-2 print:hidden">
+                        <button
+                            onClick={handlePrint}
+                            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all"
+                        >
+                            <Printer size={16} />
+                            Print View
+                        </button>
+                        <button
+                            onClick={handleExport}
+                            className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-600/20 transition-all active:scale-95"
+                        >
+                            <Download size={18} />
+                            Export CSV
+                        </button>
+                    </div>
                 </div>
             }
         >
             <Head title="Inventory Variance Logs" />
 
-            <div className="py-8">
+            <div className="py-8 print:py-0">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="hidden print:block mb-4 border-b border-slate-300 pb-3">
+                        <h1 className="text-lg font-black text-slate-900">Inventory Variance Logs</h1>
+                        <p className="text-xs text-slate-500 mt-1">
+                            Generated {new Date().toLocaleString()} • This report reflects current filter scope.
+                        </p>
+                    </div>
+
                     {/* Filter Bar */}
-                    <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm mb-8 space-y-4">
+                    <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm mb-8 space-y-4 print:hidden">
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                             <div className="relative">
                                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
@@ -153,7 +174,7 @@ export default function Index({ auth, logs, branches, filters }) {
                     </div>
 
                     {/* Table */}
-                    <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
+                    <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden print:rounded-none print:border-slate-300 print:shadow-none">
                         <div className="overflow-x-auto">
                             <table className="w-full text-left border-collapse text-xs">
                                 <thead>
@@ -174,7 +195,7 @@ export default function Index({ auth, logs, branches, filters }) {
                                 <tbody className="divide-y divide-slate-50">
                                     {logs.data.length > 0 ? (
                                         logs.data.map((log) => (
-                                            <tr key={log.id} className="hover:bg-slate-50/50 transition-colors group">
+                                            <tr key={log.id} className="hover:bg-slate-50/50 transition-colors group print:break-inside-avoid">
                                                 <td className="px-6 py-4 whitespace-nowrap text-slate-500 font-medium">
                                                     {new Date(log.created_at).toLocaleString()}
                                                 </td>
@@ -245,6 +266,11 @@ export default function Index({ auth, logs, branches, filters }) {
                                 </tbody>
                             </table>
                         </div>
+                    </div>
+
+                    <div className="hidden print:flex mt-3 justify-between text-[10px] text-slate-500">
+                        <span>Rows: {logs.data.length}</span>
+                        <span>IPOS Inventory Reports</span>
                     </div>
                 </div>
             </div>

@@ -546,6 +546,89 @@ class ProductCompositionReportTest extends TestCase
         $this->assertSame('10', $data[13]); // Branch Stock remains visible
     }
 
+    public function test_index_masks_cost_fields_without_audit_permission(): void
+    {
+        app(TenantContext::class)->setTenant($this->tenant);
+
+        $category = ProductCategory::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'status' => 'active',
+        ]);
+
+        $parent = Product::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'product_category_id' => $category->id,
+            'name' => 'Burger',
+            'sku' => 'BURGER',
+            'unit_of_measure' => 'piece',
+            'is_sellable' => true,
+            'status' => 'active',
+        ]);
+
+        $ingredient = Product::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'product_category_id' => $category->id,
+            'name' => 'Beef',
+            'sku' => 'BEEF',
+            'unit_of_measure' => 'piece',
+            'is_sellable' => false,
+            'status' => 'active',
+            'cost_price' => 20,
+        ]);
+
+        ProductRecipe::create([
+            'tenant_id' => $this->tenant->id,
+            'product_id' => $parent->id,
+            'ingredient_id' => $ingredient->id,
+            'quantity' => 2,
+            'unit' => 'piece',
+        ]);
+
+        BranchInventory::create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branch->id,
+            'product_id' => $ingredient->id,
+            'current_stock' => 10,
+            'average_cost' => 12.5,
+            'reorder_level' => 2,
+            'status' => 'active',
+        ]);
+
+        $viewer = User::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'actor_type' => 'tenant_user',
+            'status' => 'active',
+        ]);
+        $role = Role::create([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Inventory Report Viewer Index',
+            'description' => 'Can view inventory composition report page without cost access',
+        ]);
+        $role->permissions()->attach(Permission::where('name', 'view_inventory_reports')->firstOrFail());
+
+        $viewer->assignRole($role);
+        $viewer->branches()->attach($this->branch->id);
+
+        app(TenantContext::class)->clear();
+
+        $response = $this->actingAs($viewer)
+            ->withHeader('X-Tenant-ID', $this->tenant->id)
+            ->get(route('inventory.reports.product-composition.index', [
+                'branch_id' => $this->branch->id,
+            ]));
+
+        $response->assertOk();
+        $response->assertInertia(fn (Assert $page) => $page
+            ->component('Inventory/ProductComposition/Index')
+            ->where('permissions.can_view_costs', false)
+            ->where('rows.data.0.branch_average_cost', null)
+            ->where('rows.data.0.fallback_cost_price', null)
+            ->where('rows.data.0.cost_status', null)
+            ->where('rows.data.0.effective_cost_per_parent_unit', null)
+            ->where('rows.data.0.branch_current_stock', 10)
+        );
+    }
+
     public function test_csv_export_enforces_configured_row_ceiling(): void
     {
         config(['reports.product_composition_export_max_rows' => 1]);

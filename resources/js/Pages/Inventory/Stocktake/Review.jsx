@@ -159,13 +159,16 @@ export default function Review({ auth, session, lines, reasonCodes }) {
                     </div>
 
                     <div className="flex items-center gap-3">
-                        <Link
-                            href={route('inventory.stocktakes.summary', session.id)}
-                            className="inline-flex items-center gap-2 px-4 py-2.5 text-slate-600 text-sm font-bold rounded-xl hover:bg-slate-100 transition-all"
-                        >
-                            <Printer size={18} />
-                            View Summary
-                        </Link>
+                        <div className="flex flex-col items-start">
+                            <Link
+                                href={route('inventory.stocktakes.summary', session.id)}
+                                className="inline-flex items-center gap-2 px-4 py-2.5 text-slate-600 text-sm font-bold rounded-xl hover:bg-slate-100 transition-all"
+                            >
+                                <Printer size={18} />
+                                View Summary
+                            </Link>
+                            <span className="text-[10px] font-medium text-slate-400 px-4">Print-ready summary view</span>
+                        </div>
 
                         <a
                             href={route('inventory.stocktakes.export.variance-csv', session.id)}

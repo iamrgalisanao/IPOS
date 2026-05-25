@@ -5,6 +5,7 @@ import {
   Search,
   RefreshCw,
   Download,
+  Printer,
   AlertTriangle,
   GitBranch,
   Package,
@@ -89,6 +90,10 @@ export default function ProductCompositionIndex({
     window.location.href = url;
   };
 
+  const printReport = () => {
+    window.print();
+  };
+
   const formatNumber = (value, decimals = 4) => {
     if (value === null || value === undefined || value === '') {
       return '—';
@@ -114,20 +119,41 @@ export default function ProductCompositionIndex({
               Read-only composition report with optional branch stock and cost context.
             </p>
           </div>
-          <button
-            onClick={exportCsv}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-600/20 transition-all active:scale-95"
-          >
-            <Download size={16} />
-            Export CSV
-          </button>
+          <div className="flex items-center gap-2 print:hidden">
+            <button
+              onClick={printReport}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all"
+            >
+              <Printer size={16} />
+              Print View
+            </button>
+            <button
+              onClick={exportCsv}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-600/20 transition-all active:scale-95"
+            >
+              <Download size={16} />
+              Export CSV
+            </button>
+          </div>
         </div>
       }
     >
       <Head title="Product Ingredient Composition" />
 
-      <div className="py-8">
+      <div className="py-8 print:py-0">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+          <section className="hidden print:block border-b border-slate-300 pb-3">
+            <h1 className="text-lg font-black text-slate-900">Product Ingredient Composition</h1>
+            <p className="text-xs text-slate-500 mt-1">
+              Generated {new Date().toLocaleString()} • Expansion mode: {expansionMode === 'flatten_subrecipes' ? 'Flatten Sub-Recipes' : 'Direct Only'}
+            </p>
+            {!canViewCosts && (
+              <p className="text-xs text-slate-500 mt-1">
+                Cost fields are masked for this role in both on-screen and printed views.
+              </p>
+            )}
+          </section>
+
           {semantics?.mode === 'flatten_subrecipes' && semantics?.banner && (
             <section className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
               <div className="flex items-start gap-2">
@@ -137,7 +163,7 @@ export default function ProductCompositionIndex({
             </section>
           )}
 
-          <section className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
+          <section className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm print:hidden">
             <form onSubmit={applyFilters} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
                 <div className="lg:col-span-2">
@@ -242,7 +268,7 @@ export default function ProductCompositionIndex({
             </form>
           </section>
 
-          <section className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
+          <section className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden print:rounded-none print:border-slate-300 print:shadow-none">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur">
@@ -272,7 +298,7 @@ export default function ProductCompositionIndex({
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {data.length > 0 ? data.map((row, idx) => (
-                    <tr key={`${row.parent_product_id}-${row.ingredient_id}-${idx}`} className="hover:bg-slate-50/50">
+                    <tr key={`${row.parent_product_id}-${row.ingredient_id}-${idx}`} className="hover:bg-slate-50/50 print:break-inside-avoid">
                       <td className="px-4 py-3 align-top">
                         <div className="flex items-center gap-2 font-bold text-slate-700">
                           <Package size={13} className="text-slate-400" />
@@ -368,7 +394,7 @@ export default function ProductCompositionIndex({
               </table>
             </div>
 
-            <div className="flex flex-col gap-3 border-t border-slate-100 px-4 py-3 text-xs sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 border-t border-slate-100 px-4 py-3 text-xs sm:flex-row sm:items-center sm:justify-between print:hidden">
               <p className="font-semibold text-slate-500">
                 Showing {rows.from || 0} to {rows.to || 0} of {rows.total || 0} rows
               </p>
@@ -393,6 +419,10 @@ export default function ProductCompositionIndex({
               </div>
             </div>
           </section>
+
+          <p className="hidden print:block text-[10px] text-slate-500">
+            Rows shown: {rows.from || 0} to {rows.to || 0} of {rows.total || 0}
+          </p>
         </div>
       </div>
     </AuthenticatedLayout>
