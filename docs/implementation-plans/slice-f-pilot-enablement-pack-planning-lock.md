@@ -1,6 +1,6 @@
 # Slice F Planning Lock: Pilot Enablement Pack
 
-Status: Proposed Scope Lock
+Status: Closed (Implemented as Documentation and Enablement Assets)
 Date: 2026-05-25
 Parent Plan: `docs/roadmap/market-readiness-inventory-operations-priority-plan.md`
 
@@ -108,8 +108,25 @@ Before implementation starts, confirm:
 4. Reviewer/approver roles for enablement materials are defined.
 5. Closure evidence format is defined before execution.
 
-## 11. Decision
+## 11. Implementation Closure Evidence
 
-Slice F is ready for review as a planning lock.
+Implementation and governance evidence:
 
-Implementation should begin only after this planning lock is accepted.
+1. Closure report:
+   `docs/validation/pilot-enablement-pack-closure.md`
+2. Overview and ownership inventory:
+   `docs/user-enablement/pilot-enablement-pack-overview.md`
+3. Screenshot capture pack:
+   `docs/user-enablement/inventory-pilot-screenshot-capture-pack.md`
+4. Branch manager demo script:
+   `docs/user-enablement/inventory-pilot-branch-manager-demo-script.md`
+5. Pilot checklist addendum:
+   `docs/user-enablement/inventory-pilot-checklist-addendum.md`
+6. Escalation and rollback notes:
+   `docs/user-enablement/inventory-pilot-escalation-and-rollback-notes.md`
+
+## 12. Decision
+
+Slice F is closed as implemented within documentation-only boundaries.
+
+No runtime code changes were introduced in this slice.
