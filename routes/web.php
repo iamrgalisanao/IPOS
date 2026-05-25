@@ -187,6 +187,15 @@ Route::middleware(['auth', 'tenant'])->group(function () {
             ->name('export');
     });
 
+    Route::prefix('reports/product-mix')->name('reports.product-mix.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Reports\ProductMixReportController::class, 'index'])
+            ->middleware('permission:view_sales_history')
+            ->name('index');
+        Route::get('/export', [\App\Http\Controllers\Reports\ProductMixReportController::class, 'export'])
+            ->middleware('permission:export_sales_history')
+            ->name('export');
+    });
+
     Route::prefix('sales/history')->name('sales.history.')->group(function () {
         Route::get('/', [\App\Http\Controllers\Sales\SalesHistoryController::class, 'index'])
             ->middleware('permission:view_sales_history')

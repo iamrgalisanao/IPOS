@@ -4,6 +4,7 @@ import { Link, usePage } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
 import {
     LayoutDashboard,
+    BarChart3,
     Clock,
     Receipt,
     Layers,
@@ -170,6 +171,7 @@ export default function AuthenticatedLayout({ header, children }) {
     const salesAndFinanceItems = [];
     if (permissions.includes('view_sales_history')) {
         salesAndFinanceItems.push({ name: 'Sales Summary', href: route('reports.sales-summary.index'), icon: PieChart, active: route().current('reports.sales-summary.*') });
+        salesAndFinanceItems.push({ name: 'Product Mix', href: route('reports.product-mix.index'), icon: BarChart3, active: route().current('reports.product-mix.*') });
         salesAndFinanceItems.push({ name: 'Transaction Audit Log', href: route('sales.history.index'), icon: Receipt, active: route().current('sales.history.*') });
     }
     if (permissions.includes('view_settlement_periods')) {

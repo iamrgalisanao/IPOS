@@ -418,4 +418,148 @@ Final implemented behavior and validation evidence are recorded in:
 
 1. `docs/validation/transaction-audit-log-hardening-closure.md`
 
+
+# Slice R3 Planning Lock: Product Mix Report
+
+## 1. Status
+
+Implemented and locally validated.
+
+Closure evidence is recorded in `docs/validation/product-mix-report-closure.md`.
+
+## 2. Purpose
+
+Create a read-only Product Mix Report that summarizes product/category sales performance using only existing stored sales and sale item data. This report deepens management insight without touching high-risk or compliance-sensitive areas.
+
+## 3. Scope
+
+### Must Include
+
+1. Product-level performance table:
+   - product name
+   - SKU/code if available
+   - category if available
+   - quantity sold
+   - gross sales
+   - discounts
+   - net sales
+   - refund/void quantity if available from existing data
+   - average selling price
+
+2. Filters:
+   - date range
+   - branch
+   - category if available
+   - product search
+   - status if needed to exclude non-final transactions
+
+3. Summary cards:
+   - total quantity sold
+   - total gross sales
+   - total net sales
+   - number of unique products sold
+   - top-selling product
+   - highest revenue product
+
+4. Outputs:
+   - CSV export
+   - print-friendly layout
+
+5. Navigation:
+   - Add under Reports Center / Sales Reports
+   - Link back to Sales Summary Report
+   - Preserve Transaction Audit Log as separate audit surface
+
+## 4. Hard Boundaries (Explicit Non-Goals)
+
+- No transaction mutation
+- No tax engine changes
+- No settlement mutation
+- No accounting sync changes
+- No inventory mutation
+- No recipe deduction changes
+- No product catalog mutation
+- No scheduled report automation
+- No PDF generation
+- No BIR certification or compliance-format claim
+
+## 5. Data Source Review
+
+Review and document current data sources for:
+
+- Sale and SaleItem models
+- Product/category fields (if available)
+- Discount and refund/void indicators (if available)
+- Branch and tenant scoping
+
+If any required field is unavailable, mark as `Deferred / unavailable from current source`.
+
+## 6. Permission and Tenant Boundary
+
+1. Report must remain tenant-scoped.
+2. Branch filtering must respect user permissions and branch assignments.
+3. Unauthorized users must not access the report or export.
+4. Exports must use the same permission boundary as the screen report.
+
+## 7. Acceptance Criteria
+
+1. All required fields and summary cards are present and accurate.
+2. Filters and navigation match scope.
+3. Permission and branch/tenant boundaries are strictly enforced.
+4. CSV export matches on-screen data and boundaries.
+5. No mutation or compliance-format changes.
+6. All new/clarified behaviors are covered by tests.
+
+## 8. Recommended Tests
+
+- unauthorized users cannot access Product Mix Report
+- report is tenant-scoped
+- branch-limited users only see assigned branch sales
+- product totals are computed only from scoped sales
+- CSV export respects same filters and permissions
+- void/refund handling follows existing stored status/reversal data only
+- no mutation endpoints are introduced
+
+## 9. Planning-Task Boundary Confirmation
+
+Confirmed for this planning lock task:
+
+1. No runtime mutation logic is changed.
+2. No schema changes are introduced.
+3. No tax/settlement/accounting/compliance logic is altered.
+4. No scheduled reporting or automation is implemented.
+5. No inventory/product catalog logic is changed.
+
+## 10. Implementation Closure Evidence
+
+Implemented:
+
+1. New read-only route group:
+   - `reports.product-mix.index`
+   - `reports.product-mix.export`
+2. New controller:
+   - `app/Http/Controllers/Reports/ProductMixReportController.php`
+3. New service:
+   - `app/Services/Sales/ProductMixReportService.php`
+4. New Inertia page:
+   - `resources/js/Pages/Reports/ProductMix/Index.jsx`
+5. New focused tests:
+   - `tests/Feature/Reports/ProductMixReportTest.php`
+
+Validation:
+
+1. `php artisan test tests/Feature/Reports/ProductMixReportTest.php tests/Feature/Reports/SalesSummaryReportTest.php tests/Feature/Sales/SalesHistoryControllerTest.php tests/Feature/Sales/SalesHistoryExportTest.php`
+   - 15 tests passed.
+   - 210 assertions passed.
+2. `npm run build`
+   - passed.
+
+Closure report:
+
+1. `docs/validation/product-mix-report-closure.md`
+
+Next recommended gate:
+
+1. `Slice R4: Sales by Hour and Weekday`
+
 ---
