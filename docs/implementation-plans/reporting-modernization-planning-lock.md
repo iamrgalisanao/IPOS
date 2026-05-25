@@ -2,7 +2,7 @@
 
 ## 1. Status
 
-Proposed / Planning Lock
+Accepted - Slice R1 Implemented and Locally Validated
 
 Date: 2026-05-25
 
@@ -16,11 +16,11 @@ The existing `Transaction History` surface must be preserved and repositioned as
 an audit-first surface (`Transaction Audit Log`) rather than treated as the main
 reporting module.
 
-This planning lock prepares the first implementation slice:
+This planning lock prepared the first implementation slice:
 
 `Slice R1: Sales Summary Report`
 
-No runtime implementation is approved in this task.
+Slice R1 has now been implemented and locally validated. Closure evidence is recorded in `docs/validation/sales-summary-report-closure.md`.
 
 ## 3. Current State Assessment
 
@@ -276,3 +276,35 @@ Confirmed for this planning lock task:
 4. No schema changes were introduced.
 5. No tax/settlement/accounting behavior was altered.
 6. No scheduling/report automation was implemented.
+
+## 14. Slice R1 Implementation Closure Evidence
+
+Implemented:
+
+1. New read-only route group:
+   - `reports.sales-summary.index`
+   - `reports.sales-summary.export`
+2. New controller:
+   - `app/Http/Controllers/Reports/SalesSummaryReportController.php`
+3. New service:
+   - `app/Services/Sales/SalesSummaryReportService.php`
+4. New Inertia page:
+   - `resources/js/Pages/Reports/SalesSummary/Index.jsx`
+5. New focused tests:
+   - `tests/Feature/Reports/SalesSummaryReportTest.php`
+
+Validation:
+
+1. `php artisan test tests/Feature/Reports/SalesSummaryReportTest.php tests/Feature/Sales/SalesHistoryControllerTest.php tests/Feature/Sales/SalesHistoryExportTest.php`
+   - 10 tests passed.
+   - 114 assertions passed.
+2. `npm run build`
+   - passed.
+
+Closure report:
+
+1. `docs/validation/sales-summary-report-closure.md`
+
+Next recommended gate:
+
+1. `Slice R2: Transaction Audit Log Hardening`

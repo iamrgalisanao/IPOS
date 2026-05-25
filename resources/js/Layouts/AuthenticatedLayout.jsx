@@ -169,6 +169,7 @@ export default function AuthenticatedLayout({ header, children }) {
     // Dynamically filter Sales & Finance Items
     const salesAndFinanceItems = [];
     if (permissions.includes('view_sales_history')) {
+        salesAndFinanceItems.push({ name: 'Sales Summary', href: route('reports.sales-summary.index'), icon: PieChart, active: route().current('reports.sales-summary.*') });
         salesAndFinanceItems.push({ name: 'Sales History', href: route('sales.history.index'), icon: Receipt, active: route().current('sales.history.*') });
     }
     if (permissions.includes('view_settlement_periods')) {

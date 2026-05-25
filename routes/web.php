@@ -178,6 +178,15 @@ Route::middleware(['auth', 'tenant'])->group(function () {
         });
     });
 
+    Route::prefix('reports/sales-summary')->name('reports.sales-summary.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Reports\SalesSummaryReportController::class, 'index'])
+            ->middleware('permission:view_sales_history')
+            ->name('index');
+        Route::get('/export', [\App\Http\Controllers\Reports\SalesSummaryReportController::class, 'export'])
+            ->middleware('permission:export_sales_history')
+            ->name('export');
+    });
+
     Route::prefix('sales/history')->name('sales.history.')->group(function () {
         Route::get('/', [\App\Http\Controllers\Sales\SalesHistoryController::class, 'index'])
             ->middleware('permission:view_sales_history')

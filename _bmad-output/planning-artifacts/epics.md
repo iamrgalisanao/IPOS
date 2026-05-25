@@ -239,8 +239,9 @@
 
 ### Reporting Modernization Track (G-071) [In Progress]
 - [x] Planning Lock: Reporting Modernization [Created]
-- [ ] Planning Lock Review and Acceptance [Next]
-- [ ] Slice R1 Implementation: Sales Summary Report [Pending Acceptance]
+- [x] Planning Lock Review and Acceptance [Accepted]
+- [x] Slice R1 Implementation: Sales Summary Report [Implemented & Locally Validated]
+- [ ] Slice R2 Planning Lock: Transaction Audit Log Hardening [Next]
 
 ### Epic 21: Branch Comparison Business Intelligence [Planned]
 - [ ] 21.1 Cross-Branch Financial Aggregations [Planned]
