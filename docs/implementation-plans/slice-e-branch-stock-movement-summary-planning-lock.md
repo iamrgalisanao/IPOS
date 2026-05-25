@@ -1,6 +1,6 @@
 # Slice E Planning Lock: Branch Stock Movement Summary
 
-Status: Proposed Scope Lock
+Status: Closed (Implemented and Locally Validated)
 Date: 2026-05-25
 Parent Plan: `docs/roadmap/market-readiness-inventory-operations-priority-plan.md`
 
@@ -105,8 +105,27 @@ Before implementation starts, confirm:
 4. Test targets for access and scope boundaries are defined.
 5. Export inclusion/defer decision is explicitly approved.
 
-## 11. Decision
+## 11. Implementation Closure Evidence
 
-Slice E is ready for review as a planning lock.
+Implementation and validation evidence:
 
-Implementation should begin only after this planning lock is accepted.
+1. Closure report:
+   `docs/validation/branch-stock-movement-summary-closure.md`
+2. Backend/controller changes:
+   `app/Http/Controllers/Inventory/InventoryDashboardController.php`
+3. Dashboard UI updates:
+   `resources/js/Pages/Inventory/Dashboard/Index.jsx`
+4. Focused feature coverage:
+   `tests/Feature/Inventory/InventoryDashboardTest.php`
+5. Validation commands completed:
+   - `php artisan test tests/Feature/Inventory/InventoryDashboardTest.php tests/Feature/Inventory/InventoryHubTest.php tests/Feature/Inventory/StocktakeReportTest.php`
+     -> 15 passed, 169 assertions.
+   - `npm run build` -> passed.
+
+## 12. Decision
+
+Slice E is closed as implemented and locally validated within the approved
+read-only boundaries.
+
+Recommended next step: proceed to Slice F planning lock for pilot enablement
+documentation and training-safe screenshot capture.

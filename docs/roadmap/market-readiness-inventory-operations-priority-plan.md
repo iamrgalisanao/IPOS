@@ -1,6 +1,6 @@
 # Market Readiness Inventory Operations Priority Plan
 
-Status: In Progress (Priority 3 Implemented Locally)
+Status: In Progress (Priority 4 Implemented Locally)
 Date: 2026-05-25
 
 ## 1. Purpose
@@ -111,6 +111,10 @@ Boundaries:
 
 ### Priority 4: Branch Stock Movement Summary
 
+Status:
+
+Implemented and locally validated on 2026-05-25.
+
 Objective:
 
 Provide a branch-scoped movement summary across receiving, stocktake,
@@ -192,7 +196,7 @@ Planning lock:
 
 ### Slice E: Branch Movement Summary
 
-Status: Planning lock created; implementation pending acceptance
+Status: Completed (local validation passed)
 
 Planning lock:
 
@@ -225,6 +229,6 @@ Planning lock:
 
 ## 7. Recommended Next Action
 
-Review and accept Slice E planning lock for the Branch Stock Movement Summary,
-then implement only after data sources, role boundaries, acceptance criteria,
-and non-goal boundaries are reviewed.
+Create Slice F planning lock for pilot enablement pack execution (training-safe
+screenshots, manager demo script, pilot checklist addendum, and support
+escalation notes) with explicit no-production-data boundary confirmation.
