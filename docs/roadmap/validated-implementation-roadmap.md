@@ -39,6 +39,33 @@ This document represents the **Actual Execution Truth** of the IPOS project. It 
 
 *Epic 3 is closed as a Product/Catalog Core Foundation epic. Backend product/catalog capabilities are implemented and validated via downstream dependencies (POS, Stocktake, Accounting). Advanced UX/CDN/Product CRUD management UI is deferred and should be tracked separately as a future management feature.*
 
+## Current Proposed Planning Direction
+
+**Market Readiness Inventory Operations Planning** is the next proposed planning
+track after Story 31.7 and the vendor report gap analysis.
+
+This is not a broad new engine epic. It is a bounded pilot-marketability track
+focused on making existing inventory capabilities easier to find, explain, print,
+and use in branch operations.
+
+Planning artifact:
+- [market-readiness-inventory-operations-priority-plan.md](market-readiness-inventory-operations-priority-plan.md)
+
+Priority order:
+1. Unified inventory and reporting hub.
+2. Print-friendly stocktake and inventory report views.
+3. Low-stock and reorder dashboard.
+4. Branch stock movement summary.
+5. Stocktake screenshots and pilot training pack.
+
+Explicitly parked or excluded:
+1. Recursive POS recipe deduction.
+2. Auto-reorder purchasing mutation.
+3. Catalog import write path.
+4. Tax, Z-read, GCT, receipt, e-journal, accounting, or subscription engine changes.
+5. Broad offline-sales rollout.
+6. BIR certification claims.
+
 ---
 
 ## Epic 1: SaaS Foundation & Fail-Closed Tenant Isolation [Closed]
@@ -483,7 +510,7 @@ Story 29.1 provides the tenant creation foundation only. Branch/owner onboarding
 
 ### Story 29.1A: Feature Gate Enforcement Coverage Hardening [Substantially Complete — Optional POS Shell Gating Deferred]
 
-**Status:** Implemented & Locally Validated — Substantially Complete (Optional full POS shell gating deferred)
+**Status:** Closed — Wave 1 + Wave 2 Slices A-D Implemented & Target-Locally Validated
 
 **Scope Overview:**
 Hardens subscription feature enforcement across five configured features: `sales.pos`, `catalog.view`, `catalog.edit`, `reports.*`, `procurement.*` by mapping routes to gating middleware and UI visibility.
@@ -502,7 +529,7 @@ Hardens subscription feature enforcement across five configured features: `sales
 - Slice A: High-confidence catalog write routes (`catalog.edit`)
 - Slice B: Catalog read routes (`catalog.view`) with dependency classification
 - Slice C: POS checkout-only (`sales.pos`)
-- Slice D: Optional full POS shell gating (post-C validation)
+- Slice D: POS shell/supporting route gating (`sales.pos`)
 
 **Implementation & Closure (Completed):**
 - Wave 1: Reports, procurement, layout custom features gated and validated
@@ -510,9 +537,8 @@ Hardens subscription feature enforcement across five configured features: `sales
 - Slice B Phase B1: `catalog.view` safe index routes gated and validated
 - Slice B Phase B2: product create/edit form routes gated with `catalog.edit` and validated
 - Slice C: POS checkout-sensitive routes gated with `sales.pos` and validated
-
-**Residual Feature-Gate Follow-Up:**
-- Slice D: Optional full POS shell gating (deferred pending explicit future approval; non-blocking enhancement)
+- Slice D: POS shell/search/active-shift/bootstrap/offline-sync routes gated with
+  `sales.pos` and validated
 
 **Wave 2 — Slice A (Complete):**
 Implemented `subscription.feature:catalog.edit` gating on admin product/category write endpoints:
@@ -569,7 +595,8 @@ Implemented `subscription.feature:sales.pos` gating on POS checkout-sensitive ro
 - `GET /pos/sales/{sale_id}/receipt`
 - `POST /pos/sales/{sale_id}/payments`
 - `POST /pos/sales/{sale_id}/payments/split`
-- Preserved POS shell/search/active-shift/bootstrap/offline-sync routes unchanged
+- POS shell/search/active-shift/bootstrap/offline-sync routes were deferred to
+  Slice D and subsequently closed.
 
 **Validation Evidence (Slice C):**
 - RouteFeatureGateTest.php: 25 tests / 63 assertions passing
@@ -578,16 +605,33 @@ Implemented `subscription.feature:sales.pos` gating on POS checkout-sensitive ro
 **Closure Artifact:**
 - [docs/validation/story-29.1a-wave-2-slice-c-sales-pos-checkout-gating-closure.md](../validation/story-29.1a-wave-2-slice-c-sales-pos-checkout-gating-closure.md)
 
-**Wave 2 — Slice D (Deferred):**
-Optional full POS shell gating remains deferred pending explicit future approval as a non-blocking enhancement.
+**Wave 2 — Slice D (Implemented & Validated):**
+Implemented `subscription.feature:sales.pos` gating on POS shell/supporting routes:
+- `GET /pos`
+- `GET /pos/search`
+- `GET /pos/active-shift`
+- `GET /pos/bootstrap-cache`
+- `POST /api/pos/offline-sync`
+
+Also updated authenticated navigation so the POS Terminal entry requires the
+`sales.pos` feature entitlement, and updated System Admin tenant provisioning
+feature coverage to compute live route middleware coverage instead of static
+feature notes.
+
+**Validation Evidence (Slice D):**
+- `php artisan test tests/Feature/Subscription/RouteFeatureGateTest.php tests/Feature/SystemAdmin/TenantProvisioningTest.php`: 36 passed / 160 assertions
+- `npm run build`: passing
+
+**Closure Artifact:**
+- [docs/validation/story-29.1a-wave-2-slice-d-pos-shell-gating-closure.md](../validation/story-29.1a-wave-2-slice-d-pos-shell-gating-closure.md)
 
 **Governance Notes:**
-- Story 29.1A Wave 2 closure documented through Slice C with residual optional full POS shell gating deferred
+- Story 29.1A Wave 2 closure documented through Slice D with POS shell gating closed
 - Coverage map and closure artifacts updated through Wave 2 Slice C
 - Task ledger (G-060/G-061) reflects Story 29.1A completion and Story 29.2 unblocking
 - No entitlement-engine or billing behavior changes
 - Permission model unchanged; feature gates are layered on top
-- Residual feature-gate item (D only) is deferred as a non-blocking enhancement; tracked in governance artifacts and does not block Story 29.2
+- No residual Wave 2 feature-gate item remains open in this track.
 
 **Planning Artifacts:**
 - [story-29.1a-feature-gate-enforcement-coverage-hardening-scope-lock.md](../_bmad-output/planning-artifacts/story-29.1a-feature-gate-enforcement-coverage-hardening-scope-lock.md)
@@ -606,12 +650,10 @@ Optional full POS shell gating remains deferred pending explicit future approval
 **Status:** Implemented & Target-Locally Validated
 
 **Governance Decision:**
-Story 29.2 onboarding implementation is accepted for the targeted domain (System Admin provisioning/onboarding and related payment/audit checks). The optional full POS shell gate from Story 29.1A remains deferred and non-blocking for Story 29.2 acceptance.
+Story 29.2 onboarding implementation is accepted for the targeted domain (System Admin provisioning/onboarding and related payment/audit checks). Story 29.1A POS shell gating was later closed in Wave 2 Slice D and remains compatible with this acceptance.
 
 **Residual Gaps Deferred:**
-- Slice D (optional full POS shell gate)
-
-These remain in the future hardening queue and are tracked in the feature gate coverage map and task ledger.
+- None for Story 29.1A Wave 2 feature-gate coverage.
 
 **Validation Evidence:**
 - `./vendor/bin/pest tests/Feature/SystemAdmin` -> 18 tests passing
@@ -772,7 +814,7 @@ Story 29.5 Slice C implements read-only readiness export and printable summary o
 - [epic-29-platform-tenant-provisioning-closure-report.md](../validation/epic-29-platform-tenant-provisioning-closure-report.md)
 
 **Final Governance Decision:**
-Epic 29 is implemented and locally validated. Feature-gate hardening is substantially complete, the full suite is clean, and optional full POS shell gating is deferred as a non-blocking future enhancement.
+Epic 29 is implemented and locally validated. Feature-gate hardening is closed through Story 29.1A Wave 2 Slice D, and the full suite baseline remains clean in the latest recorded governance evidence.
 
 ## Epic 30: System Admin Tenant Operations & Compliance Intelligence [Closed — Implemented & Locally Validated / 30.4 + 30.5 Planning-Locked Deferred]
 *Initialized: May 2026*
@@ -872,7 +914,6 @@ No persona enforcement, hardware enforcement, POS blocking, auto-remediation,
 auto-suspension, billing change, or offline/tax engine change is approved.
 
 **Non-Blocking Deferred Items:**
-- optional full POS shell gating
 - automated remediation
 - auto-suspension
 - mandatory hardware sync blocking
