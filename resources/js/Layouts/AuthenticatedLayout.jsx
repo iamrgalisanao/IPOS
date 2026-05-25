@@ -95,10 +95,10 @@ export default function AuthenticatedLayout({ header, children }) {
         catalogAndStockItems.push({ name: 'Product Catalog', href: route('admin.products.index'), icon: Package, active: route().current('admin.products.*') || route().current('admin.product-categories.*') });
     }
     if (permissions.includes('inventory.stocktake.view') || permissions.includes('manage_branch_inventory')) {
-        catalogAndStockItems.push({ name: 'Inventory', href: route('inventory.stocktakes.index'), icon: Layers, active: route().current('inventory.*') && !route().current('inventory.unit-conversions.*') });
+        catalogAndStockItems.push({ name: 'Stocktake', href: route('inventory.stocktakes.index'), icon: Layers, active: route().current('inventory.stocktakes.*') });
     }
     if (permissions.includes('view_branch_inventory') || permissions.includes('inventory.stocktake.view')) {
-        catalogAndStockItems.push({ name: 'Inventory Overview', href: route('inventory.dashboard.index'), icon: LayoutDashboard, active: route().current('inventory.dashboard.*') });
+        catalogAndStockItems.push({ name: 'Stock Visibility', href: route('inventory.dashboard.index'), icon: LayoutDashboard, active: route().current('inventory.dashboard.*') });
     }
     if (permissions.includes('manage_unit_conversions') || permissions.includes('manage_inventory')) {
         catalogAndStockItems.push({ name: 'Unit Conversions', href: route('inventory.unit-conversions.index'), icon: Scale, active: route().current('inventory.unit-conversions.*') });

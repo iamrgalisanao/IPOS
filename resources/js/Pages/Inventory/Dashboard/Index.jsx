@@ -119,7 +119,7 @@ export default function Index({
                             <LayoutDashboard size={12} />
                             Inventory Visibility
                         </div>
-                        <h2 className="mt-2 text-2xl font-bold leading-tight text-slate-900">Inventory Overview Dashboard</h2>
+                        <h2 className="mt-2 text-2xl font-bold leading-tight text-slate-900">Stock Visibility Dashboard</h2>
                         <p className="mt-1 text-sm text-slate-500">
                             Read-only summary view from existing inventory surfaces. No inventory mutation controls are enabled.
                         </p>
@@ -127,7 +127,7 @@ export default function Index({
                 </div>
             }
         >
-            <Head title="Inventory Overview" />
+            <Head title="Stock Visibility" />
 
             <div className="py-8">
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-6">
