@@ -114,7 +114,7 @@ class SalesSummaryReportService
             ->selectRaw('COALESCE(SUM(total), 0) as net_sales')
             ->selectRaw("SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) as paid_count")
             ->selectRaw("SUM(CASE WHEN status IN ('created', 'pending', 'draft') THEN 1 ELSE 0 END) as pending_count")
-            ->selectRaw("SUM(CASE WHEN status IN ('voided', 'refunded') OR is_reversal = 1 THEN 1 ELSE 0 END) as void_refund_count")
+            ->selectRaw("SUM(CASE WHEN status IN ('voided', 'refunded') OR is_reversal IS TRUE THEN 1 ELSE 0 END) as void_refund_count")
             ->selectRaw('COALESCE(SUM(discount_total), 0) as discount_total')
             ->first();
 

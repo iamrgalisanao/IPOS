@@ -88,6 +88,16 @@ class SalesSummaryReportTest extends TestCase
             'tax_total' => 0,
             'total' => 50,
         ]);
+        $this->sale([
+            'sale_number' => 'SALE-003',
+            'status' => 'paid',
+            'subtotal' => -20,
+            'gross_sales_amount' => -20,
+            'discount_total' => 0,
+            'tax_total' => 0,
+            'total' => -20,
+            'is_reversal' => true,
+        ]);
 
         $response = $this->actingAs($this->manager)
             ->get(route('reports.sales-summary.index'));
@@ -95,12 +105,13 @@ class SalesSummaryReportTest extends TestCase
         $response->assertOk();
         $response->assertInertia(fn (Assert $page) => $page
             ->component('Reports/SalesSummary/Index')
-            ->where('kpis.transaction_count', 2)
-            ->where('kpis.gross_sales', 150)
-            ->where('kpis.net_sales', 152)
-            ->where('kpis.paid_count', 1)
+            ->where('kpis.transaction_count', 3)
+            ->where('kpis.gross_sales', 130)
+            ->where('kpis.net_sales', 132)
+            ->where('kpis.paid_count', 2)
             ->where('kpis.pending_count', 1)
-            ->where('kpis.average_transaction_value', 76)
+            ->where('kpis.void_refund_count', 1)
+            ->where('kpis.average_transaction_value', 44)
             ->has('payment_breakdown', 1)
             ->where('payment_breakdown.0.payment_method_name', 'Cash')
             ->where('payment_breakdown.0.total_amount', 102)
