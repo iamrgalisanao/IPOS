@@ -40,6 +40,8 @@ export default function Index({
     const [status, setStatus] = useState(filters.status || 'all');
     const [priority, setPriority] = useState(filters.priority || 'all');
     const [days, setDays] = useState(String(filters.days || 30));
+    const [movementType, setMovementType] = useState(filters.movement_type || '');
+    const [sourceType, setSourceType] = useState(filters.source_type || '');
 
     const applyFilters = (e) => {
         e.preventDefault();
@@ -53,6 +55,8 @@ export default function Index({
                 status,
                 priority,
                 days,
+                movement_type: movementType || undefined,
+                source_type: sourceType || undefined,
             },
             {
                 preserveScroll: true,
@@ -68,6 +72,8 @@ export default function Index({
         setStatus('all');
         setPriority('all');
         setDays('30');
+        setMovementType('');
+        setSourceType('');
 
         router.get(
             route('inventory.dashboard.index'),
@@ -77,6 +83,8 @@ export default function Index({
                 status: 'all',
                 priority: 'all',
                 days: 30,
+                movement_type: undefined,
+                source_type: undefined,
             },
             {
                 preserveScroll: true,
@@ -133,7 +141,7 @@ export default function Index({
                                 Read-only filters use existing data paths and never trigger stock updates.
                             </p>
 
-                            <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-4 lg:grid-cols-8">
                                 <div>
                                     <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">Branch</label>
                                     <div className="relative">
@@ -214,6 +222,34 @@ export default function Index({
                                         <option value="7">Last 7 Days</option>
                                         <option value="30">Last 30 Days</option>
                                         <option value="90">Last 90 Days</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">Movement Type</label>
+                                    <select
+                                        value={movementType}
+                                        onChange={(e) => setMovementType(e.target.value)}
+                                        className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 focus:border-indigo-400 focus:ring-indigo-200"
+                                    >
+                                        <option value="">All Movement Types</option>
+                                        {(movementSummary.available_movement_types || []).map((option) => (
+                                            <option key={option} value={option}>{option}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">Source Type</label>
+                                    <select
+                                        value={sourceType}
+                                        onChange={(e) => setSourceType(e.target.value)}
+                                        className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 focus:border-indigo-400 focus:ring-indigo-200"
+                                    >
+                                        <option value="">All Sources</option>
+                                        {(movementSummary.available_source_types || []).map((option) => (
+                                            <option key={option} value={option}>{option}</option>
+                                        ))}
                                     </select>
                                 </div>
                             </div>
@@ -465,7 +501,7 @@ export default function Index({
                     </section>
 
                     <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-                        <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Movement Summary</h3>
+                        <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Branch Stock Movement Summary (Read-Only)</h3>
                         <p className="mt-2 text-xs text-slate-500">
                             Existing read-path movement summary for the selected branch over the last {movementSummary.period_days ?? 30} days.
                         </p>
@@ -488,6 +524,57 @@ export default function Index({
                                         </div>
                                     ) : (
                                         <p className="mt-2 text-xs font-semibold text-slate-500">No movement rows in this period.</p>
+                                    )}
+                                </div>
+
+                                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:col-span-3">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Top Source Types</p>
+                                    {movementSummary.source_type_counts && movementSummary.source_type_counts.length > 0 ? (
+                                        <div className="mt-2 flex flex-wrap gap-2">
+                                            {movementSummary.source_type_counts.map((row) => (
+                                                <span key={row.source_type} className="rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase tracking-wider text-slate-700 border border-slate-200">
+                                                    {row.source_type} ({row.total})
+                                                </span>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="mt-2 text-xs font-semibold text-slate-500">No source rows in this period.</p>
+                                    )}
+                                </div>
+
+                                <div className="rounded-2xl border border-slate-200 bg-white p-4 md:col-span-3">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Recent Movements</p>
+                                    {movementSummary.recent_movements && movementSummary.recent_movements.length > 0 ? (
+                                        <div className="mt-3 overflow-x-auto">
+                                            <table className="w-full text-left text-xs">
+                                                <thead>
+                                                    <tr className="border-b border-slate-100 text-[10px] uppercase tracking-widest text-slate-400">
+                                                        <th className="py-2">Time</th>
+                                                        <th className="py-2">Movement</th>
+                                                        <th className="py-2">Source</th>
+                                                        <th className="py-2">Product</th>
+                                                        <th className="py-2">Before</th>
+                                                        <th className="py-2">Change</th>
+                                                        <th className="py-2">After</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {movementSummary.recent_movements.map((row) => (
+                                                        <tr key={row.id} className="border-b border-slate-50">
+                                                            <td className="py-2 text-slate-500">{row.created_at ? new Date(row.created_at).toLocaleString() : 'N/A'}</td>
+                                                            <td className="py-2 font-semibold text-slate-700">{row.movement_type}</td>
+                                                            <td className="py-2 text-slate-600">{row.source_type}</td>
+                                                            <td className="py-2 text-slate-700">{row.product_name || 'Unknown'} <span className="text-slate-400">({row.sku || 'N/A'})</span></td>
+                                                            <td className="py-2 text-slate-500">{formatQty(row.quantity_before)}</td>
+                                                            <td className="py-2 font-semibold text-indigo-700">{formatQty(row.quantity_change)}</td>
+                                                            <td className="py-2 text-slate-700">{formatQty(row.quantity_after)}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    ) : (
+                                        <p className="mt-2 text-xs font-semibold text-slate-500">No recent movement rows for active filters.</p>
                                     )}
                                 </div>
                             </div>

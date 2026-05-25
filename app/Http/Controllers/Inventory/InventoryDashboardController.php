@@ -41,6 +41,9 @@ class InventoryDashboardController extends Controller
             $days = 30;
         }
 
+        $movementType = trim((string) $request->query('movement_type', ''));
+        $sourceType = trim((string) $request->query('source_type', ''));
+
         $productQuery = trim((string) $request->query('product', ''));
         $categoryId = trim((string) $request->query('category_id', ''));
         $priority = (string) $request->query('priority', 'all');
@@ -233,13 +236,48 @@ class InventoryDashboardController extends Controller
             'period_days' => $days,
             'total_count' => 0,
             'type_counts' => [],
+            'source_type_counts' => [],
+            'recent_movements' => [],
+            'available_movement_types' => [],
+            'available_source_types' => [],
         ];
 
         if ($user->hasPermission('view_branch_inventory') && $selectedBranchId) {
-            $movementQuery = InventoryMovement::query()
+            $movementBaseQuery = InventoryMovement::query()
                 ->whereIn('branch_id', $branchIds)
                 ->where('branch_id', $selectedBranchId)
                 ->where('created_at', '>=', now()->subDays($days));
+
+            $movementSummary['available_movement_types'] = (clone $movementBaseQuery)
+                ->select('movement_type')
+                ->distinct()
+                ->whereNotNull('movement_type')
+                ->orderBy('movement_type')
+                ->pluck('movement_type')
+                ->values();
+
+            $movementSummary['available_source_types'] = (clone $movementBaseQuery)
+                ->select('source_type')
+                ->distinct()
+                ->whereNotNull('source_type')
+                ->where('source_type', '!=', '')
+                ->orderBy('source_type')
+                ->pluck('source_type')
+                ->values();
+
+            $movementQuery = clone $movementBaseQuery;
+
+            if ($movementType !== '' && $movementSummary['available_movement_types']->contains($movementType)) {
+                $movementQuery->where('movement_type', $movementType);
+            } else {
+                $movementType = '';
+            }
+
+            if ($sourceType !== '' && $movementSummary['available_source_types']->contains($sourceType)) {
+                $movementQuery->where('source_type', $sourceType);
+            } else {
+                $sourceType = '';
+            }
 
             $movementSummary['total_count'] = (clone $movementQuery)->count();
             $movementSummary['type_counts'] = (clone $movementQuery)
@@ -251,6 +289,36 @@ class InventoryDashboardController extends Controller
                 ->map(fn ($row) => [
                     'movement_type' => $row->movement_type,
                     'total' => (int) $row->total,
+                ])
+                ->values();
+
+            $movementSummary['source_type_counts'] = (clone $movementQuery)
+                ->selectRaw('source_type, COUNT(*) as total')
+                ->groupBy('source_type')
+                ->orderByDesc('total')
+                ->limit(5)
+                ->get()
+                ->map(fn ($row) => [
+                    'source_type' => $row->source_type ?: 'unspecified',
+                    'total' => (int) $row->total,
+                ])
+                ->values();
+
+            $movementSummary['recent_movements'] = (clone $movementQuery)
+                ->with(['product:id,name,sku'])
+                ->latest('created_at')
+                ->limit(15)
+                ->get()
+                ->map(fn (InventoryMovement $movement) => [
+                    'id' => $movement->id,
+                    'movement_type' => $movement->movement_type,
+                    'source_type' => $movement->source_type ?: 'unspecified',
+                    'product_name' => $movement->product?->name,
+                    'sku' => $movement->product?->sku,
+                    'quantity_before' => (float) $movement->quantity_before,
+                    'quantity_change' => (float) $movement->quantity_change,
+                    'quantity_after' => (float) $movement->quantity_after,
+                    'created_at' => $movement->created_at?->toIso8601String(),
                 ])
                 ->values();
         }
@@ -267,6 +335,8 @@ class InventoryDashboardController extends Controller
                 'status' => $status,
                 'priority' => $priority,
                 'days' => $days,
+                'movement_type' => $movementType,
+                'source_type' => $sourceType,
             ],
             'categories' => $categories,
             'summary' => $summary,
