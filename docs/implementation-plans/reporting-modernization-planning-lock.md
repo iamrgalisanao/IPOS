@@ -334,3 +334,88 @@ Closure report:
 Next recommended gate:
 
 1. `Slice R3: Product Mix Report`
+
+# Slice R2 Planning Note: Transaction Audit Log Hardening
+
+## 1. Status
+
+Superseded by implementation closure.
+
+Slice R2 has already been implemented and locally validated. The authoritative closure record is `docs/validation/transaction-audit-log-hardening-closure.md`.
+
+## 2. Purpose
+
+Harden the Transaction Audit Log as a dedicated, audit-first reporting surface. Ensure it is clearly separated from management reporting, with improved traceability, context, and audit support. No mutation or compliance-format changes are permitted.
+
+## 3. Current State Assessment
+
+- The Transaction Audit Log (formerly Transaction History) is implemented as a read-only, traceability-focused surface.
+- It provides transaction listing, status, branch, total, and detail inspection.
+- Recent improvements (R1) added UUID, cashier, and terminal/profile context.
+- Audit helper text and a link to the Sales Summary Report are present.
+- All mutation, settlement, tax, and compliance logic remain unchanged.
+
+## 4. Original Scope of R2
+
+**Objective:**
+
+1. Strengthen audit traceability and context for all transaction records.
+2. Add or clarify audit helper text and guidance for users.
+3. Ensure all audit log fields are unambiguous and complete (UUID, cashier, terminal, status, timestamps, reversal info).
+4. Harden permission and branch/tenant isolation boundaries.
+5. Add or improve links to related reports (Sales Summary, detail views).
+6. Ensure CSV export matches on-screen data and boundaries.
+7. Add test coverage for all new/clarified behaviors.
+
+**Explicit Non-Goals:**
+
+- No transaction mutation, editing, or recalculation.
+- No tax, settlement, or accounting logic changes.
+- No compliance-format/BIR certification changes.
+- No scheduled reporting or automation.
+- No inventory or procurement logic changes.
+
+## 5. Data Source Review
+
+Review and document current data sources for:
+
+- Transaction records (Sale model, SalesHistoryQueryService)
+- User/cashier context
+- Terminal/profile context
+- Status and reversal indicators
+- Branch and tenant scoping
+
+If any required field is unavailable, mark as `Deferred / unavailable from current source`.
+
+## 6. Permission and Tenant Boundary
+
+1. Audit log must remain tenant-scoped and branch-filtered per user permissions.
+2. Unauthorized users must not access audit log or export.
+3. Exports must match on-screen permission boundaries.
+
+## 7. Acceptance Criteria
+
+1. All audit log fields are present, unambiguous, and match source-of-truth.
+2. Helper text and guidance are clear and visible.
+3. Permission and branch/tenant boundaries are strictly enforced.
+4. CSV export matches on-screen data and boundaries.
+5. No mutation or compliance-format changes.
+6. All new/clarified behaviors are covered by tests.
+
+## 8. Planning-Task Boundary Confirmation
+
+Confirmed for this planning lock task:
+
+1. No runtime mutation logic is changed.
+2. No schema changes are introduced.
+3. No tax/settlement/accounting/compliance logic is altered.
+4. No scheduled reporting or automation is implemented.
+5. No inventory/procurement logic is changed.
+
+## 9. Closure Link
+
+Final implemented behavior and validation evidence are recorded in:
+
+1. `docs/validation/transaction-audit-log-hardening-closure.md`
+
+---
