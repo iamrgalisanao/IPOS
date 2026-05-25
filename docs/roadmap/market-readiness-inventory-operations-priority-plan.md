@@ -1,6 +1,6 @@
 # Market Readiness Inventory Operations Priority Plan
 
-Status: Proposed Planning Track
+Status: In Progress (Priority 1 Implemented Locally)
 Date: 2026-05-25
 
 ## 1. Purpose
@@ -46,6 +46,10 @@ Disallowed positioning:
 ## 4. Priority Order
 
 ### Priority 1: Unified Inventory and Reporting Hub
+
+Status:
+
+Implemented and locally validated on 2026-05-25.
 
 Objective:
 
@@ -135,6 +139,8 @@ Boundaries:
 
 ### Slice A: Inventory Hub Planning Lock
 
+Status: Completed (accepted and implemented)
+
 1. Inventory navigation inventory.
 2. Current route/page inventory.
 3. User role workflow map.
@@ -142,6 +148,8 @@ Boundaries:
 5. Acceptance criteria.
 
 ### Slice B: Inventory Hub Implementation
+
+Status: Completed (local validation passed)
 
 1. Add hub route and page.
 2. Link existing inventory reports and stocktake surfaces.
@@ -195,6 +203,6 @@ Boundaries:
 
 ## 7. Recommended Next Action
 
-Create Slice A as a formal scope lock for the unified inventory and reporting
-hub, then implement only after route/page inventory and acceptance criteria are
-reviewed.
+Create Slice C as a formal planning lock for print-friendly stocktake and
+inventory report views, then implement after print-surface inventory,
+acceptance criteria, and non-goal boundaries are reviewed.

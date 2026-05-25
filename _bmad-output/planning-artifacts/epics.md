@@ -225,6 +225,11 @@
 
 ## 3. Future Strategic Roadmap
 
+### Market Readiness Inventory Operations Track (G-070) [In Progress]
+- [x] Slice A Planning Lock: Unified Inventory & Reporting Hub [Completed]
+- [x] Slice B Implementation: Read-Only Inventory Hub Surface [Implemented & Locally Validated]
+- [ ] Slice C Planning/Implementation: Print-Friendly Stocktake & Inventory Report Views [Planned]
+
 ### Epic 21: Branch Comparison Business Intelligence [Planned]
 - [ ] 21.1 Cross-Branch Financial Aggregations [Planned]
 - [ ] 21.2 Performance Metric Visualization Dashboard [Planned]

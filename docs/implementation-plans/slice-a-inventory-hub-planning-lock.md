@@ -1,6 +1,6 @@
 # Slice A Planning Lock: Inventory Hub
 
-Status: Proposed Scope Lock
+Status: Closed - Implemented & Locally Validated
 Date: 2026-05-25
 Parent Plan: `docs/roadmap/market-readiness-inventory-operations-priority-plan.md`
 
@@ -377,7 +377,22 @@ blocking support/setup users or exposing inventory surfaces too broadly.
 
 ## 11. Decision
 
-Slice A is ready for review as a planning lock.
+Slice A is accepted and implementation is complete within read-only guardrails.
 
-Implementation should not begin until this document is accepted and any route,
-permission, or information architecture corrections are applied.
+Closure evidence:
+
+1. `docs/validation/inventory-hub-implementation-closure.md`
+2. `app/Http/Controllers/Inventory/InventoryHubController.php`
+3. `resources/js/Pages/Inventory/Hub/Index.jsx`
+4. `tests/Feature/Inventory/InventoryHubTest.php`
+
+Validation summary:
+
+1. `php artisan test tests/Feature/Inventory/InventoryHubTest.php` passed (4 tests, 44 assertions).
+2. `npm run build` passed.
+
+Boundary confirmation:
+
+1. Hub remains read-mostly and route-link oriented.
+2. No new mutation workflows were introduced for inventory, stocktake, procurement, or reporting.
+3. No BIR certification or accreditation claim was added.
