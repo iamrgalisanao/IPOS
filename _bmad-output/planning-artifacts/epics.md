@@ -233,7 +233,8 @@
 - [x] Slice D Implementation: Low-Stock and Reorder Read-Only Dashboard [Implemented & Locally Validated]
 - [x] Slice E Planning Lock: Branch Stock Movement Summary [Created]
 - [x] Slice E Implementation: Branch Stock Movement Summary [Implemented & Locally Validated]
-- [ ] Slice F Planning Lock: Stocktake Screenshot and Client Training Pack [Next]
+- [x] Slice F Planning Lock: Stocktake Screenshot and Client Training Pack [Created]
+- [ ] Slice F Implementation: Pilot Enablement Pack [Next]
 
 ### Epic 21: Branch Comparison Business Intelligence [Planned]
 - [ ] 21.1 Cross-Branch Financial Aggregations [Planned]

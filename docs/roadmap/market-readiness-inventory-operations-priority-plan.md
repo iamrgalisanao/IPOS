@@ -132,6 +132,10 @@ Boundaries:
 
 ### Priority 5: Stocktake Screenshot and Client Training Pack
 
+Status:
+
+Planning lock created; implementation pending acceptance.
+
 Objective:
 
 Complete enablement assets for branch pilot onboarding.
@@ -210,6 +214,12 @@ Planning lock:
 
 ### Slice F: Pilot Enablement Pack
 
+Status: Planning lock created; implementation pending acceptance
+
+Planning lock:
+
+`docs/implementation-plans/slice-f-pilot-enablement-pack-planning-lock.md`
+
 1. Capture stocktake screenshots.
 2. Add inventory hub screenshots after implementation.
 3. Create branch manager demo script.
@@ -229,6 +239,6 @@ Planning lock:
 
 ## 7. Recommended Next Action
 
-Create Slice F planning lock for pilot enablement pack execution (training-safe
-screenshots, manager demo script, pilot checklist addendum, and support
-escalation notes) with explicit no-production-data boundary confirmation.
+Review and accept Slice F planning lock for pilot enablement pack execution,
+then implement documentation/screenshot outputs using training-safe, non-
+production data only.
