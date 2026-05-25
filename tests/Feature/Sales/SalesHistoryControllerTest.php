@@ -5,6 +5,7 @@ namespace Tests\Feature\Sales;
 use App\Models\Branch;
 use App\Models\Role;
 use App\Models\Sale;
+use App\Models\SalesMachineProfile;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\RbacSeeder;
@@ -54,11 +55,21 @@ class SalesHistoryControllerTest extends TestCase
     public function test_authorized_user_can_access_index(): void
     {
         app(TenantContext::class)->setTenant($this->tenant);
-        Sale::factory()->count(3)->create([
+        $profile = SalesMachineProfile::create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branch->id,
+            'profile_code' => 'POS-01',
+            'terminal_identifier' => 'TERM-01',
+            'status' => 'active',
+        ]);
+
+        $sale = Sale::factory()->create([
             'tenant_id' => $this->tenant->id,
             'branch_id' => $this->branch->id,
             'user_id' => $this->manager->id,
+            'client_request_uuid' => '11111111-1111-4111-8111-111111111111',
             'status' => 'paid',
+            'sales_machine_profile_id' => $profile->id,
         ]);
 
         $response = $this->actingAs($this->manager)
@@ -67,10 +78,16 @@ class SalesHistoryControllerTest extends TestCase
         $response->assertStatus(200);
         $response->assertInertia(fn (Assert $page) => $page
             ->component('Sales/History/Index')
-            ->has('sales.data', 3)
+            ->has('sales.data', 1)
+            ->where('sales.data.0.id', $sale->id)
+            ->where('sales.data.0.client_request_uuid', '11111111-1111-4111-8111-111111111111')
+            ->where('sales.data.0.branch_name', $this->branch->name)
+            ->where('sales.data.0.cashier_name', $this->manager->name)
+            ->where('sales.data.0.terminal_identifier', 'TERM-01')
             ->has('meta', fn (Assert $meta) => $meta
                 ->where('can_view_details', true)
                 ->where('can_export', false) // Branch Manager does not have export_sales_history
+                ->where('semantics', 'Audit log view of existing transactions. This page is read-only and does not edit, repost, recalculate, void, refund, or settle transactions.')
             )
         );
     }

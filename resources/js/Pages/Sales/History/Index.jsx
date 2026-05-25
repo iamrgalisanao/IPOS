@@ -1,35 +1,39 @@
 import React, { useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link, router } from '@inertiajs/react';
-import { 
-    Search, 
-    Filter, 
-    Eye, 
-    ArrowRight, 
-    Calendar, 
-    Clock, 
-    User as UserIcon, 
-    CreditCard, 
+import {
+    Search,
+    Filter,
+    ArrowRight,
+    Calendar,
+    Clock,
     AlertCircle,
     CheckCircle2,
     XCircle,
     History,
-    Download
+    Download,
+    BarChart3,
+    User,
+    Monitor,
 } from 'lucide-react';
 
 const StatusBadge = ({ status }) => {
     const statusConfig = {
-        paid: { color: 'bg-emerald-100 text-emerald-800 border-emerald-200', icon: CheckCircle2 },
-        voided: { color: 'bg-rose-100 text-rose-800 border-rose-200', icon: XCircle },
-        refunded: { color: 'bg-amber-100 text-amber-800 border-amber-200', icon: History },
-        draft: { color: 'bg-slate-100 text-slate-800 border-slate-200', icon: AlertCircle },
+        paid: { color: 'bg-emerald-100 text-emerald-800 border-emerald-200', icon: CheckCircle2, description: 'Paid transaction recorded from existing sales data.' },
+        voided: { color: 'bg-rose-100 text-rose-800 border-rose-200', icon: XCircle, description: 'Voided transaction status from existing audit data.' },
+        refunded: { color: 'bg-amber-100 text-amber-800 border-amber-200', icon: History, description: 'Refunded transaction status from existing audit data.' },
+        created: { color: 'bg-slate-100 text-slate-800 border-slate-200', icon: AlertCircle, description: 'Created transaction that is not marked paid in current records.' },
+        draft: { color: 'bg-slate-100 text-slate-800 border-slate-200', icon: AlertCircle, description: 'Draft or unfinalized transaction status.' },
     };
 
     const config = statusConfig[status] || statusConfig.draft;
     const Icon = config.icon;
 
     return (
-        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${config.color}`}>
+        <span
+            title={config.description}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${config.color}`}
+        >
             <Icon size={12} />
             {status.charAt(0).toUpperCase() + status.slice(1)}
         </span>
@@ -99,21 +103,31 @@ export default function Index({ auth, sales, filters, meta }) {
                             <History size={12} />
                             Sales Audit
                         </div>
-                        <h2 className="text-2xl font-bold leading-tight text-slate-900">Transaction History</h2>
+                        <h2 className="text-2xl font-bold leading-tight text-slate-900">Transaction Audit Log</h2>
+                        <p className="text-sm text-slate-500">{meta.semantics}</p>
                     </div>
-                    {meta.can_export && (
-                        <button
-                            onClick={handleExport}
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm font-bold rounded-xl hover:bg-emerald-700 transition-all shadow-sm shadow-emerald-200/50"
+                    <div className="flex flex-wrap gap-2">
+                        <Link
+                            href={route('reports.sales-summary.index')}
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 text-sm font-bold rounded-xl hover:bg-slate-50 transition-all shadow-sm"
                         >
-                            <Download size={16} />
-                            Export CSV
-                        </button>
-                    )}
+                            <BarChart3 size={16} />
+                            Sales Summary
+                        </Link>
+                        {meta.can_export && (
+                            <button
+                                onClick={handleExport}
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm font-bold rounded-xl hover:bg-emerald-700 transition-all shadow-sm shadow-emerald-200/50"
+                            >
+                                <Download size={16} />
+                                Export CSV
+                            </button>
+                        )}
+                    </div>
                 </div>
             }
         >
-            <Head title="Sales History" />
+            <Head title="Transaction Audit Log" />
 
             <div className="py-8">
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-6">
@@ -201,9 +215,10 @@ export default function Index({ auth, sales, filters, meta }) {
                             <table className="w-full text-left border-collapse">
                                 <thead>
                                     <tr className="bg-slate-50/50 border-b border-slate-100">
-                                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-widest">Transaction Details</th>
+                                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-widest">Audit Reference</th>
                                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-widest">Status</th>
                                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-widest">Branch</th>
+                                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-widest">Cashier / Terminal</th>
                                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-widest text-right">Total Amount</th>
                                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-widest"></th>
                                     </tr>
@@ -218,8 +233,11 @@ export default function Index({ auth, sales, filters, meta }) {
                                                     </span>
                                                     <div className="flex items-center gap-2 mt-1 text-xs text-slate-500">
                                                         <Clock size={12} />
-                                                        {formatDate(sale.confirmed_at || sale.created_at)}
+                                                        {formatDate(sale.reporting_basis_at || sale.confirmed_at || sale.created_at)}
                                                     </div>
+                                                    <span className="mt-1 max-w-[240px] truncate font-mono text-[11px] text-slate-400" title={sale.client_request_uuid || sale.id}>
+                                                        UUID: {sale.client_request_uuid || sale.id}
+                                                    </span>
                                                 </div>
                                             </td>
                                             <td className="px-6 py-5">
@@ -229,6 +247,18 @@ export default function Index({ auth, sales, filters, meta }) {
                                                 <div className="flex items-center gap-2 text-sm text-slate-600 font-medium">
                                                     <div className="w-2 h-2 rounded-full bg-blue-400"></div>
                                                     {sale.branch_name || 'Main Branch'}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-5">
+                                                <div className="space-y-1 text-sm text-slate-600">
+                                                    <div className="flex items-center gap-2 font-medium">
+                                                        <User size={13} className="text-slate-400" />
+                                                        {sale.cashier_name || 'Unassigned cashier'}
+                                                    </div>
+                                                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                                                        <Monitor size={13} className="text-slate-400" />
+                                                        {sale.terminal_identifier || 'No terminal profile'}
+                                                    </div>
                                                 </div>
                                             </td>
                                             <td className="px-6 py-5 text-right">
@@ -250,7 +280,7 @@ export default function Index({ auth, sales, filters, meta }) {
                                         </tr>
                                     )) : (
                                         <tr>
-                                            <td colSpan="5" className="px-6 py-12 text-center">
+                                            <td colSpan="6" className="px-6 py-12 text-center">
                                                 <div className="flex flex-col items-center gap-3">
                                                     <div className="p-4 rounded-full bg-slate-50">
                                                         <Search size={32} className="text-slate-300" />

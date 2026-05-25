@@ -26,7 +26,22 @@ class SalesHistoryController extends Controller
             'payment_method_id', 'cashier_id', 'search', 'per_page'
         ]);
 
-        $sales = $this->queryService->query($request->user(), $filters);
+        $sales = $this->queryService
+            ->query($request->user(), $filters)
+            ->through(fn ($sale) => [
+                'id' => $sale->id,
+                'sale_number' => $sale->sale_number,
+                'client_request_uuid' => $sale->client_request_uuid,
+                'status' => $sale->status,
+                'branch_name' => $sale->branch?->name,
+                'cashier_name' => $sale->user?->name,
+                'terminal_identifier' => $sale->salesMachineProfile?->terminal_identifier
+                    ?: $sale->salesMachineProfile?->profile_code,
+                'total' => $sale->total,
+                'confirmed_at' => optional($sale->confirmed_at)->toDateTimeString(),
+                'created_at' => optional($sale->created_at)->toDateTimeString(),
+                'reporting_basis_at' => optional($sale->reporting_basis_at)->toDateTimeString(),
+            ]);
 
         return Inertia::render('Sales/History/Index', [
             'sales' => $sales,
@@ -34,6 +49,7 @@ class SalesHistoryController extends Controller
             'meta' => [
                 'can_view_details' => $request->user()->hasPermission('view_sale_details'),
                 'can_export' => $request->user()->hasPermission('export_sales_history'),
+                'semantics' => 'Audit log view of existing transactions. This page is read-only and does not edit, repost, recalculate, void, refund, or settle transactions.',
             ]
         ]);
     }

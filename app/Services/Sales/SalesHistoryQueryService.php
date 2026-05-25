@@ -25,7 +25,11 @@ class SalesHistoryQueryService
      */
     public function getBuilder(User $user, array $filters = []): Builder
     {
-        $query = Sale::query();
+        $query = Sale::query()->with([
+            'branch:id,name',
+            'user:id,name',
+            'salesMachineProfile:id,profile_code,terminal_identifier',
+        ]);
 
         // 1. Branch Isolation
         $this->applyBranchScoping($query, $user, $filters['branch_id'] ?? null);
