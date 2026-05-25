@@ -31,6 +31,13 @@ This pack does not introduce runtime behavior changes.
 4. Escalation and rollback notes:
    `docs/user-enablement/inventory-pilot-escalation-and-rollback-notes.md`
 
+Execution aids:
+
+1. Single-page facilitator run sheet:
+   `docs/user-enablement/inventory-pilot-branch-walkthrough-run-sheet.md`
+2. Cycle 1 feedback-delta log template:
+   `docs/validation/pilot-enablement-pack-cycle-1-feedback-delta-log-template.md`
+
 ## 4. Ownership and Update Cadence
 
 1. Product Operations Owner:
