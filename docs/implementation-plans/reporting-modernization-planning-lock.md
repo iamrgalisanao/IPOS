@@ -562,4 +562,146 @@ Next recommended gate:
 
 1. `Slice R4: Sales by Hour and Weekday`
 
----
+
+# Slice R4 Planning Lock: Sales by Hour / Weekday Report
+
+## 1. Status
+
+Implemented and locally validated.
+
+Closure evidence is recorded in `docs/validation/sales-timing-report-closure.md`.
+
+## 2. Purpose
+
+Create a read-only sales timing report that helps managers understand peak hours, weak periods, and weekday sales patterns using only existing stored sales data. This report is strictly analytical and does not introduce forecasting or scheduling features.
+
+## 3. Scope
+
+### Minimum Deliverables
+
+1. Hourly sales table:
+   - hour block
+   - transaction count
+   - gross sales
+   - net sales
+   - average transaction value
+
+2. Weekday sales table:
+   - day of week
+   - transaction count
+   - gross sales
+   - net sales
+   - average transaction value
+
+3. Summary cards:
+   - peak sales hour
+   - peak sales weekday
+   - lowest sales hour
+   - total transactions
+   - total net sales
+
+4. Filters:
+   - date range
+   - branch
+   - status
+   - cashier, if available
+
+5. Outputs:
+   - CSV export
+   - print-friendly layout
+
+6. Navigation:
+   - Add under Sales & Finance / Reports area
+   - Link back to Sales Summary Report
+   - Keep Product Mix and Transaction Audit Log as separate report surfaces
+
+## 4. Hard Boundaries (Explicit Non-Goals)
+
+- No sales forecasting engine
+- No staffing scheduler
+- No transaction mutation
+- No tax engine changes
+- No settlement mutation
+- No accounting sync changes
+- No inventory mutation
+- No scheduled report automation
+- No PDF generation
+- No BIR certification or compliance-format claim
+
+## 5. Data Source Review
+
+Review and document current data sources for:
+
+- Sale model (timestamp, status, branch, cashier, amounts)
+- Branch and tenant scoping
+
+If any required field is unavailable, mark as `Deferred / unavailable from current source`.
+
+## 6. Permission and Tenant Boundary
+
+1. Report must remain tenant-scoped.
+2. Branch filtering must respect user permissions and branch assignments.
+3. Unauthorized users must not access the report or export.
+4. Exports must use the same permission boundary as the screen report.
+
+## 7. Acceptance Criteria
+
+1. All required tables and summary cards are present and accurate.
+2. Filters and navigation match scope.
+3. Permission and branch/tenant boundaries are strictly enforced.
+4. CSV export matches on-screen data and boundaries.
+5. No mutation or compliance-format changes.
+6. All new/clarified behaviors are covered by tests.
+
+## 8. Recommended Tests
+
+- unauthorized users cannot access Sales by Hour / Weekday Report
+- report is tenant-scoped
+- branch-limited users only see assigned branch sales
+- hourly totals are computed only from scoped sales
+- weekday totals are computed only from scoped sales
+- CSV export respects filters and permissions
+- print layout does not expose cross-branch data
+- existing R1, R2, and R3 report tests remain green
+
+## 9. Planning-Task Boundary Confirmation
+
+Confirmed for this planning lock task:
+
+1. No runtime mutation logic is changed.
+2. No schema changes are introduced.
+3. No tax/settlement/accounting/compliance logic is altered.
+4. No scheduled reporting or automation is implemented.
+5. No inventory/product catalog logic is changed.
+
+## 10. Implementation Closure Evidence
+
+Implemented:
+
+1. New read-only route group:
+   - `reports.sales-timing.index`
+   - `reports.sales-timing.export`
+2. New controller:
+   - `app/Http/Controllers/Reports/SalesTimingReportController.php`
+3. New service:
+   - `app/Services/Sales/SalesTimingReportService.php`
+4. New Inertia page:
+   - `resources/js/Pages/Reports/SalesTiming/Index.jsx`
+5. New focused tests:
+   - `tests/Feature/Reports/SalesTimingReportTest.php`
+
+Validation:
+
+1. `php artisan test tests/Feature/Reports/SalesTimingReportTest.php tests/Feature/Reports/ProductMixReportTest.php tests/Feature/Reports/SalesSummaryReportTest.php tests/Feature/Sales/SalesHistoryControllerTest.php tests/Feature/Sales/SalesHistoryExportTest.php`
+   - 20 tests passed.
+   - 302 assertions passed.
+2. `npm run build`
+   - passed.
+
+Closure report:
+
+1. `docs/validation/sales-timing-report-closure.md`
+
+Next recommended gate:
+
+1. `Slice R5: Inventory Visibility Report`

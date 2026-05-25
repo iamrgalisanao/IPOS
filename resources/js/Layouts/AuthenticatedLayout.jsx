@@ -172,6 +172,7 @@ export default function AuthenticatedLayout({ header, children }) {
     if (permissions.includes('view_sales_history')) {
         salesAndFinanceItems.push({ name: 'Sales Summary', href: route('reports.sales-summary.index'), icon: PieChart, active: route().current('reports.sales-summary.*') });
         salesAndFinanceItems.push({ name: 'Product Mix', href: route('reports.product-mix.index'), icon: BarChart3, active: route().current('reports.product-mix.*') });
+        salesAndFinanceItems.push({ name: 'Sales Timing', href: route('reports.sales-timing.index'), icon: Clock, active: route().current('reports.sales-timing.*') });
         salesAndFinanceItems.push({ name: 'Transaction Audit Log', href: route('sales.history.index'), icon: Receipt, active: route().current('sales.history.*') });
     }
     if (permissions.includes('view_settlement_periods')) {
