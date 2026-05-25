@@ -1,8 +1,9 @@
 # Slice C Planning Lock: Print-Friendly Stocktake and Inventory Report Views
 
-Status: Proposed Scope Lock
+Status: Closed - Implemented & Locally Validated
 Date: 2026-05-25
 Parent Plan: `docs/roadmap/market-readiness-inventory-operations-priority-plan.md`
+Closure Evidence: `docs/validation/print-friendly-inventory-reports-closure.md`
 
 ## 1. Purpose
 
@@ -107,8 +108,19 @@ Before implementation starts, confirm:
 4. No mutation behavior is altered.
 5. Test targets are defined.
 
-## 10. Decision
+## 10. Closure Decision
 
-Slice C is ready for review as a planning lock.
+Slice C was implemented as a presentation-layer enhancement on existing
+stocktake and inventory report pages.
 
-Implementation should begin only after this planning lock is accepted.
+Validation evidence:
+
+1. `php artisan test tests/Feature/Inventory/VarianceLogAuditingTest.php tests/Feature/Inventory/ProductCompositionReportTest.php tests/Feature/Inventory/StocktakeReportTest.php` passed: 22 tests, 184 assertions.
+2. `npm run build` passed.
+
+Closure accepted with boundaries preserved:
+
+1. No stock mutation workflow was added.
+2. No stocktake posting/review decision behavior changed.
+3. No new report engine or aggregation service was introduced.
+4. No new export format or BIR certification/accreditation claim was added.

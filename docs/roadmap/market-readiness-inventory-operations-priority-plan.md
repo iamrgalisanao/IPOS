@@ -1,6 +1,6 @@
 # Market Readiness Inventory Operations Priority Plan
 
-Status: In Progress (Priority 1 Implemented Locally)
+Status: In Progress (Priority 2 Implemented Locally)
 Date: 2026-05-25
 
 ## 1. Purpose
@@ -67,6 +67,10 @@ Boundaries:
 3. No procurement automation trigger.
 
 ### Priority 2: Print-Friendly Stocktake and Inventory Report Views
+
+Status:
+
+Implemented and locally validated on 2026-05-25.
 
 Objective:
 
@@ -159,6 +163,8 @@ Status: Completed (local validation passed)
 
 ### Slice C: Print-Friendly Report Views
 
+Status: Completed (local validation passed)
+
 1. Select stocktake and inventory reports for print pass.
 2. Add print CSS/layout.
 3. Add export/print action placement.
@@ -203,6 +209,6 @@ Status: Completed (local validation passed)
 
 ## 7. Recommended Next Action
 
-Create Slice C as a formal planning lock for print-friendly stocktake and
-inventory report views, then implement after print-surface inventory,
+Create Slice D as a formal planning lock for the Low-Stock and Reorder
+Read-Only Dashboard, then implement only after data sources, role boundaries,
 acceptance criteria, and non-goal boundaries are reviewed.
