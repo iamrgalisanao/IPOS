@@ -19,20 +19,26 @@ import {
 export default function Index({
     auth,
     branches = [],
+    categories = [],
     filters = {},
     summary = {},
     branchSummaries = [],
     productVisibility = [],
+    reorderPriorities = [],
     movementSummary = {},
+    permissions = {},
 }) {
     const canViewMovements = auth.permissions.includes('view_branch_inventory');
     const canViewStocktakes = auth.permissions.includes('inventory.stocktake.view');
     const canViewVariance = auth.permissions.includes('view_inventory_reports') || auth.permissions.includes('audit_inventory');
     const canViewUnitConversions = auth.permissions.includes('manage_unit_conversions') || auth.permissions.includes('manage_inventory');
+    const canViewCosts = !!permissions.can_view_costs;
 
     const [branchId, setBranchId] = useState(filters.branch_id || '');
     const [product, setProduct] = useState(filters.product || '');
+    const [categoryId, setCategoryId] = useState(filters.category_id || '');
     const [status, setStatus] = useState(filters.status || 'all');
+    const [priority, setPriority] = useState(filters.priority || 'all');
     const [days, setDays] = useState(String(filters.days || 30));
 
     const applyFilters = (e) => {
@@ -43,7 +49,9 @@ export default function Index({
             {
                 branch_id: branchId || undefined,
                 product: product || undefined,
+                category_id: categoryId || undefined,
                 status,
+                priority,
                 days,
             },
             {
@@ -56,14 +64,18 @@ export default function Index({
 
     const clearFilters = () => {
         setProduct('');
+        setCategoryId('');
         setStatus('all');
+        setPriority('all');
         setDays('30');
 
         router.get(
             route('inventory.dashboard.index'),
             {
                 branch_id: branchId || undefined,
+                category_id: undefined,
                 status: 'all',
+                priority: 'all',
                 days: 30,
             },
             {
@@ -85,6 +97,10 @@ export default function Index({
     }, [branches, filters.branch_id, branchId]);
 
     const formatQty = (value) => Number.parseFloat(value || 0).toFixed(2);
+    const formatCurrency = (value) => Number.parseFloat(value || 0).toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    });
 
     return (
         <AuthenticatedLayout
@@ -117,7 +133,7 @@ export default function Index({
                                 Read-only filters use existing data paths and never trigger stock updates.
                             </p>
 
-                            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
                                 <div>
                                     <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">Branch</label>
                                     <div className="relative">
@@ -148,6 +164,20 @@ export default function Index({
                                 </div>
 
                                 <div>
+                                    <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">Category</label>
+                                    <select
+                                        value={categoryId}
+                                        onChange={(e) => setCategoryId(e.target.value)}
+                                        className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 focus:border-indigo-400 focus:ring-indigo-200"
+                                    >
+                                        <option value="">All Categories</option>
+                                        {categories.map((category) => (
+                                            <option key={category.id} value={category.id}>{category.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
                                     <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">Stock Status</label>
                                     <select
                                         value={status}
@@ -157,6 +187,20 @@ export default function Index({
                                         <option value="all">All</option>
                                         <option value="low">Low Stock</option>
                                         <option value="negative">Negative Stock</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">Reorder Priority</label>
+                                    <select
+                                        value={priority}
+                                        onChange={(e) => setPriority(e.target.value)}
+                                        className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 focus:border-indigo-400 focus:ring-indigo-200"
+                                    >
+                                        <option value="all">All Priorities</option>
+                                        <option value="critical">Critical (Negative)</option>
+                                        <option value="high">High (At/Below Reorder)</option>
+                                        <option value="normal">Normal</option>
                                     </select>
                                 </div>
 
@@ -192,7 +236,7 @@ export default function Index({
                         </form>
                     </section>
 
-                    <section className="grid grid-cols-1 gap-6 md:grid-cols-3">
+                    <section className="grid grid-cols-1 gap-6 md:grid-cols-5">
                         <article className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
                             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Tracked Inventory Items</p>
                             <p className="mt-2 text-3xl font-black text-slate-800">{summary.tracked_items ?? 0}</p>
@@ -210,6 +254,79 @@ export default function Index({
                             <p className="mt-2 text-3xl font-black text-rose-800">{summary.negative_stock_count ?? 0}</p>
                             <p className="mt-2 text-xs text-rose-800">Below zero and needs investigation.</p>
                         </article>
+
+                        <article className="rounded-[28px] border border-indigo-200 bg-indigo-50/60 p-6 shadow-sm">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-indigo-700">Suggested Reorder Units</p>
+                            <p className="mt-2 text-3xl font-black text-indigo-800">{formatQty(summary.suggested_reorder_units ?? 0)}</p>
+                            <p className="mt-2 text-xs text-indigo-800">Advisory quantity only. No purchase order is generated.</p>
+                        </article>
+
+                        <article className="rounded-[28px] border border-slate-200 bg-slate-50 p-6 shadow-sm">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-600">Estimated Reorder Value</p>
+                            {canViewCosts ? (
+                                <>
+                                    <p className="mt-2 text-3xl font-black text-slate-800">{formatCurrency(summary.estimated_reorder_value ?? 0)}</p>
+                                    <p className="mt-2 text-xs text-slate-600">Based on branch average cost and advisory reorder quantity.</p>
+                                </>
+                            ) : (
+                                <>
+                                    <p className="mt-2 text-lg font-black text-slate-500">Masked</p>
+                                    <p className="mt-2 text-xs text-slate-500">Cost visibility requires inventory audit permission.</p>
+                                </>
+                            )}
+                        </article>
+                    </section>
+
+                    <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                        <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Reorder Priority Queue (Read-Only)</h3>
+                        <p className="mt-2 text-xs text-slate-500">
+                            Advisory queue from current stock and reorder levels. No procurement automation or stock mutation is triggered.
+                        </p>
+
+                        {reorderPriorities.length > 0 ? (
+                            <div className="mt-4 overflow-x-auto">
+                                <table className="w-full text-left text-xs">
+                                    <thead>
+                                        <tr className="border-b border-slate-100 text-[10px] uppercase tracking-widest text-slate-400">
+                                            <th className="py-2">Priority</th>
+                                            <th className="py-2">Product</th>
+                                            <th className="py-2">Category</th>
+                                            <th className="py-2">Branch</th>
+                                            <th className="py-2">Current</th>
+                                            <th className="py-2">Reorder</th>
+                                            <th className="py-2">Suggest Qty</th>
+                                            {canViewCosts && <th className="py-2">Est. Value</th>}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {reorderPriorities.map((row, idx) => (
+                                            <tr key={`${row.sku}-priority-${idx}`} className="border-b border-slate-50">
+                                                <td className="py-2">
+                                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${
+                                                        row.priority_class === 'critical'
+                                                            ? 'bg-rose-100 text-rose-700'
+                                                            : 'bg-amber-100 text-amber-700'
+                                                    }`}>
+                                                        {row.priority_class}
+                                                    </span>
+                                                </td>
+                                                <td className="py-2 font-bold text-slate-700">{row.product_name} <span className="text-slate-400">({row.sku})</span></td>
+                                                <td className="py-2 text-slate-600">{row.category_name || 'Uncategorized'}</td>
+                                                <td className="py-2 text-slate-600">{row.branch_name}</td>
+                                                <td className="py-2 text-slate-700">{formatQty(row.current_stock)}</td>
+                                                <td className="py-2 text-slate-500">{formatQty(row.reorder_level)}</td>
+                                                <td className="py-2 font-semibold text-indigo-700">{formatQty(row.recommended_reorder_units)}</td>
+                                                {canViewCosts && <td className="py-2 text-slate-700">{formatCurrency(row.estimated_reorder_value)}</td>}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-xs font-semibold text-slate-500">
+                                No products currently qualify for reorder priority under active filters.
+                            </div>
+                        )}
                     </section>
 
                     <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -281,9 +398,12 @@ export default function Index({
                                         <thead>
                                             <tr className="border-b border-slate-100 text-[10px] uppercase tracking-widest text-slate-400">
                                                 <th className="py-2">Product</th>
+                                                <th className="py-2">Category</th>
                                                 <th className="py-2">SKU</th>
                                                 <th className="py-2">Current</th>
                                                 <th className="py-2">Reorder</th>
+                                                <th className="py-2">Suggest Qty</th>
+                                                {canViewCosts && <th className="py-2">Est. Value</th>}
                                                 <th className="py-2">State</th>
                                             </tr>
                                         </thead>
@@ -291,9 +411,12 @@ export default function Index({
                                             {productVisibility.map((row, idx) => (
                                                 <tr key={`${row.sku}-${idx}`} className="border-b border-slate-50">
                                                     <td className="py-2 font-bold text-slate-700">{row.product_name}</td>
+                                                    <td className="py-2 text-slate-500">{row.category_name || 'Uncategorized'}</td>
                                                     <td className="py-2 text-slate-500">{row.sku}</td>
                                                     <td className="py-2 text-slate-700">{formatQty(row.current_stock)}</td>
                                                     <td className="py-2 text-slate-500">{formatQty(row.reorder_level)}</td>
+                                                    <td className="py-2 font-semibold text-indigo-700">{formatQty(row.recommended_reorder_units)}</td>
+                                                    {canViewCosts && <td className="py-2 text-slate-700">{formatCurrency(row.estimated_reorder_value)}</td>}
                                                     <td className="py-2">
                                                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${
                                                             row.stock_state === 'negative'

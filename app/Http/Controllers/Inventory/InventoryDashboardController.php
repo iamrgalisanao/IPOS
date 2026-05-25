@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\BranchInventory;
 use App\Models\InventoryMovement;
+use App\Models\ProductCategory;
 use App\Services\BranchContext;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -20,6 +21,7 @@ class InventoryDashboardController extends Controller
     public function index(Request $request): Response
     {
         $user = $request->user();
+        $canViewCosts = $user->hasPermission('audit_inventory');
 
         $branches = $this->resolveAccessibleBranches($user);
         $branchIds = $branches->pluck('id');
@@ -40,6 +42,11 @@ class InventoryDashboardController extends Controller
         }
 
         $productQuery = trim((string) $request->query('product', ''));
+        $categoryId = trim((string) $request->query('category_id', ''));
+        $priority = (string) $request->query('priority', 'all');
+        if (!in_array($priority, ['all', 'critical', 'high', 'normal'], true)) {
+            $priority = 'all';
+        }
 
         $baseInventory = BranchInventory::query()
             ->active()
@@ -59,6 +66,12 @@ class InventoryDashboardController extends Controller
             });
         }
 
+        if ($categoryId !== '') {
+            $baseInventory->whereHas('product', function ($q) use ($categoryId) {
+                $q->where('product_category_id', $categoryId);
+            });
+        }
+
         $filteredInventory = clone $baseInventory;
         if ($status === 'low') {
             $filteredInventory->whereColumn('current_stock', '<=', 'reorder_level');
@@ -67,11 +80,55 @@ class InventoryDashboardController extends Controller
             $filteredInventory->where('current_stock', '<', 0);
         }
 
+        if ($priority === 'critical') {
+            $filteredInventory->where('current_stock', '<', 0);
+        }
+
+        if ($priority === 'high') {
+            $filteredInventory
+                ->where('current_stock', '>=', 0)
+                ->whereColumn('current_stock', '<=', 'reorder_level');
+        }
+
+        if ($priority === 'normal') {
+            $filteredInventory->whereColumn('current_stock', '>', 'reorder_level');
+        }
+
+        $summaryRows = (clone $baseInventory)->get([
+            'current_stock',
+            'reorder_level',
+            'average_cost',
+        ]);
+
+        $suggestedReorderUnits = $summaryRows->sum(function (BranchInventory $inventory) {
+            $stock = (float) $inventory->current_stock;
+            $reorder = (float) ($inventory->reorder_level ?? 0);
+            return max($reorder - $stock, 0);
+        });
+
+        $estimatedReorderValue = $summaryRows->sum(function (BranchInventory $inventory) {
+            $stock = (float) $inventory->current_stock;
+            $reorder = (float) ($inventory->reorder_level ?? 0);
+            $shortage = max($reorder - $stock, 0);
+            $cost = (float) ($inventory->average_cost ?? 0);
+            return $shortage * $cost;
+        });
+
         $summary = [
             'tracked_items' => (clone $baseInventory)->count(),
             'low_stock_count' => (clone $baseInventory)->whereColumn('current_stock', '<=', 'reorder_level')->count(),
             'negative_stock_count' => (clone $baseInventory)->where('current_stock', '<', 0)->count(),
+            'suggested_reorder_units' => round($suggestedReorderUnits, 4),
+            'estimated_reorder_value' => $canViewCosts ? round($estimatedReorderValue, 4) : null,
         ];
+
+        $categories = ProductCategory::query()
+            ->active()
+            ->whereHas('products.branchInventories', function ($q) use ($branchIds) {
+                $q->active()->whereIn('branch_id', $branchIds);
+            })
+            ->orderBy('name')
+            ->get(['id', 'name']);
 
         $branchAggregates = (clone $filteredInventory)
             ->selectRaw('branch_id, COUNT(*) as item_count')
@@ -96,15 +153,19 @@ class InventoryDashboardController extends Controller
         $productVisibility = (clone $filteredInventory)
             ->with([
                 'branch:id,name',
-                'product:id,name,sku,status',
+                'product:id,name,sku,status,product_category_id',
+                'product.category:id,name',
             ])
             ->orderByRaw('CASE WHEN current_stock < 0 THEN 0 WHEN current_stock <= reorder_level THEN 1 ELSE 2 END')
+            ->orderByRaw('(reorder_level - current_stock) DESC')
             ->orderBy('current_stock')
             ->limit(15)
             ->get()
-            ->map(function (BranchInventory $inventory) {
+            ->map(function (BranchInventory $inventory) use ($canViewCosts) {
                 $stock = (float) $inventory->current_stock;
                 $reorder = (float) ($inventory->reorder_level ?? 0);
+                $averageCost = (float) ($inventory->average_cost ?? 0);
+                $reorderShortage = max($reorder - $stock, 0);
 
                 $stockState = 'normal';
                 if ($stock < 0) {
@@ -113,13 +174,57 @@ class InventoryDashboardController extends Controller
                     $stockState = 'low';
                 }
 
+                $priorityClass = 'normal';
+                if ($stock < 0) {
+                    $priorityClass = 'critical';
+                } elseif ($stock <= $reorder) {
+                    $priorityClass = 'high';
+                }
+
                 return [
                     'branch_name' => $inventory->branch?->name,
                     'product_name' => $inventory->product?->name,
                     'sku' => $inventory->product?->sku,
+                    'category_name' => $inventory->product?->category?->name,
                     'current_stock' => $stock,
                     'reorder_level' => $reorder,
+                    'reorder_shortage' => $reorderShortage,
+                    'recommended_reorder_units' => $reorderShortage,
                     'stock_state' => $stockState,
+                    'priority_class' => $priorityClass,
+                    'average_cost' => $canViewCosts ? $averageCost : null,
+                    'estimated_reorder_value' => $canViewCosts ? ($reorderShortage * $averageCost) : null,
+                ];
+            })
+            ->values();
+
+        $reorderPriorities = (clone $filteredInventory)
+            ->with([
+                'branch:id,name',
+                'product:id,name,sku,product_category_id',
+                'product.category:id,name',
+            ])
+            ->whereColumn('current_stock', '<=', 'reorder_level')
+            ->orderByRaw('CASE WHEN current_stock < 0 THEN 0 ELSE 1 END')
+            ->orderByRaw('(reorder_level - current_stock) DESC')
+            ->limit(10)
+            ->get()
+            ->map(function (BranchInventory $inventory) use ($canViewCosts) {
+                $stock = (float) $inventory->current_stock;
+                $reorder = (float) ($inventory->reorder_level ?? 0);
+                $averageCost = (float) ($inventory->average_cost ?? 0);
+                $reorderShortage = max($reorder - $stock, 0);
+
+                return [
+                    'branch_name' => $inventory->branch?->name,
+                    'product_name' => $inventory->product?->name,
+                    'sku' => $inventory->product?->sku,
+                    'category_name' => $inventory->product?->category?->name,
+                    'current_stock' => $stock,
+                    'reorder_level' => $reorder,
+                    'recommended_reorder_units' => $reorderShortage,
+                    'priority_class' => $stock < 0 ? 'critical' : 'high',
+                    'estimated_reorder_value' => $canViewCosts ? ($reorderShortage * $averageCost) : null,
                 ];
             })
             ->values();
@@ -158,13 +263,20 @@ class InventoryDashboardController extends Controller
             'filters' => [
                 'branch_id' => $selectedBranchId,
                 'product' => $productQuery,
+                'category_id' => $categoryId,
                 'status' => $status,
+                'priority' => $priority,
                 'days' => $days,
             ],
+            'categories' => $categories,
             'summary' => $summary,
             'branchSummaries' => $branchSummaries,
             'productVisibility' => $productVisibility,
+            'reorderPriorities' => $reorderPriorities,
             'movementSummary' => $movementSummary,
+            'permissions' => [
+                'can_view_costs' => $canViewCosts,
+            ],
         ]);
     }
 
