@@ -173,6 +173,12 @@ Status: Completed (local validation passed)
 
 ### Slice D: Low-Stock and Reorder Read-Only Dashboard
 
+Status: Planning lock created; implementation pending acceptance
+
+Planning lock:
+
+`docs/implementation-plans/slice-d-low-stock-reorder-read-only-dashboard-planning-lock.md`
+
 1. Build read-only query service.
 2. Add branch/category filters.
 3. Show low-stock, negative-stock, reorder-level status, and stock value context
@@ -209,6 +215,6 @@ Status: Completed (local validation passed)
 
 ## 7. Recommended Next Action
 
-Create Slice D as a formal planning lock for the Low-Stock and Reorder
+Review and accept Slice D planning lock for the Low-Stock and Reorder
 Read-Only Dashboard, then implement only after data sources, role boundaries,
 acceptance criteria, and non-goal boundaries are reviewed.

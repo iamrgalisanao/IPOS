@@ -229,7 +229,8 @@
 - [x] Slice A Planning Lock: Unified Inventory & Reporting Hub [Completed]
 - [x] Slice B Implementation: Read-Only Inventory Hub Surface [Implemented & Locally Validated]
 - [x] Slice C Planning/Implementation: Print-Friendly Stocktake & Inventory Report Views [Implemented & Locally Validated]
-- [ ] Slice D Planning Lock: Low-Stock and Reorder Read-Only Dashboard [Next]
+- [x] Slice D Planning Lock: Low-Stock and Reorder Read-Only Dashboard [Created]
+- [ ] Slice D Implementation: Low-Stock and Reorder Read-Only Dashboard [Next]
 
 ### Epic 21: Branch Comparison Business Intelligence [Planned]
 - [ ] 21.1 Cross-Branch Financial Aggregations [Planned]
