@@ -22,7 +22,8 @@ class Tenant extends Model
         'receipt_footer',
         'business_registration_number',
         'subscription_metadata',
-        'offline_sales_enabled'
+        'offline_sales_enabled',
+        'default_cash_drawer_limit',
     ];
 
     protected $attributes = [
@@ -34,6 +35,7 @@ class Tenant extends Model
     protected $casts = [
         'subscription_metadata' => 'array',
         'offline_sales_enabled' => 'boolean',
+        'default_cash_drawer_limit' => 'decimal:4',
     ];
 
     public function branches(): HasMany

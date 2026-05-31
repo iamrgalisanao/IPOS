@@ -19,7 +19,7 @@ class ProductCategoryFactory extends Factory
                 ? $tenantContext->getTenantId()
                 : Tenant::factory(),
             'name' => $this->faker->word(),
-            'code' => strtoupper($this->faker->lexify('CAT-???')),
+            'code' => strtoupper($this->faker->unique()->bothify('CAT-??????')),
             'status' => 'active',
         ];
     }

@@ -15,6 +15,7 @@ import { useTransactionStore } from './hooks/useTransactionStore';
 import ShiftHUD from '@/Components/Shift/ShiftHUD';
 import CloseShiftModal from '@/Components/Shift/CloseShiftModal';
 import RecordCashEventModal from '@/Components/Shift/RecordCashEventModal';
+import SpotAuditModal from '@/Components/Shift/SpotAuditModal';
 import TerminalLockScreen from './Components/TerminalLockScreen';
 import { createUncertainCheckoutError, getCheckoutErrorMessage, getGuardianPresentation, isUncertainCheckoutError } from './helpers/checkoutFailureHelper';
 import { catalogCache } from '@/POS/offline/catalogCache';
@@ -45,6 +46,7 @@ export default function Index({ categories, payment_methods, tenant_id, branch_i
     const [isCheckingStatus, setIsCheckingStatus] = useState(false);
     const [errorMessage, setErrorMessage] = useState(null);
     const [showCashEvent, setShowCashEvent] = useState(false);
+    const [showSpotAudit, setShowSpotAudit] = useState(false);
     const [activeShift, setActiveShift] = useState(null);
     const [activeLayout, setActiveLayout] = useState(null);
     const [isLayoutLoading, setIsLayoutLoading] = useState(false);
@@ -467,6 +469,24 @@ export default function Index({ categories, payment_methods, tenant_id, branch_i
         persistDraftState(persistedCartState);
     }, [cart, cartSubtotal, context, clientRequestUuid, showSplitPay, activeSale, paymentRows, checkoutState]);
 
+    // Prevent accidental reload/navigation if there is an active draft or in-flight transaction
+    useEffect(() => {
+        const handleBeforeUnload = (e) => {
+            const hasActiveDraft = cart.length > 0;
+            const isInFlight = checkoutState === 'checking' || isSubmitting || isCheckingStatus;
+            const isPaymentPending = showSplitPay && activeSale;
+
+            if (hasActiveDraft || isInFlight || isPaymentPending) {
+                e.preventDefault();
+                e.returnValue = ''; // Standard way to trigger browser warning
+                return '';
+            }
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [cart.length, checkoutState, isSubmitting, isCheckingStatus, showSplitPay, activeSale]);
+
     // Fetch products based on search and category
     const fetchProducts = async (q = '', catId = null) => {
         setLoading(true);
@@ -776,7 +796,7 @@ export default function Index({ categories, payment_methods, tenant_id, branch_i
     };
 
     return (
-        <div className="h-screen bg-slate-950 text-slate-100 flex flex-col overflow-hidden relative">
+        <div className="h-full w-full bg-slate-950 text-slate-100 flex flex-col overflow-hidden relative">
             <Head title="POS Terminal" />
 
             <ConnectivityBanner />
@@ -837,6 +857,7 @@ export default function Index({ categories, payment_methods, tenant_id, branch_i
                 <ShiftHUD 
                     shift={activeShift} 
                     onRecordEvent={() => setShowCashEvent(true)}
+                    onSpotAudit={() => setShowSpotAudit(true)}
                     onCloseShift={() => setShowCloseShift(true)}
                     onLockTerminal={() => {
                         localStorage.setItem(`terminal_locked_${user_id}`, 'true');
@@ -1069,6 +1090,15 @@ export default function Index({ categories, payment_methods, tenant_id, branch_i
                 <RecordCashEventModal
                     show={showCashEvent}
                     onClose={() => setShowCashEvent(false)}
+                    shift={activeShift}
+                />
+            )}
+
+            {/* Spot Audit Modal */}
+            {!is_admin_mode && activeShift && showSpotAudit && (
+                <SpotAuditModal
+                    show={showSpotAudit}
+                    onClose={() => setShowSpotAudit(false)}
                     shift={activeShift}
                 />
             )}

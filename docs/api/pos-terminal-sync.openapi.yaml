@@ -1,0 +1,331 @@
+openapi: 3.0.3
+info:
+  title: IPOS POS Terminal Sync Diagnostics API
+  description: |
+    Internal API specifications for validating terminal payloads, dry-running tax/pricing logic,
+    and performing sync status checks. Access is guarded by Sanctum authentication and restricted
+    by active Tenant and Branch scopes.
+  version: 1.0.0
+servers:
+  - url: /api/pos
+    description: Relative POS terminal API root
+paths:
+  /sandbox/validate:
+    post:
+      summary: Dry-run validate offline sale import payload
+      description: |
+        Performs in-memory dry-run calculations (schema validation, sequence verification,
+        and tax recalculation checks) against the submitted sales payload without mutating
+        any database records, inventory stocks, or triggering outbox events.
+      security:
+        - SanctumAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SandboxValidationRequest'
+      responses:
+        '200':
+          description: Validation result payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SandboxValidationResponse'
+        '403':
+          description: Tenant or Branch context is missing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Terminal profile configuration issue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /submissions/{submission_uuid}:
+    get:
+      summary: Get sync batch status by UUID or reference
+      description: |
+        Retrieves status information, processed counts, and non-sensitive diagnostic logs
+        for an offline synchronization batch. Enforces strict isolation boundaries.
+      security:
+        - SanctumAuth: []
+      parameters:
+        - name: submission_uuid
+          in: path
+          required: true
+          description: The UUID of the sync batch or its batch reference string.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Sync batch diagnostic status DTO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionStatusDTO'
+        '404':
+          description: Batch not found or boundary check failed (fails closed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /submissions/sequence/{offline_sequence_number}:
+    get:
+      summary: Get individual offline sale status by terminal sequence
+      description: |
+        Allows a terminal to query the status of a specific import sequence number.
+        The sequence prefix must match the terminal's registered range.
+      security:
+        - SanctumAuth: []
+      parameters:
+        - name: offline_sequence_number
+          in: path
+          required: true
+          description: Terminal sequence number (e.g., REG01-0000045)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Import status details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportStatusDTO'
+        '404':
+          description: Sequence not found, prefix mismatch, or boundary check failed (fails closed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    SanctumAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Laravel Sanctum API Token authentication
+
+  schemas:
+    SandboxValidationRequest:
+      type: object
+      required:
+        - offline_sequence_number
+        - submitted_at
+        - items
+        - client_subtotal
+        - client_tax_total
+        - client_total
+      properties:
+        offline_sequence_number:
+          type: string
+          description: Terminal-generated sequence identifier (must start with register sequence prefix)
+          example: REG01-0000045
+        submitted_at:
+          type: string
+          format: date-time
+          description: Transaction capture timestamp on the client register
+          example: '2026-05-30T10:15:00+08:00'
+        client_subtotal:
+          type: string
+          description: Total gross client calculation before tax deductions
+          example: '1120.00'
+        client_tax_total:
+          type: string
+          description: Total tax calculated by the client register
+          example: '120.00'
+        client_total:
+          type: string
+          description: Total net paid amount calculated by the client register
+          example: '1000.00'
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required:
+              - product_id
+              - quantity
+              - unit_price
+            properties:
+              product_id:
+                type: string
+                format: uuid
+                example: 9bf2e3dd-8b1b-4029-a796-7c22e5be5be9
+              quantity:
+                type: number
+                minimum: 0.0001
+                example: 2.0
+              unit_price:
+                type: number
+                minimum: 0.01
+                example: 500.00
+
+    SandboxValidationResponse:
+      type: object
+      properties:
+        valid:
+          type: boolean
+          description: True if all calculations match and sequences are valid
+        classification:
+          type: string
+          enum: [server_verified, conflict, rejected]
+        checks:
+          type: object
+          properties:
+            schema:
+              type: string
+              enum: [passed, failed, unchecked]
+            checksum:
+              type: string
+              enum: [passed, failed, unchecked]
+            tax_recalculation:
+              type: string
+              enum: [passed, failed, unchecked]
+            sequence_format:
+              type: string
+              enum: [passed, failed, unchecked]
+        computed_totals:
+          type: object
+          nullable: true
+          properties:
+            gross_amount:
+              type: string
+              example: '1120.00'
+            net_amount:
+              type: string
+              example: '1000.00'
+            vat_amount:
+              type: string
+              example: '120.00'
+        submitted_totals:
+          type: object
+          nullable: true
+          properties:
+            gross_amount:
+              type: string
+              example: '1120.00'
+            net_amount:
+              type: string
+              example: '1000.00'
+            vat_amount:
+              type: string
+              example: '120.00'
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              code:
+                type: string
+                example: TAX_RECALCULATION_MISMATCH
+              message:
+                type: string
+                example: Submitted VAT does not match server recalculation.
+              field:
+                type: string
+                example: client_total
+
+    SubmissionStatusDTO:
+      type: object
+      properties:
+        submission_uuid:
+          type: string
+          format: uuid
+          example: 9af83c44-e221-4f11-9a7c-bc22e5a409aa
+        status:
+          type: string
+          enum: [pending, posted, failed]
+        terminal:
+          type: object
+          properties:
+            machine_number:
+              type: string
+              example: POS-001
+            sequence_prefix:
+              type: string
+              example: REG01
+        summary:
+          type: object
+          properties:
+            submitted_count:
+              type: integer
+              example: 10
+            accepted_count:
+              type: integer
+              example: 9
+            rejected_count:
+              type: integer
+              example: 1
+            duplicate_count:
+              type: integer
+              example: 0
+        timing:
+          type: object
+          properties:
+            submitted_at:
+              type: string
+              format: date-time
+              nullable: true
+            server_verified_at:
+              type: string
+              format: date-time
+              nullable: true
+            posted_at:
+              type: string
+              format: date-time
+              nullable: true
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              sequence_number:
+                type: string
+                example: REG01-0000045
+              code:
+                type: string
+                example: REJECTED
+              message:
+                type: string
+                example: Validation mismatch or missing sequence prefix
+
+    ImportStatusDTO:
+      type: object
+      properties:
+        offline_sequence_number:
+          type: string
+          example: REG01-0000045
+        status:
+          type: string
+          enum: [pending, validated, posted, duplicate, rejected, conflict, hold]
+        rejection_reason:
+          type: string
+          nullable: true
+          example: Tax recalculation check failed
+        timing:
+          type: object
+          properties:
+            submitted_at:
+              type: string
+              format: date-time
+              nullable: true
+            reconciled_at:
+              type: string
+              format: date-time
+              nullable: true
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: SUBMISSION_NOT_FOUND
+        message:
+          type: string
+          example: The sync submission was not found.

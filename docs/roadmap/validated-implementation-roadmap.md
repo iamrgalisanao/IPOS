@@ -3,6 +3,12 @@
 ## Overview
 This document represents the **Actual Execution Truth** of the IPOS project. It has been reconciled against validated implementation history and project-gate closures.
 
+## Architecture Decision: Android Tablet POS Terminal Production Strategy
+
+IPOS will continue using the existing POS Terminal module inside the monolithic Laravel/Inertia/React application. 
+
+For long-term production readiness, the POS Terminal will be hardened as a tablet-first PWA and prepared for future Android native wrapping if hardware integration, kiosk control, or offline requirements become stronger. The current POS terminal UI, checkout flow, drawer workflows, shift handling, offline sync, and queue-backed backend services will be preserved. Do not split to a new repo or rewrite in native Android.
+
 ---
 
 ## Epic Summary
@@ -35,6 +41,18 @@ This document represents the **Actual Execution Truth** of the IPOS project. It 
 | **Epic 29** | Platform Tenant Provisioning & Subscription Feature Gating | **[Closed — Implemented & Locally Validated / Non-Blocking Residual Follow-Ups Tracked Separately]** |
 | **Epic 30** | System Admin Tenant Operations & Compliance Intelligence | **[Closed — Implemented & Locally Validated / 30.4 + 30.5 Planning-Locked Deferred]** |
 | **Epic 31** | Product Catalog & Inventory Admin UX Completion | **[Closed - Implemented & Locally Validated / Import Write Path Deferred]** |
+| **Epic 32** | IPOS POS Terminal Sync Diagnostics & Reliability | **[Closed — Implemented & Locally Validated]** |
+| **Epic 33** | Late-Sync Auditability & Z-Report Reconciliation | **[Closed — Implemented & Locally Validated]** |
+| **Epic 34** | Enterprise Async Reporting Export | **[Closed]** |
+| **Epic 35** | Recipe Maintenance and Costing Engine | **[Closed]** |
+| **Epic 36** | Local Register Sync and Store-Level Coordination | **[Proposed]** |
+| **Epic 37** | Advanced Promotions & Bundling Engine | **[Proposed]** |
+| **Epic 38** | F&B Table & Bill Manipulation Operations | **[Proposed]** |
+| **Epic 39** | Loyalty & Store Credit Ledger | **[Proposed]** |
+| **Epic 40** | Cash Drawer Audit & Manager Shift Reconciliation | **[Closed]** |
+| **Epic 41** | POS Terminal Production Hardening for Android Tablet | **[Implemented / Pilot Validation Required]** |
+
+
 
 
 *Epic 3 is closed as a Product/Catalog Core Foundation epic. Backend product/catalog capabilities are implemented and validated via downstream dependencies (POS, Stocktake, Accounting). Advanced UX/CDN/Product CRUD management UI is deferred and should be tracked separately as a future management feature.*
@@ -1251,5 +1269,170 @@ covered by earlier implementation tracks.
 - prioritize read/write Back Office usability and operational clarity
 - keep tenant and branch isolation fail-closed
 - preserve append-only audit behavior for critical catalog/inventory mutations
-- exclude pilot enablement logistics (Epic 28) unless explicitly re-prioritized
-- exclude persona enforcement schema redesign unless separately approved
+- exclude pilot enablement logistics (Epic 28) unless explicitly re-prioritize## Epic 32: IPOS POS Terminal Sync Diagnostics & Reliability [Closed — Implemented & Locally Validated]
+*Validated: May 2026*
+
+Epic 32 brings observability, testability, and supportability to the POS terminal sync pipeline.
+
+**Completed Stories:**
+- **32.1: Sandbox Validation Service** dry-run verification for terminal payloads without database mutations.
+- **32.2: Submission status lookup endpoints** query details by UUID or sequence number.
+- **32.3: Operational Sync Health Dashboard** displaying terminal metrics, pending/failed/posted counters, and sync batches.
+
+**Architecture Boundary & Guidelines:**
+- Strictly enforce tenant and branch scopes in all submission status lookups to prevent cross-tenant enumeration (fail-closed, return 404 on invalid ownership).
+
+---
+
+## Epic 33: Late-Sync Auditability & Z-Report Reconciliation [Closed — Implemented & Locally Validated]
+*Validated: May 2026*
+
+Epic 33 implements compliance-only safeguards for late-synced offline transactions, protecting finalized Z-report daily journals from mutations.
+
+**Completed Stories:**
+- **33.1: Prior Period Adjustments Ledger** recording retroactive entries without altering finalized Z-report numbers.
+- **33.2: Late-Sync Reconciliation Service** shunting the reporting basis of late imports to the branch's active open settlement period.
+- **33.3: Sync Discrepancy Logging** tracking GCT or sequence discrepancies.
+- **33.4: Back-Office Adjustments Dashboard** providing search, filter, and drill-down audit capabilities.
+
+**Architecture Boundary & Guidelines:**
+- Do not mutate historically closed, signed, or hashed Z-reports.
+- Record retroactive sales in the current open period's sub-ledgers.
+- Log reconciliation discrepancy alerts if the terminal's reported local GCT differs from the server's calculated totals.
+- Cashier cash-handling workflows (spot audits, cash drops, warnings, and shift dashboard) are separated and deferred to **Epic 40**.
+
+
+## Epic 34: Enterprise Async Reporting Export [Closed]
+*Validated: May 2026*
+
+Epic 34 securely moves heavy compliance exports into a background worker pipeline, preventing HTTP timeouts and memory crashes.
+
+**Status:**
+Closed — Implemented and validated.
+
+**Key Deliverables:**
+- 34.1 `data_exports` lifecycle tracking and private storage disk mapping.
+- 34.2 `ProcessDataExportJob` queued worker implementation.
+- 34.3 Streamed CSV generation via `EJournalExportService::exportToFile()` with HMAC-SHA-256 validation.
+- 34.4 Secure dashboard and download controls.
+- 34.5 `PruneExpiredDataExports` scheduler for 48-hour retention pruning.
+
+---
+
+## Epic 40: Cash Drawer Audit & Manager Shift Reconciliation [Closed]
+*Validated: May 2026*
+
+Epic 40 hardens operational cash control, spot audits, and manager shift reconciliation.
+
+**Status:**
+Closed — Implemented and validated.
+
+**Key Deliverables:**
+- 40.1 Branch-to-tenant hierarchical cash threshold resolution.
+- 40.2 High-value cash drop manager verification and cashier self-approval blocking.
+- 40.3 Mid-shift spot audit workflow and variance calculation via `SpotAuditService`.
+- 40.4 Immutable shift deposit record creation during shift approval.
+
+---
+
+## Epic 35: Recipe Maintenance and Costing Engine [Closed]
+*Validated: May 2026*
+
+Epic 35 introduces raw ingredient inventories, Bills of Materials (BOM), and recursive recipe-based stock depletions for F&B operations.
+
+**Completed Stories:**
+- 35.1 Unit of Measure (UOM) Conversion Resolver
+- 35.2 Interactive Bill of Materials (BOM) & Recipe Editor UI
+- 35.3 Automated POS Checkout Recipe Stock Deduction Engine
+- 35.4 Weighted Average Cost (WAC) Margin Valuation Ledger
+
+**Architecture Boundary & Guidelines:**
+- Run ingredient stock depletions asynchronously via background job queues to protect live POS checkout latency.
+- Allow raw stocks to enter negative values with dashboard warnings rather than failing transaction checkouts.
+
+---
+
+## Epic 36: Local Register Sync and Store-Level Coordination [Proposed]
+*Initialized: May 2026*
+
+Epic 36 enables store-level synchronization, table management, and order distribution between multiple registers on a local network during offline periods (aligning with StoreHub Multiple Register Sync / MRS capability).
+
+**Proposed Stories:**
+- 36.1 Local Subnet Sync Broker Service (Tauri Desktop wrapper broker acting as local LAN coordinator)
+- 36.2 Local Pub/Sub and Table/Order State Sharing (WebSockets / MQTT for table/cart sync)
+- 36.3 Local Print Broker for network orders and receipt routing
+
+**Architecture Boundary & Guidelines:**
+- Enforce strict single-owner locking per table or order to resolve split-brain conflicts.
+- Always use Terminal-Bound sequence prefixes to ensure zero receipt number collisions when syncing back to the cloud.
+- Support local broker discovery over local Wi-Fi / LAN to allow seamless slave register connections.
+
+---
+
+## Epic 37: Advanced Promotions & Bundling Engine [Proposed]
+*Initialized: May 2026*
+
+Epic 37 is proposed to enable complex promotional logic and auto-applied bundling rules in the checkout cart.
+
+**Proposed Stories:**
+- 37.1 Declarative Promotion Rule Engine (Buy X Get Y, combo packages)
+- 37.2 Automatic Promotion Application Service in Cart
+- 37.3 Promotion Usage Reporting & Cost Analysis
+
+**Architecture Boundary & Guidelines:**
+- Do not allow manual stacking of promotions unless explicitly configured in rule sets.
+- Calculate promotions deterministically on the server side (and locally offline using the identical logic engine).
+
+---
+
+## Epic 38: F&B Table & Bill Manipulation Operations [Proposed]
+*Initialized: May 2026*
+
+Epic 38 introduces visual table management and complex checkout bill splitting, moving, and merging.
+
+**Proposed Stories:**
+- 38.1 Dining Floor Table Status Visualizer
+- 38.2 Split-Bill by Seat/Item Service
+- 38.3 Merge/Move Orders between Table IDs
+
+**Architecture Boundary & Guidelines:**
+- Table layout configurations must be synced from BackOffice and cached locally.
+- Bill split operations must preserve strict accounting balance constraints (sum of parts must exactly equal original total).
+
+---
+
+## Epic 39: Loyalty & Store Credit Ledger [Proposed]
+*Initialized: May 2026*
+
+Epic 39 adds loyalty point accumulation and customer store credit wallets (e.g., for handling refunds and returns).
+
+**Proposed Stories:**
+- 39.1 Append-Only Store Credit Wallet Ledger
+- 39.2 Customer Loyalty Points Accumulation Engine
+- 39.3 Store Credit Wallet Payment Integration
+
+**Architecture Boundary & Guidelines:**
+- Store credit and loyalty point deductions must be modeled as append-only ledger entries (no mutable updates to wallet balances).
+- Enforce strict authentication checks (e.g., manager approval or customer verification) when redeeming store credit or loyalty points.
+
+---
+
+## Epic 41: POS Terminal Production Hardening for Android Tablet [Implemented / Pilot Validation Required]
+
+**Status:** Implemented / Pilot Validation Required
+**Decision:** Ready for Android tablet physical validation. This acts as the bridge between the current working POS terminal and a future production-grade Android deployment.
+
+**Proposed Stories:**
+- **41.1 Tablet POS Shell Hardening**: Full-screen tablet layout, touch-optimized controls, persistent cashier/session state, and prevention of accidental navigation loss.
+- **41.2 POS Terminal PWA Foundation**: manifest.json, service worker, installable app mode, offline fallback, and asset caching.
+- **41.3 Terminal State Recovery**: Recover active cart after refresh, recover active shift, show pending sync state, and warn before clearing local state.
+- **41.4 Hardware Adapter Abstraction**: Define printer/cash drawer adapter interface (e.g., `PosHardwareAdapter`), implement initial browser/network printer strategy, prepare Android bridge adapter later.
+- **41.5 Android Kiosk Readiness**: Document recommended Android settings, lock orientation, full-screen mode, app pinning/kiosk deployment guide.
+- **41.6 Production Tablet Validation**: Test checkout, payment, spot audit, cash drop, receipt printing, queue-backed inventory deduction, reconnect/reload behavior.
+
+**Architecture Boundary & Guidelines:**
+- Do not make Android-specific logic spread across the POS UI. Instead, use: `POS UI -> Hardware Adapter -> Android/PWA/Browser implementation`.
+- PWA offline support should not mean finalizing unsynced official transactions recklessly. It should support safe draft/cart persistence and controlled offline transaction queueing only under existing sync rules.
+- Do not split the POS terminal into a separate repo yet.
+- Do not rewrite the POS terminal in native Android now.
+- Do not discard the existing POS workflows.

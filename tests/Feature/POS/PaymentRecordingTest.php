@@ -30,6 +30,7 @@ class PaymentRecordingTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        \Illuminate\Support\Facades\Queue::fake([\App\Jobs\Inventory\ProcessSaleInventoryDeductionJob::class]);
 
         app(TenantContext::class)->clear();
         app(BranchContext::class)->clear();
@@ -318,6 +319,7 @@ class PaymentRecordingTest extends TestCase
     public function test_mutation_silence(): void
     {
         $this->postPayment($this->sale->id, ['payment_method_id' => $this->cashMethod->id, 'amount' => 100]);
+        \Illuminate\Support\Facades\Queue::assertPushed(\App\Jobs\Inventory\ProcessSaleInventoryDeductionJob::class);
         if (\Schema::hasTable('inventory_movements')) $this->assertEquals(0, \DB::table('inventory_movements')->count());
         if (\Schema::hasTable('accounting_outbox')) $this->assertEquals(1, \DB::table('accounting_outbox')->count());
         if (\Schema::hasTable('refunds')) $this->assertEquals(0, \DB::table('refunds')->count());

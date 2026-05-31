@@ -83,4 +83,14 @@ class Shift extends Model
     {
         return $this->hasMany(SalePayment::class);
     }
+
+    public function depositRecord(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(ShiftDepositRecord::class);
+    }
+
+    public function spotAudits(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(SpotAudit::class);
+    }
 }

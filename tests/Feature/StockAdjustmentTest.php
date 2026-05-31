@@ -102,7 +102,12 @@ class StockAdjustmentTest extends TestCase
         $inventory = app(InventoryService::class)->initializeInventory(['branch_id' => $branch->id, 'product_id' => $product->id, 'current_stock' => 10]);
 
         // We will mock recordMovement to throw an exception and verify the stock update rolls back
-        $service = \Mockery::mock(\App\Services\InventoryService::class, [app(\App\Services\AuditLogger::class), app(TenantContext::class), app(BranchContext::class)])->makePartial();
+        $service = \Mockery::mock(\App\Services\InventoryService::class, [
+            app(\App\Services\AuditLogger::class),
+            app(TenantContext::class),
+            app(BranchContext::class),
+            app(\App\Services\Inventory\UnitConversionResolver::class),
+        ])->makePartial();
         $service->shouldReceive('recordMovement')->andThrow(new \RuntimeException('Forced failure'));
 
         try {

@@ -41,3 +41,8 @@ Schedule::command('ipos:generate-replenishment-drafts')
     ->onOneServer()
     ->runInBackground();
 
+Schedule::command('reports:prune-exports')
+    ->hourly()
+    ->onOneServer()
+    ->runInBackground();
+

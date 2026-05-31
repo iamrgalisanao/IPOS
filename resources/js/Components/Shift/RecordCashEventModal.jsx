@@ -15,6 +15,8 @@ export default function RecordCashEventModal({ show, onClose, shift }) {
         amount: '',
         reason_code: 'SKIM',
         reason_notes: '',
+        manager_email: '',
+        manager_password: '',
     });
 
     if (!shift) return null;
@@ -128,11 +130,45 @@ export default function RecordCashEventModal({ show, onClose, shift }) {
 
                     {/* Threshold Warning */}
                     {isHighValueDrop && (
-                        <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg flex gap-3">
-                            <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
-                            <div className="text-xs text-amber-200">
-                                <p className="font-bold">Manager Approval Required</p>
-                                <p>This drop exceeds ₱{THRESHOLD.toLocaleString()}. A manager must authorize this transaction.</p>
+                        <div className="space-y-4">
+                            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg flex gap-3">
+                                <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
+                                <div className="text-xs text-amber-200">
+                                    <p className="font-bold">Manager Approval Required</p>
+                                    <p>This drop exceeds ₱{THRESHOLD.toLocaleString()}. A manager must authorize this transaction.</p>
+                                </div>
+                            </div>
+                            
+                            <div className="bg-slate-900 rounded-xl p-4 border border-slate-800">
+                                <h3 className="text-sm font-bold text-slate-200 mb-4">Manager Credentials</h3>
+                                
+                                <div className="space-y-4">
+                                    <div>
+                                        <InputLabel htmlFor="manager_email" value="Manager Email" />
+                                        <TextInput
+                                            id="manager_email"
+                                            type="email"
+                                            className="mt-1 block w-full bg-slate-950 border-slate-700"
+                                            value={data.manager_email}
+                                            onChange={(e) => setData('manager_email', e.target.value)}
+                                            required={isHighValueDrop}
+                                        />
+                                        <InputError message={errors.manager_email} className="mt-2" />
+                                    </div>
+
+                                    <div>
+                                        <InputLabel htmlFor="manager_password" value="Manager Password" />
+                                        <TextInput
+                                            id="manager_password"
+                                            type="password"
+                                            className="mt-1 block w-full bg-slate-950 border-slate-700"
+                                            value={data.manager_password}
+                                            onChange={(e) => setData('manager_password', e.target.value)}
+                                            required={isHighValueDrop}
+                                        />
+                                        <InputError message={errors.manager_password} className="mt-2" />
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     )}

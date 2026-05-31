@@ -117,6 +117,8 @@ class ShiftSummaryController extends Controller
             'approvedByUser:id,name',
             'cashDrawerEvents' => fn($q) => $q->with(['cashier:id,name', 'createdBy:id,name'])->latest('occurred_at'),
             'salePayments' => fn($q) => $q->whereHas('paymentMethod', fn($pq) => $pq->whereRaw('LOWER(code) = ?', ['cash']))->with('sale:id,sale_number'),
+            'spotAudits' => fn($q) => $q->with('manager:id,name')->latest('occurred_at'),
+            'depositRecord' => fn($q) => $q->with('manager:id,name'),
         ]);
 
         return Inertia::render('Shift/Show', [

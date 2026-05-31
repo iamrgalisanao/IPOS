@@ -20,6 +20,22 @@ use Illuminate\Support\Str;
 class CheckoutController extends Controller
 {
     /**
+     * Display the Tablet POS Terminal checkout interface.
+     */
+    public function index(Request $request, \App\Http\Controllers\POSController $posController)
+    {
+        // Re-use the existing POS controller index logic but override the inertia view
+        $response = $posController->index($request);
+        
+        // If the posController returns an Inertia response, change its component
+        if ($response instanceof \Inertia\Response) {
+            $response->component('POS/Terminal/Checkout');
+        }
+        
+        return $response;
+    }
+
+    /**
      * Validate a POS draft cart submission and establish the idempotency record.
      *
      * This story validates only. It does NOT:

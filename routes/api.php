@@ -58,6 +58,27 @@ Route::middleware(['auth:sanctum', 'tenant', 'branch', 'permission:create_sale',
     ->post('/pos/offline-sync', [\App\Http\Controllers\POS\OfflineSyncController::class, 'sync'])
     ->name('pos.offline-sync');
 
+// Epic 32 — POS Terminal Sync Diagnostics & Reliability
+Route::middleware(['auth:sanctum', 'tenant', 'branch', 'permission:create_sale', 'subscription.feature:sales.pos', 'throttle:60,1'])
+    ->prefix('pos')
+    ->name('pos.')
+    ->group(function () {
+        Route::post('/sandbox/validate', [\App\Http\Controllers\POS\SandboxValidationController::class, 'validatePayload'])
+            ->name('sandbox.validate');
+        Route::get('/submissions/{submission_uuid}', [\App\Http\Controllers\POS\SubmissionLookupController::class, 'show'])
+            ->name('submissions.show');
+        Route::get('/submissions/sequence/{offline_sequence_number}', [\App\Http\Controllers\POS\SubmissionLookupController::class, 'bySequence'])
+            ->name('submissions.by-sequence');
+
+        // Epic 40 — Cash Drawer Audit & Manager Shift Reconciliation
+        Route::get('/drawer-status', [\App\Http\Controllers\POS\POSDrawerController::class, 'drawerStatus'])
+            ->name('drawer-status');
+        Route::post('/shifts/{shift}/spot-audits', [\App\Http\Controllers\POS\POSDrawerController::class, 'spotAudit'])
+            ->name('shifts.spot-audits');
+        Route::post('/shifts/{shift}/drawer-events', [\App\Http\Controllers\POS\POSDrawerController::class, 'recordEvent'])
+            ->name('shifts.drawer-events');
+    });
+
 // Epic 30 — System Admin Operational Dashboard (Slice B)
 Route::middleware(['auth:sanctum', 'platform.admin'])
     ->prefix('system-admin/dashboard')

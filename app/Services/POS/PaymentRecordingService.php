@@ -172,7 +172,7 @@ class PaymentRecordingService
 
                 // 8. Inventory Deduction (Skip for training mode)
                 if (!$sale->is_training_mode) {
-                    $this->inventoryService->deductFromSale($sale);
+                    \App\Jobs\Inventory\ProcessSaleInventoryDeductionJob::dispatch($sale->id)->afterCommit();
                 }
 
                 // 9. Accounting Outbox (Skip for training mode)

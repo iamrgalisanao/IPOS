@@ -217,6 +217,15 @@ Route::middleware(['auth', 'tenant'])->group(function () {
             ->name('show');
     });
 
+    // Reports
+    Route::prefix('reports')->name('reports.')->group(function () {
+        Route::get('/sales-summary', [ReportController::class, 'salesSummary'])->name('sales_summary');
+        
+        // Data Exports
+        Route::get('/exports', [\App\Http\Controllers\Reports\DataExportController::class, 'index'])->name('exports.index');
+        Route::get('/exports/{export}/download', [\App\Http\Controllers\Reports\DataExportController::class, 'download'])->name('exports.download');
+    });
+
     // Shift Management
     Route::prefix('shifts')->name('shifts.')->group(function () {
         Route::get('/', [\App\Http\Controllers\Shift\ShiftSummaryController::class, 'index'])
@@ -240,6 +249,8 @@ Route::middleware(['auth', 'tenant'])->group(function () {
             Route::post('/drawer-events', [\App\Http\Controllers\Shift\ShiftController::class, 'recordDrawerEvent'])
                 ->middleware('permission:manage_cash_drawer')
                 ->name('drawer-events');
+            Route::post('/{shift}/spot-audit', [\App\Http\Controllers\Shift\SpotAuditController::class, 'store'])
+                ->name('spot-audit');
         });
 
         Route::get('/{shift}', [\App\Http\Controllers\Shift\ShiftSummaryController::class, 'show'])
@@ -251,7 +262,24 @@ Route::middleware(['auth', 'tenant'])->group(function () {
             ->name('z-report');
     });
 
-    // POS Shell Routes: requires branch context + sales.pos entitlement
+    // Epic 41: POS Terminal Tablet Production Routes
+    Route::prefix('pos/terminal')
+        ->name('pos.terminal.')
+        ->middleware([
+            'auth',
+            'tenant.resolved',
+            'branch.resolved',
+            'subscription.feature:sales.pos',
+        ])
+        ->group(function () {
+            Route::get('/checkout', [\App\Http\Controllers\CheckoutController::class, 'index'])->name('checkout');
+            // Stubbed for future story implementation
+            Route::get('/shift', [\App\Http\Controllers\CheckoutController::class, 'index'])->name('shift');
+            Route::get('/sync-status', [\App\Http\Controllers\CheckoutController::class, 'index'])->name('sync-status');
+            Route::get('/settings', [\App\Http\Controllers\CheckoutController::class, 'index'])->name('settings');
+        });
+
+    // POS Shell Routes (Legacy transition): requires branch context + sales.pos entitlement
     Route::middleware(['branch', 'subscription.feature:sales.pos'])->group(function () {
         Route::get('/pos', [\App\Http\Controllers\POSController::class, 'index'])->name('pos.index');
         Route::get('/pos/search', [\App\Http\Controllers\POSController::class, 'search'])->name('pos.search');
@@ -610,6 +638,11 @@ Route::middleware(['auth', 'tenant'])->group(function () {
         Route::post('/{product}/recipe', [\App\Http\Controllers\Admin\ProductController::class, 'updateRecipe'])
             ->middleware(['permission:manage_products', 'subscription.feature:catalog.edit'])
             ->name('recipe.update');
+
+        // Recipe Costing (Story 35.4) — WAC-based estimated cost per composite product unit
+        Route::get('/{product}/recipe-cost', [\App\Http\Controllers\Admin\ProductController::class, 'recipeCost'])
+            ->middleware(['permission:manage_products'])
+            ->name('recipe.cost');
     });
 
     // Branch settings and deduction policy
@@ -642,6 +675,18 @@ Route::middleware(['auth', 'tenant'])->group(function () {
             ->name('admin.offline-sync.imports.review');
         Route::post('/api/admin/offline-sync/imports/{offlineSalesImport}/post', [\App\Http\Controllers\Admin\OfflineImportController::class, 'postImport'])
             ->name('admin.offline-sync.imports.post');
+
+        // Epic 32 - Terminal Sync Monitor
+        Route::get('/admin/terminal-sync-monitor', [\App\Http\Controllers\Admin\TerminalSyncMonitorController::class, 'index'])
+            ->name('admin.terminal-sync-monitor.index');
+        Route::get('/api/admin/terminal-sync-monitor/data', [\App\Http\Controllers\Admin\TerminalSyncMonitorController::class, 'getMonitorData'])
+            ->name('admin.terminal-sync-monitor.data');
+
+        // Epic 33 - Prior Period Adjustments
+        Route::get('/admin/prior-period-adjustments', [\App\Http\Controllers\Admin\PriorPeriodAdjustmentController::class, 'index'])
+            ->name('admin.prior-period-adjustments.index');
+        Route::get('/api/admin/prior-period-adjustments/data', [\App\Http\Controllers\Admin\PriorPeriodAdjustmentController::class, 'getAdjustmentsData'])
+            ->name('admin.prior-period-adjustments.data');
     });
 
     // Unit Conversions settings

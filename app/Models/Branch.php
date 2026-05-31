@@ -50,10 +50,12 @@ class Branch extends Model
         'receipt_next_number',
         'inventory_deduction_policy',
         'offline_sales_enabled',
+        'cash_drawer_limit',
     ];
 
     protected $casts = [
         'offline_sales_enabled' => 'boolean',
+        'cash_drawer_limit' => 'decimal:4',
     ];
 
     /**

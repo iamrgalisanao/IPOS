@@ -68,3 +68,117 @@ Documents the validation of Epic 22, covering the implementation of the Visual P
 - **POS Layout Suite**: 43/43 tests passed.
 - **Security Suite**: 16/16 tests passed.
 - **Frontend Build**: Success.
+
+---
+
+## 3. Epic 34 — Enterprise Async Reporting Export
+
+### Execution Status
+`CLOSED & VALIDATED`
+
+### Overview
+Implemented the asynchronous BIR E-Journal export pipeline using the `data_exports` lifecycle table, private exports storage disk, queued `ProcessDataExportJob`, streamed CSV generation with HMAC-SHA-256 row integrity, secure download controls, duplicate active export prevention, and 48-hour retention pruning.
+
+### Slice Validation Status
+
+| Slice | Focus | Status | Evidence |
+| :--- | :--- | :--- | :--- |
+| **Slice A** | Export Tracking & Queueing | PASSED | `DataExportStatusTest.php`, `TaxReportingControllerTest.php` |
+| **Slice B** | Streamed CSV Generation & Hashing | PASSED | `AsyncEJournalExportTest.php` |
+| **Slice C** | Secure Download & Retention | PASSED | `DataExportDownloadTest.php`, `ExportRetentionPolicyTest.php` |
+
+### Test Validation Summary
+- `DataExportStatusTest` passed
+- `AsyncEJournalExportTest` passed
+- `DataExportDownloadTest` passed
+- `TaxReportingControllerTest` passed
+- `ExportRetentionPolicyTest` passed
+- `UserGuideQualityTest` passed
+
+---
+
+## 4. Epic 40 — Cash Drawer Audit & Manager Shift Reconciliation
+
+### Execution Status
+`CLOSED & VALIDATED`
+
+### Overview
+Implemented cash drawer threshold resolution, high-value cash drop manager verification, cashier self-approval blocking, spot audit workflow, POS spot audit modal, variance calculation, and immutable shift deposit handling.
+
+### Slice Validation Status
+
+| Slice | Focus | Status | Evidence |
+| :--- | :--- | :--- | :--- |
+| **Slice 40A/C** | Thresholds & Manager Approvals | PASSED | `CashDropThresholdTest.php` |
+| **Slice 40B** | Spot Audit Workflow | PASSED | `SpotAuditTest.php` |
+| **Slice 40D** | Shift Reconciliation & Deposits | PASSED | `tests/Feature/Shift/` Full Suite |
+
+### Test Validation Summary
+- `SpotAuditTest` passed
+- `CashDropThresholdTest` passed
+- Full Shift feature regression tests (107 tests / 357 assertions) passed
+- Frontend asset compilation (`npm run build`) passed
+
+---
+
+## 5. Epic 35 — Recipe Maintenance and Costing Engine
+
+### Execution Status
+`CLOSED & VALIDATED`
+
+### Overview
+Implemented raw ingredient inventories, Bills of Materials (BOM), UOM resolution, WAC margin valuation, and the Automated POS Checkout Recipe Stock Deduction Engine (`ProcessSaleInventoryDeductionJob`). Ensures inventory deductions do not block live POS checkout latency.
+
+### Slice Validation Status
+
+| Slice | Focus | Status | Evidence |
+| :--- | :--- | :--- | :--- |
+| **Story 35.1/35.2/35.4** | BOM, UOM, and WAC ledger | PASSED | `ProductCompositionReportTest.php`, `UnitConversionResolverTest.php` |
+| **Story 35.3** | Async POS Stock Deduction | PASSED | `ProcessSaleInventoryDeductionJobTest.php`, `InventoryDeductionPolicyTest.php` |
+
+### Test Validation Summary
+- `ProcessSaleInventoryDeductionJobTest` passed
+- `InventoryDeductionPolicyTest` passed
+- POS Feature tests passed
+- Frontend asset compilation (`npm run build`) passed
+
+---
+
+## 6. Epic 41 — POS Terminal Production Hardening for Android Tablet
+
+### Execution Status
+`Implemented — Ready for Android tablet pilot validation.`
+
+### Summary
+Epic 41 introduced a production-oriented tablet shell for the existing IPOS POS terminal without rewriting existing POS business logic. The implementation added the `/pos/terminal/*` route group, `TabletPOSLayout`, PWA manifest, scoped POS service worker, placeholder PWA icons, conditional service worker registration, reload protection, hardware adapter abstraction, and Android kiosk deployment documentation.
+
+### Implemented Components
+- `resources/js/Layouts/TabletPOSLayout.jsx`
+- `/pos/terminal/*` route group in `routes/web.php`
+- `public/manifest.json`
+- `public/pos/terminal/sw.js`
+- `public/pwa/ipos-pos-icon-192.png`
+- `public/pwa/ipos-pos-icon-512.png`
+- `public/pwa/ipos-pos-maskable-512.png`
+- Conditional PWA registration in `resources/views/app.blade.php`
+- `resources/js/POS/Hardware/PosHardwareAdapter.js`
+- `resources/js/POS/Hardware/NoOpHardwareAdapter.js`
+- `resources/js/POS/Hardware/BrowserPrintAdapter.js`
+- `resources/js/POS/Hardware/HardwareAdapterProvider.js`
+- `docs/deployment/android-kiosk-deployment.md`
+
+### Validation
+- `npm run build` passed.
+
+### Required Pilot Validation
+- Physical Android tablet PWA installation.
+- Standalone launch behavior.
+- Checkout/payment workflow.
+- Cash drop workflow.
+- Spot audit workflow.
+- Service worker scope safety.
+- Offline fallback behavior.
+- Receipt print adapter behavior.
+
+### Decision
+Epic 41 is accepted as implemented and ready for Android tablet pilot testing. Full production closure should follow after successful physical-device validation.

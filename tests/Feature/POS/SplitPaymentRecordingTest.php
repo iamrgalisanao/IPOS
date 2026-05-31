@@ -30,6 +30,7 @@ class SplitPaymentRecordingTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        \Illuminate\Support\Facades\Queue::fake([\App\Jobs\Inventory\ProcessSaleInventoryDeductionJob::class]);
 
         app(TenantContext::class)->clear();
         app(BranchContext::class)->clear();
@@ -284,6 +285,7 @@ class SplitPaymentRecordingTest extends TestCase
         $response = $this->postSplitPayment($this->sale->id, $payload);
 
         $response->assertStatus(200);
+        \Illuminate\Support\Facades\Queue::assertPushed(\App\Jobs\Inventory\ProcessSaleInventoryDeductionJob::class);
 
         if (\Schema::hasTable('inventory_movements')) $this->assertEquals(0, \DB::table('inventory_movements')->count());
         if (\Schema::hasTable('accounting_outbox')) {

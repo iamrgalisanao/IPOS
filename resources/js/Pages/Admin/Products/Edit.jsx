@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { Head, useForm, Link, router } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import InputLabel from '@/Components/InputLabel';
@@ -23,7 +23,10 @@ import {
     Layers,
     Coffee,
     AlertCircle,
-    CheckCircle2
+    CheckCircle2,
+    Calculator,
+    TrendingUp,
+    AlertTriangle
 } from 'lucide-react';
 
 export default function Edit({ auth, product, categories, taxCategories, branches, branchPrices, allProducts, uomOptions, productTypes }) {
@@ -31,6 +34,10 @@ export default function Edit({ auth, product, categories, taxCategories, branche
     const searchInputRef = useRef(null);
     const [branchPricingFeedback, setBranchPricingFeedback] = useState(null);
     const [recipeFeedback, setRecipeFeedback] = useState(null);
+    const [recipeCost, setRecipeCost] = useState(null);
+    const [costBranchId, setCostBranchId] = useState('');
+    const [costLoading, setCostLoading] = useState(false);
+    const [costError, setCostError] = useState(null);
     
     // Product Metadata Form
     const { data, setData, put, processing, errors, isDirty, recentlySuccessful } = useForm({
@@ -199,6 +206,29 @@ export default function Edit({ auth, product, categories, taxCategories, branche
 
     const getRecipeFieldError = (index, field) => recipeForm.errors[`ingredients.${index}.${field}`];
     const recipeErrorCount = Object.keys(recipeForm.errors).filter((key) => key.startsWith('ingredients.')).length;
+
+    const fetchRecipeCost = useCallback(async () => {
+        setCostLoading(true);
+        setCostError(null);
+        setRecipeCost(null);
+        try {
+            const url = new URL(route('admin.products.recipe.cost', product.id), window.location.origin);
+            if (costBranchId) url.searchParams.set('branch_id', costBranchId);
+            const res = await fetch(url.toString(), {
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                }
+            });
+            if (!res.ok) throw new Error(`Server responded with ${res.status}`);
+            const json = await res.json();
+            setRecipeCost(json);
+        } catch (e) {
+            setCostError('Failed to calculate recipe cost. Please try again.');
+        } finally {
+            setCostLoading(false);
+        }
+    }, [product.id, costBranchId]);
 
     return (
         <AuthenticatedLayout
@@ -735,6 +765,162 @@ export default function Edit({ auth, product, categories, taxCategories, branche
                                             <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mt-1">Ingredient line items</p>
                                         </div>
                                     </div>
+                                </div>
+
+                                {/* WAC Recipe Cost Estimator (Story 35.4) */}
+                                <div className="mb-6 rounded-3xl border border-indigo-100 bg-indigo-50/30 p-5">
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <div className="p-1.5 bg-indigo-100 text-indigo-600 rounded-lg">
+                                            <Calculator size={15} />
+                                        </div>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-indigo-700">WAC Recipe Cost Estimator</p>
+                                    </div>
+                                    <p className="text-[11px] text-slate-500 leading-relaxed mb-4">
+                                        Estimates the total ingredient cost per unit sold using Weighted Average Cost (WAC) from branch inventory. Select a branch for branch-specific WAC; leave blank for catalog cost fallback.
+                                    </p>
+                                    <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                                        <select
+                                            id="cost-branch-select"
+                                            className="flex-1 h-11 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:ring-indigo-500/20 focus:border-indigo-500"
+                                            value={costBranchId}
+                                            onChange={(e) => { setCostBranchId(e.target.value); setRecipeCost(null); }}
+                                        >
+                                            <option value="">No branch — use catalog cost</option>
+                                            {branches.map(b => (
+                                                <option key={b.id} value={b.id}>{b.name}</option>
+                                            ))}
+                                        </select>
+                                        <button
+                                            type="button"
+                                            id="btn-calculate-recipe-cost"
+                                            onClick={fetchRecipeCost}
+                                            disabled={costLoading || recipeForm.data.ingredients.length === 0}
+                                            className={`px-4 h-11 flex items-center gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
+                                                costLoading || recipeForm.data.ingredients.length === 0
+                                                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                                    : 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-lg shadow-indigo-600/20'
+                                            }`}
+                                        >
+                                            <TrendingUp size={14} />
+                                            {costLoading ? 'Calculating...' : 'Calculate WAC Cost'}
+                                        </button>
+                                    </div>
+
+                                    {costError && (
+                                        <div className="mt-4 flex items-center gap-2 text-rose-600">
+                                            <AlertTriangle size={14} />
+                                            <p className="text-[10px] font-black uppercase tracking-widest">{costError}</p>
+                                        </div>
+                                    )}
+
+                                    {recipeCost && (
+                                        <div className="mt-4 space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                            {/* Summary row */}
+                                            <div className="flex flex-wrap gap-4">
+                                                <div className="flex-1 min-w-[160px] bg-white border border-indigo-200 rounded-2xl p-4">
+                                                    <p className="text-[9px] font-black uppercase tracking-widest text-indigo-600">Estimated Total Cost</p>
+                                                    {recipeCost.total_cost !== null ? (
+                                                        <p className="text-xl font-black text-slate-800 mt-1">₱{parseFloat(recipeCost.total_cost).toFixed(4)}</p>
+                                                    ) : (
+                                                        <p className="text-sm font-black text-amber-600 mt-1">Incomplete</p>
+                                                    )}
+                                                    <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider mt-1">
+                                                        {recipeCost.branch_id ? 'Using branch WAC' : 'Using catalog cost'}
+                                                    </p>
+                                                </div>
+                                                {recipeCost.total_cost !== null && parseFloat(data.selling_price) > 0 && (
+                                                    <div className="flex-1 min-w-[160px] bg-white border border-emerald-200 rounded-2xl p-4">
+                                                        <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Recipe Gross Margin</p>
+                                                        <p className={`text-xl font-black mt-1 ${
+                                                            (parseFloat(data.selling_price) - parseFloat(recipeCost.total_cost)) >= 0 ? 'text-emerald-700' : 'text-rose-600'
+                                                        }`}>
+                                                            ₱{(parseFloat(data.selling_price) - parseFloat(recipeCost.total_cost)).toFixed(4)}
+                                                        </p>
+                                                        <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider mt-1">
+                                                            Selling ₱{parseFloat(data.selling_price).toFixed(2)} − Recipe cost
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Warnings */}
+                                            {(recipeCost.has_missing_costs || recipeCost.has_missing_conversions) && (
+                                                <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
+                                                    <AlertTriangle size={14} className="text-amber-600 shrink-0 mt-0.5" />
+                                                    <p className="text-[10px] font-semibold text-amber-800 leading-relaxed">
+                                                        {recipeCost.has_missing_conversions && 'One or more ingredients could not be unit-converted (missing conversion rule). '}
+                                                        {recipeCost.has_missing_costs && 'One or more ingredients have no WAC or catalog cost available. '}
+                                                        Total cost is marked incomplete. Update missing WAC via stock receiving or set catalog cost per ingredient.
+                                                    </p>
+                                                </div>
+                                            )}
+
+                                            {/* Per-ingredient breakdown */}
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-xs">
+                                                    <thead>
+                                                        <tr className="border-b border-slate-100">
+                                                            <th className="text-left py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 pb-3">Ingredient</th>
+                                                            <th className="text-right py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 pb-3">Qty (Recipe)</th>
+                                                            <th className="text-right py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 pb-3">Converted Qty</th>
+                                                            <th className="text-right py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 pb-3">Unit Cost</th>
+                                                            <th className="text-right py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 pb-3">Line Cost</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-50">
+                                                        {recipeCost.ingredients.map(ing => (
+                                                            <tr key={ing.ingredient_id} className={`${
+                                                                ing.conversion_missing || ing.line_cost === null ? 'bg-amber-50/50' : ''
+                                                            }`}>
+                                                                <td className="py-2.5 pr-4">
+                                                                    <p className="font-bold text-slate-800">{ing.name}</p>
+                                                                    <p className="text-[9px] font-black text-slate-400 uppercase">{ing.sku}</p>
+                                                                    <span className={`inline-block mt-1 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${
+                                                                        ing.cost_source === 'branch_wac' ? 'bg-indigo-100 text-indigo-700' :
+                                                                        ing.cost_source === 'catalog_cost' ? 'bg-slate-100 text-slate-600' :
+                                                                        'bg-amber-100 text-amber-700'
+                                                                    }`}>
+                                                                        {ing.cost_source === 'branch_wac' ? 'Branch WAC' :
+                                                                         ing.cost_source === 'catalog_cost' ? 'Catalog Cost' : 'No Cost'}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="py-2.5 text-right font-medium text-slate-600">
+                                                                    {ing.recipe_quantity} {ing.recipe_unit}
+                                                                </td>
+                                                                <td className="py-2.5 text-right">
+                                                                    {ing.conversion_missing ? (
+                                                                        <span className="text-amber-600 font-black text-[10px]">No Rule</span>
+                                                                    ) : (
+                                                                        <span className="font-medium text-slate-600">{ing.converted_quantity} {ing.ingredient_uom}</span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="py-2.5 text-right font-medium text-slate-600">
+                                                                    {ing.unit_cost !== null ? `₱${parseFloat(ing.unit_cost).toFixed(4)}` : <span className="text-amber-600 font-black text-[10px]">—</span>}
+                                                                </td>
+                                                                <td className="py-2.5 text-right font-black">
+                                                                    {ing.line_cost !== null ? (
+                                                                        <span className="text-slate-800">₱{parseFloat(ing.line_cost).toFixed(4)}</span>
+                                                                    ) : (
+                                                                        <span className="text-amber-600 text-[10px]">—</span>
+                                                                    )}
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                    <tfoot>
+                                                        <tr className="border-t-2 border-indigo-200">
+                                                            <td colSpan={4} className="pt-3 text-[10px] font-black uppercase tracking-widest text-indigo-700">Estimated Recipe Total</td>
+                                                            <td className="pt-3 text-right font-black text-slate-800">
+                                                                {recipeCost.total_cost !== null
+                                                                    ? `₱${parseFloat(recipeCost.total_cost).toFixed(4)}`
+                                                                    : <span className="text-amber-600">Incomplete</span>}
+                                                            </td>
+                                                        </tr>
+                                                    </tfoot>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="space-y-6">

@@ -73,15 +73,64 @@ export default function Index({
     const exportUrl = () => `${route('reports.sales-summary.export')}?${new URLSearchParams(form).toString()}`;
 
     const cards = [
-        ['Gross Sales', money(kpis.gross_sales), 'Stored gross amount, with subtotal fallback.'],
-        ['Net Sales', money(kpis.net_sales), 'Sum of existing sale totals under active filters.'],
-        ['Transactions', number(kpis.transaction_count), 'All visible transactions in this report slice.'],
-        ['Paid', number(kpis.paid_count), 'Transactions currently marked paid.'],
-        ['Pending / Created', number(kpis.pending_count), 'Open or not-yet-final transactions.'],
-        ['Voids / Refunds', number(kpis.void_refund_count), 'Exception transactions and reversals.'],
-        ['Average Transaction', money(kpis.average_transaction_value), 'Net sales divided by transaction count.'],
-        ['Discounts', money(kpis.discount_total), 'Stored discount totals only.'],
+        {
+            label: 'Net Sales',
+            value: money(kpis.net_sales),
+            description: `${number(kpis.transaction_count)} visible transactions under active filters.`,
+            emphasis: 'primary',
+        },
+        {
+            label: 'Transactions',
+            value: number(kpis.transaction_count),
+            description: 'All visible transactions in this report slice.',
+            emphasis: 'secondary',
+        },
+        {
+            label: 'Average Transaction',
+            value: money(kpis.average_transaction_value),
+            description: 'Net sales divided by visible transaction count.',
+            emphasis: 'secondary',
+        },
+        {
+            label: 'Paid',
+            value: number(kpis.paid_count),
+            description: `${percentage(kpis.paid_count, kpis.transaction_count)} of visible transactions.`,
+            tone: 'success',
+        },
+        {
+            label: 'Gross Sales',
+            value: money(kpis.gross_sales),
+            description: 'Stored gross amount, with subtotal fallback.',
+        },
+        {
+            label: 'Pending / Created',
+            value: number(kpis.pending_count),
+            description: Number(kpis.pending_count || 0) > 0 ? 'Open or not-yet-final transactions need review.' : 'No open visible transactions.',
+            tone: Number(kpis.pending_count || 0) > 0 ? 'warning' : 'neutral',
+        },
+        {
+            label: 'Voids / Refunds',
+            value: number(kpis.void_refund_count),
+            description: Number(kpis.void_refund_count || 0) > 0 ? 'Exception transactions and reversals are present.' : 'No visible exception transactions.',
+            tone: Number(kpis.void_refund_count || 0) > 0 ? 'danger' : 'neutral',
+        },
+        {
+            label: 'Discounts',
+            value: money(kpis.discount_total),
+            description: 'Stored discount totals only.',
+        },
     ];
+    const selectedBranch = (filterOptions.branches || []).find((branch) => branch.id === form.branch_id)?.name || 'All Visible';
+    const selectedPayment = (filterOptions.payment_methods || []).find((method) => method.id === form.payment_method_id)?.name || 'All Payments';
+    const selectedCashier = (filterOptions.cashiers || []).find((cashier) => cashier.id === form.cashier_id)?.name || 'All Cashiers';
+    const activeFilters = [
+        ['Date Range', dateRangeLabel(form.start_date, form.end_date)],
+        ['Branch', selectedBranch],
+        ['Status', form.status ? titleCase(form.status) : 'All Statuses'],
+        ['Payment', selectedPayment],
+        ['Cashier', selectedCashier],
+    ];
+    const insightText = buildInsightText({ kpis, paymentBreakdown, statusBreakdown });
 
     return (
         <AuthenticatedLayout
@@ -165,15 +214,24 @@ export default function Index({
                                     </select>
                                 </label>
                             </div>
-                            <div className="flex flex-wrap justify-end gap-3">
-                                <button type="button" onClick={reset} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600">
-                                    <RefreshCcw size={15} />
-                                    Reset
-                                </button>
-                                <button type="submit" className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-2 text-sm font-bold text-white">
-                                    <Filter size={15} />
-                                    Apply
-                                </button>
+                            <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+                                <div className="flex flex-wrap gap-2">
+                                    {activeFilters.map(([label, value]) => (
+                                        <span key={label} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
+                                            <span className="text-slate-400">{label}:</span> {value}
+                                        </span>
+                                    ))}
+                                </div>
+                                <div className="flex flex-wrap justify-end gap-3">
+                                    <button type="button" onClick={reset} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600">
+                                        <RefreshCcw size={15} />
+                                        Reset
+                                    </button>
+                                    <button type="submit" className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-2 text-sm font-bold text-white">
+                                        <Filter size={15} />
+                                        Apply
+                                    </button>
+                                </div>
                             </div>
                         </form>
                     </section>
@@ -184,31 +242,78 @@ export default function Index({
                         <p className="mt-1 text-sm text-slate-600">Read-only report generated from existing sales records.</p>
                     </section>
 
-                    <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                        {cards.map(([label, value, description]) => (
-                            <article key={label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm print:break-inside-avoid print:shadow-none">
-                                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">{label}</p>
-                                <p className="mt-3 text-2xl font-bold text-slate-950">{value}</p>
-                                <p className="mt-2 text-xs leading-5 text-slate-500">{description}</p>
-                            </article>
-                        ))}
+                    <section>
+                        <div className="mb-3">
+                            <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Sales Overview</p>
+                            <p className="mt-1 text-sm text-slate-500">Read-only totals from existing sales records under the active filters.</p>
+                        </div>
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                            {cards.map(({ label, value, description, emphasis, tone }) => (
+                                <article
+                                    key={label}
+                                    className={[
+                                        'rounded-2xl border bg-white p-5 shadow-sm print:break-inside-avoid print:shadow-none',
+                                        emphasis === 'primary' ? 'border-blue-200 bg-blue-50/60 lg:col-span-2' : 'border-slate-200',
+                                        emphasis === 'secondary' ? 'border-slate-300' : '',
+                                        tone === 'warning' ? 'border-amber-200 bg-amber-50/50' : '',
+                                        tone === 'danger' ? 'border-rose-200 bg-rose-50/50' : '',
+                                        tone === 'success' ? 'border-emerald-200 bg-emerald-50/40' : '',
+                                    ].filter(Boolean).join(' ')}
+                                >
+                                    <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">{label}</p>
+                                    <p className={['mt-3 font-bold text-slate-950', emphasis === 'primary' ? 'text-3xl' : 'text-2xl'].join(' ')}>{value}</p>
+                                    <p className="mt-2 text-xs leading-5 text-slate-500">{description}</p>
+                                </article>
+                            ))}
+                        </div>
                     </section>
 
-                    <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm print:break-inside-avoid print:shadow-none">
+                        <div className="flex items-start gap-3">
+                            <div className="rounded-xl bg-blue-50 p-2 text-blue-700">
+                                <BarChart3 size={18} />
+                            </div>
+                            <div>
+                                <p className="text-sm font-black uppercase tracking-[0.18em] text-slate-800">Summary Insight</p>
+                                <p className="mt-2 text-sm leading-6 text-slate-600">{insightText}</p>
+                                {Number(kpis.transaction_count || 0) === 0 && (
+                                    <p className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
+                                        No sales found for the selected filters. Try adjusting the date range, branch, payment method, or cashier.
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    </section>
+
+                    <section>
+                        <div className="mb-3">
+                            <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Breakdown Analysis</p>
+                            <p className="mt-1 text-sm text-slate-500">Relative share of visible transaction count and amount.</p>
+                        </div>
+                        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
                         <ReportTable
                             title="Payment Breakdown"
                             icon={CreditCard}
                             columns={['Payment Method', 'Count', 'Amount']}
                             empty="No payment rows under active filters."
-                            rows={paymentBreakdown.map((row) => [row.payment_method_name, number(row.payment_count), money(row.total_amount)])}
+                            rows={paymentBreakdown.map((row) => ({
+                                label: row.payment_method_name,
+                                count: Number(row.payment_count || 0),
+                                amount: Number(row.total_amount || 0),
+                            }))}
                         />
                         <ReportTable
                             title="Status Breakdown"
                             icon={Receipt}
                             columns={['Status', 'Count', 'Amount']}
                             empty="No status rows under active filters."
-                            rows={statusBreakdown.map((row) => [titleCase(row.status), number(row.transaction_count), money(row.total_amount)])}
+                            rows={statusBreakdown.map((row) => ({
+                                label: titleCase(row.status),
+                                count: Number(row.transaction_count || 0),
+                                amount: Number(row.total_amount || 0),
+                            }))}
                         />
+                        </div>
                     </section>
 
                     <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm print:shadow-none">
@@ -218,10 +323,10 @@ export default function Index({
                                     <Calendar size={16} />
                                     Recent Transactions
                                 </h3>
-                                <p className="mt-1 text-sm text-slate-500">Latest visible transactions for context. Full audit detail remains in Sales History.</p>
+                                <p className="mt-1 text-sm text-slate-500">Latest visible transactions for context. Full audit detail remains in the Transaction Audit Log.</p>
                             </div>
                             <Link href={route('sales.history.index')} className="text-xs font-bold uppercase tracking-widest text-blue-700 print:hidden">
-                                Audit Log
+                                View Full Audit Log
                             </Link>
                         </div>
                         <div className="overflow-x-auto">
@@ -238,9 +343,9 @@ export default function Index({
                                 </thead>
                                 <tbody className="divide-y divide-slate-50">
                                     {recentTransactions.length > 0 ? recentTransactions.map((sale) => (
-                                        <tr key={sale.id}>
+                                        <tr key={sale.id} className="transition hover:bg-slate-50">
                                             <td className="py-3 pr-4 font-bold text-slate-900">{sale.sale_number}</td>
-                                            <td className="py-3 pr-4 text-slate-600">{titleCase(sale.status)}</td>
+                                            <td className="py-3 pr-4"><StatusBadge status={sale.status} /></td>
                                             <td className="py-3 pr-4 text-slate-600">{sale.branch_name || 'Unassigned'}</td>
                                             <td className="py-3 pr-4 text-slate-600">{sale.cashier_name || 'Unassigned'}</td>
                                             <td className="py-3 pr-4 text-slate-600">{sale.timestamp || 'N/A'}</td>
@@ -261,7 +366,87 @@ export default function Index({
     );
 }
 
+function percentage(value, total) {
+    const denominator = Number(total || 0);
+
+    if (denominator <= 0) {
+        return '0%';
+    }
+
+    return `${number((Number(value || 0) / denominator) * 100)}%`;
+}
+
+function dateRangeLabel(start, end) {
+    if (start && end) {
+        return `${start} to ${end}`;
+    }
+
+    if (start) {
+        return `From ${start}`;
+    }
+
+    if (end) {
+        return `Until ${end}`;
+    }
+
+    return 'All Dates';
+}
+
+function buildInsightText({ kpis, paymentBreakdown, statusBreakdown }) {
+    const transactionCount = Number(kpis.transaction_count || 0);
+
+    if (transactionCount === 0) {
+        return 'No visible transactions were found under the selected filters.';
+    }
+
+    const topPayment = [...paymentBreakdown].sort((a, b) => Number(b.total_amount || 0) - Number(a.total_amount || 0))[0];
+    const paidCount = Number(kpis.paid_count || 0);
+    const pendingCount = Number(kpis.pending_count || 0);
+    const exceptionCount = Number(kpis.void_refund_count || 0);
+    const statusNote = pendingCount > 0
+        ? `${number(pendingCount)} remain pending or created.`
+        : 'No pending or created transactions are visible.';
+    const exceptionNote = exceptionCount > 0
+        ? `${number(exceptionCount)} void/refund records are visible.`
+        : 'No void/refund records are visible.';
+    const paymentNote = topPayment
+        ? `${topPayment.payment_method_name || 'Unspecified payment'} is the largest visible payment method at ${money(topPayment.total_amount)}.`
+        : 'No payment breakdown is available for the current filters.';
+
+    return `${number(transactionCount)} visible transactions were found with ${money(kpis.net_sales)} in net sales. ${number(paidCount)} are marked paid. ${statusNote} ${exceptionNote} ${paymentNote}`;
+}
+
+function statusClasses(status) {
+    const normalized = String(status || '').toLowerCase();
+
+    if (normalized === 'paid' || normalized === 'completed') {
+        return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+    }
+
+    if (['voided', 'refunded', 'cancelled'].includes(normalized)) {
+        return 'border-rose-200 bg-rose-50 text-rose-700';
+    }
+
+    if (['created', 'pending', 'draft'].includes(normalized)) {
+        return 'border-amber-200 bg-amber-50 text-amber-700';
+    }
+
+    return 'border-slate-200 bg-slate-50 text-slate-600';
+}
+
+function StatusBadge({ status }) {
+    return (
+        <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-black uppercase tracking-wider ${statusClasses(status)}`}>
+            {titleCase(status)}
+        </span>
+    );
+}
+
 function ReportTable({ title, icon: Icon, columns, rows, empty }) {
+    const totalCount = rows.reduce((sum, row) => sum + Number(row.count || 0), 0);
+    const totalAmount = rows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+    const maxAmount = Math.max(...rows.map((row) => Number(row.amount || 0)), 0);
+
     return (
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm print:break-inside-avoid print:shadow-none">
             <h3 className="mb-4 flex items-center gap-2 text-sm font-black uppercase tracking-[0.18em] text-slate-800">
@@ -280,9 +465,25 @@ function ReportTable({ title, icon: Icon, columns, rows, empty }) {
                     <tbody className="divide-y divide-slate-50">
                         {rows.length > 0 ? rows.map((row, rowIndex) => (
                             <tr key={rowIndex}>
-                                {row.map((cell, cellIndex) => (
-                                    <td key={`${rowIndex}-${cellIndex}`} className={`py-3 ${cellIndex === row.length - 1 ? 'text-right font-bold text-slate-900' : 'pr-4 text-slate-600'}`}>{cell}</td>
-                                ))}
+                                <td className="py-3 pr-4 text-slate-700">
+                                    <div className="space-y-1.5">
+                                        <span className="font-bold text-slate-800">{row.label || 'Unspecified'}</span>
+                                        <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                                            <div
+                                                className="h-full rounded-full bg-blue-500"
+                                                style={{ width: `${maxAmount > 0 ? Math.max((Number(row.amount || 0) / maxAmount) * 100, 3) : 0}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                </td>
+                                <td className="py-3 pr-4 text-center font-semibold text-slate-700">
+                                    {number(row.count)}
+                                    <span className="ml-1 text-xs font-medium text-slate-400">({percentage(row.count, totalCount)})</span>
+                                </td>
+                                <td className="py-3 text-right font-bold text-slate-900">
+                                    {money(row.amount)}
+                                    <span className="ml-1 text-xs font-medium text-slate-400">({percentage(row.amount, totalAmount)})</span>
+                                </td>
                             </tr>
                         )) : (
                             <tr>
@@ -290,6 +491,15 @@ function ReportTable({ title, icon: Icon, columns, rows, empty }) {
                             </tr>
                         )}
                     </tbody>
+                    {rows.length > 0 && (
+                        <tfoot>
+                            <tr className="border-t border-slate-100 text-sm font-bold text-slate-900">
+                                <td className="py-3 pr-4">Total</td>
+                                <td className="py-3 pr-4 text-center">{number(totalCount)}</td>
+                                <td className="py-3 text-right">{money(totalAmount)}</td>
+                            </tr>
+                        </tfoot>
+                    )}
                 </table>
             </div>
         </section>

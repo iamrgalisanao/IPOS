@@ -18,13 +18,21 @@ import {
     FileText,
     History,
     ShoppingCart,
-    Lock
+    Lock,
+    X
 } from 'lucide-react';
 
 export default function ShiftShow({ auth, shift }) {
     const [showCloseModal, setShowCloseModal] = useState(false);
     const [showEventModal, setShowEventModal] = useState(false);
     const [confirmOpen, setConfirmOpen] = useState(false);
+
+    const [depositAmount, setDepositAmount] = useState(shift.counted_cash_amount || '');
+    const [varianceExplanation, setVarianceExplanation] = useState('');
+    const [bankName, setBankName] = useState('');
+    const [referenceNumber, setReferenceNumber] = useState('');
+    const [depositedAt, setDepositedAt] = useState(new Date().toISOString().split('T')[0]);
+    const [managerNotes, setManagerNotes] = useState('');
 
     const formatCurrency = (val) => {
         return new Intl.NumberFormat('en-PH', {
@@ -57,12 +65,22 @@ export default function ShiftShow({ auth, shift }) {
     };
 
     const handleApprove = () => {
+        setDepositAmount(shift.counted_cash_amount || '');
         setConfirmOpen(true);
     };
 
-    const handleConfirmApprove = () => {
-        router.post(route('shifts.approve', shift.id));
-        setConfirmOpen(false);
+    const handleConfirmApprove = (e) => {
+        e.preventDefault();
+        router.post(route('shifts.approve', shift.id), {
+            manager_notes: managerNotes,
+            deposit_amount: depositAmount,
+            variance_explanation: varianceExplanation,
+            bank_name: bankName,
+            reference_number: referenceNumber,
+            deposited_at: depositedAt,
+        }, {
+            onSuccess: () => setConfirmOpen(false)
+        });
     };
 
     return (
@@ -105,7 +123,7 @@ export default function ShiftShow({ auth, shift }) {
                             </Link>
                         )}
                         
-                        {shift.status === 'closed' && auth.permissions.includes('approve_shift') && (
+                        {shift.status === 'closing_submitted' && auth.permissions.includes('approve_shift') && (
                             <button
                                 onClick={handleApprove}
                                 className="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-xl font-bold text-white text-sm uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
@@ -149,6 +167,12 @@ export default function ShiftShow({ auth, shift }) {
                                     <span className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-full border border-emerald-100">
                                         <CheckCircle2 size={14} />
                                         Verified
+                                    </span>
+                                )}
+                                {parseFloat(shift.expected_cash_amount) > parseFloat(shift.branch?.cash_drawer_limit || 5000) && (
+                                    <span className="flex items-center gap-1.5 px-4 py-1.5 bg-rose-50 text-rose-700 text-xs font-bold rounded-full border border-rose-100 animate-pulse">
+                                        <AlertCircle size={14} />
+                                        Threshold Exceeded
                                     </span>
                                 )}
                             </div>
@@ -231,6 +255,40 @@ export default function ShiftShow({ auth, shift }) {
                                         </div>
                                     )) : (
                                         <div className="px-6 py-12 text-center text-gray-400 italic">No drawer events recorded during this shift.</div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Spot Audits History */}
+                            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                                <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between">
+                                    <h4 className="font-bold text-gray-900 flex items-center gap-2">
+                                        <ShieldCheck size={18} className="text-gray-400" />
+                                        Surprise Spot Audits
+                                    </h4>
+                                    <span className="text-xs text-gray-500 font-medium">{shift.spot_audits?.length || 0} Audits</span>
+                                </div>
+                                <div className="divide-y divide-gray-50">
+                                    {shift.spot_audits?.length > 0 ? shift.spot_audits.map((audit) => (
+                                        <div key={audit.id} className="px-6 py-4 flex items-center justify-between hover:bg-gray-50/50 transition-colors">
+                                            <div>
+                                                <p className="text-sm font-semibold text-gray-900">Spot Audit by {audit.manager?.name || 'Manager'}</p>
+                                                <div className="flex items-center gap-2 mt-0.5">
+                                                    <p className="text-xs text-gray-500">Counted: {formatCurrency(audit.counted_cash_amount)}</p>
+                                                    <span className="text-gray-300">•</span>
+                                                    <p className="text-xs text-gray-500">Expected: {formatCurrency(audit.expected_cash_amount)}</p>
+                                                </div>
+                                                {audit.audit_notes && <p className="text-[10px] text-gray-400 italic mt-1">"{audit.audit_notes}"</p>}
+                                            </div>
+                                            <div className="text-right">
+                                                <span className={`inline-block px-2.5 py-1 text-[10px] font-bold rounded-full border ${parseFloat(audit.variance_amount) === 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-rose-50 text-rose-700 border-rose-100'}`}>
+                                                    Variance: {formatCurrency(audit.variance_amount)}
+                                                </span>
+                                                <p className="text-[10px] text-gray-400 mt-1 font-medium">{formatDate(audit.occurred_at || audit.created_at)}</p>
+                                            </div>
+                                        </div>
+                                    )) : (
+                                        <div className="px-6 py-12 text-center text-gray-400 italic">No surprise spot audits conducted during this shift.</div>
                                     )}
                                 </div>
                             </div>
@@ -335,6 +393,30 @@ export default function ShiftShow({ auth, shift }) {
                                                         <p className="text-sm text-gray-600 italic leading-relaxed">"{shift.manager_notes}"</p>
                                                     </div>
                                                 )}
+                                                {shift.deposit_record && (
+                                                    <div className="p-4 bg-indigo-50/50 border border-indigo-100 rounded-xl space-y-3 mt-4">
+                                                        <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest">Bank Deposit Voucher</p>
+                                                        <div className="grid grid-cols-2 gap-y-2 text-xs">
+                                                            <span className="text-gray-500">Deposit Amount:</span>
+                                                            <span className="font-semibold text-gray-800 text-right">{formatCurrency(shift.deposit_record.deposit_amount)}</span>
+                                                            
+                                                            <span className="text-gray-500">Bank Name:</span>
+                                                            <span className="font-semibold text-gray-800 text-right">{shift.deposit_record.bank_name || 'N/A'}</span>
+                                                            
+                                                            <span className="text-gray-500">Reference No:</span>
+                                                            <span className="font-semibold text-gray-800 text-right font-mono">{shift.deposit_record.reference_number || 'N/A'}</span>
+                                                            
+                                                            <span className="text-gray-500">Deposited At:</span>
+                                                            <span className="font-semibold text-gray-800 text-right">{shift.deposit_record.deposited_at ? new Date(shift.deposit_record.deposited_at).toLocaleDateString('en-PH') : 'N/A'}</span>
+                                                        </div>
+                                                        {shift.deposit_record.variance_explanation && (
+                                                            <div className="mt-2 pt-2 border-t border-indigo-100/50 text-[11px] text-gray-600">
+                                                                <p className="font-bold text-gray-400 uppercase tracking-wider mb-0.5">Variance Explanation:</p>
+                                                                <p className="italic">"{shift.deposit_record.variance_explanation}"</p>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </>
                                         ) : (
                                             <div className="flex items-center gap-3 text-amber-600">
@@ -358,15 +440,153 @@ export default function ShiftShow({ auth, shift }) {
                     </div>
                 </div>
             </div>
-            <PremiumDialog
-                isOpen={confirmOpen}
-                type="success"
-                title="Approve & Finalize Shift"
-                message="Are you sure you want to approve and finalize this shift? This will permanently post the calculated variance and commit the audit drawer logs."
-                confirmLabel="Approve Shift"
-                onConfirm={handleConfirmApprove}
-                onCancel={() => setConfirmOpen(false)}
-            />
+            {confirmOpen && (
+                <div className="fixed inset-0 z-50 overflow-y-auto">
+                    <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+                        <div className="fixed inset-0 transition-opacity" aria-hidden="true" onClick={() => setConfirmOpen(false)}>
+                            <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
+                        </div>
+
+                        <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+                        <div className="inline-block align-bottom bg-white rounded-2xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-xl sm:w-full">
+                            <form onSubmit={handleConfirmApprove} className="p-6 sm:p-8 space-y-6">
+                                <div className="flex items-center justify-between mb-4 border-b border-gray-100 pb-4">
+                                    <h3 className="text-xl font-bold text-gray-900">Approve Shift & Record Deposit</h3>
+                                    <button type="button" onClick={() => setConfirmOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                                        <X size={20} className="text-gray-400" />
+                                    </button>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Expected Cash</label>
+                                            <p className="text-sm font-semibold text-gray-800">{formatCurrency(shift.expected_cash_amount)}</p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Counted Cash</label>
+                                            <p className="text-sm font-semibold text-gray-800">{formatCurrency(shift.counted_cash_amount)}</p>
+                                        </div>
+                                    </div>
+
+                                    {parseFloat(shift.variance_amount) !== 0 && (
+                                        <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg text-xs text-amber-800 font-medium">
+                                            Warning: A variance of {formatCurrency(shift.variance_amount)} was reported.
+                                        </div>
+                                    )}
+
+                                    <div>
+                                        <label htmlFor="deposit_amount" className="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-2">
+                                            Actual Bank Deposit Amount (PHP) <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="number"
+                                            id="deposit_amount"
+                                            step="0.01"
+                                            className="block w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm font-medium"
+                                            required
+                                            value={depositAmount}
+                                            onChange={(e) => setDepositAmount(e.target.value)}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label htmlFor="bank_name" className="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-2">
+                                            Destination Bank Name
+                                        </label>
+                                        <input
+                                            type="text"
+                                            id="bank_name"
+                                            placeholder="e.g. BDO, BPI"
+                                            className="block w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm"
+                                            value={bankName}
+                                            onChange={(e) => setBankName(e.target.value)}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label htmlFor="reference_number" className="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-2">
+                                            Bank Reference / Slip Number
+                                        </label>
+                                        <input
+                                            type="text"
+                                            id="reference_number"
+                                            placeholder="e.g. Reference/Transaction Number"
+                                            className="block w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm"
+                                            value={referenceNumber}
+                                            onChange={(e) => setReferenceNumber(e.target.value)}
+                                        />
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label htmlFor="deposited_at" className="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-2">
+                                                Deposit Date
+                                            </label>
+                                            <input
+                                                type="date"
+                                                id="deposited_at"
+                                                className="block w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm"
+                                                value={depositedAt}
+                                                onChange={(e) => setDepositedAt(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {parseFloat(shift.variance_amount) !== 0 && (
+                                        <div>
+                                            <label htmlFor="variance_explanation" className="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-2">
+                                                Variance Explanation <span className="text-red-500">*</span>
+                                            </label>
+                                            <textarea
+                                                id="variance_explanation"
+                                                className="block w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm"
+                                                rows="2"
+                                                placeholder="Explain the cause of variance..."
+                                                required={parseFloat(shift.variance_amount) !== 0}
+                                                value={varianceExplanation}
+                                                onChange={(e) => setVarianceExplanation(e.target.value)}
+                                            ></textarea>
+                                        </div>
+                                    )}
+
+                                    <div>
+                                        <label htmlFor="manager_notes" className="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-2">
+                                            Manager Review Notes
+                                        </label>
+                                        <textarea
+                                            id="manager_notes"
+                                            className="block w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm"
+                                            rows="2"
+                                            placeholder="General notes for approval..."
+                                            value={managerNotes}
+                                            onChange={(e) => setManagerNotes(e.target.value)}
+                                        ></textarea>
+                                    </div>
+                                </div>
+
+                                <div className="mt-6 flex flex-col sm:flex-row-reverse gap-3 border-t border-gray-100 pt-4">
+                                    <button
+                                        type="submit"
+                                        className="w-full sm:w-auto inline-flex items-center justify-center px-6 py-2.5 bg-indigo-600 border border-transparent rounded-xl font-bold text-white text-xs uppercase tracking-widest hover:bg-indigo-700 active:bg-indigo-900 focus:outline-none transition-all shadow-md"
+                                    >
+                                        <CheckCircle2 className="w-4 h-4 mr-2" />
+                                        Approve Shift
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setConfirmOpen(false)}
+                                        className="w-full sm:w-auto inline-flex items-center justify-center px-6 py-2.5 bg-white border border-gray-200 rounded-xl font-bold text-gray-700 text-xs uppercase tracking-widest hover:bg-gray-50 focus:outline-none transition-all"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
         </AuthenticatedLayout>
     );
 }

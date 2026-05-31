@@ -183,6 +183,7 @@ class ShiftApprovalTest extends TestCase
             ])
             ->post(route('shifts.approve', $this->shift->id), [
                 'manager_notes' => 'Some approval notes',
+                'deposit_amount' => 1000,
             ]);
 
         $response->assertRedirect();

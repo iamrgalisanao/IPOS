@@ -202,6 +202,24 @@ class ShiftService
     }
 
     /**
+     * Resolve the cash drawer threshold limit.
+     * Hierarchy: Branch -> Tenant -> Fallback Constant
+     */
+    public function getDrawerLimit(Branch $branch): string
+    {
+        if ($branch->cash_drawer_limit !== null) {
+            return (string) $branch->cash_drawer_limit;
+        }
+
+        $tenant = $branch->tenant;
+        if ($tenant && $tenant->default_cash_drawer_limit !== null) {
+            return (string) $tenant->default_cash_drawer_limit;
+        }
+
+        return (string) self::CASH_DROP_APPROVAL_THRESHOLD;
+    }
+
+    /**
      * Record a cash drawer operational event.
      */
     public function recordDrawerEvent(
@@ -260,7 +278,9 @@ class ShiftService
         }
 
         // 6.1 Threshold Guard for Cash Drops
-        if ($eventType === CashDrawerEvent::TYPE_CASH_DROP && bccomp($amount, (string) self::CASH_DROP_APPROVAL_THRESHOLD, 4) > 0) {
+        $resolvedThreshold = $this->getDrawerLimit($shift->branch);
+        
+        if ($eventType === CashDrawerEvent::TYPE_CASH_DROP && bccomp($amount, $resolvedThreshold, 4) > 0) {
             if (!$actor->hasPermission('approve_shift')) {
                 throw new \RuntimeException('Unauthorized: high-value cash drop requires manager approval.');
             }

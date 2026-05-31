@@ -158,7 +158,12 @@ class StockInTest extends TestCase
         $inventory = app(InventoryService::class)->initializeInventory(['branch_id' => $branch->id, 'product_id' => $product->id, 'current_stock' => 10]);
 
         // 16. If movement creation fails, stock update must not persist
-        $service = \Mockery::mock(\App\Services\InventoryService::class, [app(\App\Services\AuditLogger::class), app(TenantContext::class), app(BranchContext::class)])->makePartial();
+        $service = \Mockery::mock(\App\Services\InventoryService::class, [
+            app(\App\Services\AuditLogger::class),
+            app(TenantContext::class),
+            app(BranchContext::class),
+            app(\App\Services\Inventory\UnitConversionResolver::class),
+        ])->makePartial();
         $service->shouldReceive('recordMovement')->andThrow(new \RuntimeException('Forced failure'));
 
         try {

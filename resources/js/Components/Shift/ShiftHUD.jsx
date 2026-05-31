@@ -13,7 +13,7 @@ import {
     Lock
 } from 'lucide-react';
 
-export default function ShiftHUD({ shift, onRecordEvent, onCloseShift, onLockTerminal }) {
+export default function ShiftHUD({ shift, onRecordEvent, onSpotAudit, onCloseShift, onLockTerminal }) {
     const [duration, setDuration] = useState('');
     const [showActions, setShowActions] = useState(false);
     const [showFinancials, setShowFinancials] = useState(false);
@@ -145,6 +145,17 @@ export default function ShiftHUD({ shift, onRecordEvent, onCloseShift, onLockTer
                         >
                             <ArrowDownCircle className="w-4 h-4 text-rose-400" />
                             Record Cash Event
+                        </button>
+
+                        <button
+                            onClick={() => {
+                                onSpotAudit();
+                                setShowActions(false);
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-2 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                        >
+                            <Eye className="w-4 h-4 text-indigo-400" />
+                            Perform Spot Audit
                         </button>
                         
                         {shift?.id && (

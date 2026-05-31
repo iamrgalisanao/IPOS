@@ -72,28 +72,47 @@ class TaxReportingController extends Controller
             ->header('Content-Disposition', 'attachment; filename="'.$filename.'"');
     }
 
-    public function exportEJournal(Request $request): \Illuminate\Http\Response
+    public function exportEJournal(Request $request)
     {
         $filters = $this->filters($request);
         $resolvedBranchId = $this->resolveBranchScope($request, $filters['branch_id']);
         $tenantId = app(TenantContext::class)->getTenantId() ?? (string) $request->user()->tenant_id;
 
-        $journalContent = $this->ejournalService->export([
+        $exportParameters = [
             'date_from' => $filters['date_from'],
             'date_to' => $filters['date_to'],
             'branch_id' => $resolvedBranchId,
             'sales_machine_profile_id' => $filters['sales_machine_profile_id'],
+        ];
+
+        $parametersHash = md5(json_encode($exportParameters));
+
+        // Duplicate active export guard
+        $activeExport = \App\Models\DataExport::where('tenant_id', $tenantId)
+            ->where('type', 'ejournal')
+            ->where('parameters_hash', $parametersHash)
+            ->whereIn('status', [\App\Models\DataExport::STATUS_PENDING, \App\Models\DataExport::STATUS_PROCESSING])
+            ->first();
+
+        if ($activeExport) {
+            return redirect()->route('reports.exports.index')
+                ->with('info', 'An export with these parameters is already in progress.');
+        }
+
+        $export = \App\Models\DataExport::create([
+            'tenant_id' => $tenantId,
+            'user_id' => $request->user()->id,
+            'type' => 'ejournal',
+            'status' => \App\Models\DataExport::STATUS_PENDING,
+            'parameters' => $exportParameters,
+            'parameters_hash' => $parametersHash,
+            'requested_at' => now(),
         ]);
 
-        $filename = sprintf(
-            'ipos-electronic-journal-%s-to-%s.txt',
-            $filters['date_from'],
-            $filters['date_to']
-        );
+        \App\Jobs\Reports\ProcessDataExportJob::dispatch($export);
 
-        return response($journalContent)
-            ->header('Content-Type', 'text/plain')
-            ->header('Content-Disposition', 'attachment; filename="'.$filename.'"');
+        return redirect()->route('reports.exports.index')
+            ->with('success', 'E-Journal export has been requested. You will be able to download it here once completed.');
     }
 
     protected function filters(Request $request): array

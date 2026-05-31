@@ -27,14 +27,10 @@ class IdentifyTenantContext
                 abort(403, 'User account is deactivated.');
             }
 
-            // Platform support users with no tenant_id are accessing system-admin routes
-            // Allow them to bypass tenant context requirement
+            // Platform support users are never permitted on tenant-scoped routes.
+            // Their cross-tenant operations are handled through dedicated system-admin routes
+            // with their own middleware stack, not by bypassing IdentifyTenantContext.
             if ($user->isPlatformSupport()) {
-                if ($user->tenant_id === null) {
-                    // Platform admin accessing cross-tenant endpoints; skip tenant context
-                    return $next($request);
-                }
-                // Platform support user with tenant_id is not allowed on tenant routes
                 abort(403, 'Platform support access restricted.');
             }
 

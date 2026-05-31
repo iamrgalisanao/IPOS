@@ -157,6 +157,12 @@ class OfflineReconciliationService
             $processedCount++;
         }
 
+        // Check for GCT discrepancy if reported by the terminal
+        if (isset($batchPayload['reported_gct'])) {
+            app(\App\Services\POS\Reconciliation\LateSyncReconciliationService::class)
+                ->checkAndLogGctDiscrepancy($profile, (float) $batchPayload['reported_gct'], 'sync');
+        }
+
         // 5. Finalise batch
         $batch->update([
             'status'            => OfflineSyncBatch::STATUS_COMPLETED,
@@ -353,6 +359,28 @@ class OfflineReconciliationService
                 }
             }
 
+            // Check for late sync and shift reporting basis (Slice 33B)
+            $lateSyncService = app(\App\Services\POS\Reconciliation\LateSyncReconciliationService::class);
+            $isLateSync = $lateSyncService->isLateSync($import);
+            $originalZReadId = null;
+            $adjustedSettlementPeriodId = null;
+            $reportingBasisAt = $rawPayload['submitted_at'] ?? now();
+
+            if ($isLateSync) {
+                $originalZRead = $lateSyncService->getOriginalZRead($import);
+                if ($originalZRead) {
+                    $originalZReadId = $originalZRead->id;
+                }
+
+                $openPeriod = $lateSyncService->getBranchActiveOpenSettlementPeriod($import->branch_id);
+                if ($openPeriod) {
+                    $reportingBasisAt = $openPeriod->period_start_at;
+                    $adjustedSettlementPeriodId = $openPeriod->id;
+                } else {
+                    $reportingBasisAt = now();
+                }
+            }
+
             $sale = Sale::create([
                 'id'                           => Str::uuid()->toString(),
                 'tenant_id'                    => $import->tenant_id,
@@ -385,7 +413,7 @@ class OfflineReconciliationService
                 'tax_computation_source'       => 'system',
                 'tax_profile_snapshot'         => $profileSnapshot,
                 'invoice_issued_at'            => $rawPayload['submitted_at'] ?? now(),
-                'reporting_basis_at'           => $rawPayload['submitted_at'] ?? now(),
+                'reporting_basis_at'           => $reportingBasisAt,
                 'confirmed_at'                 => now(),
                 'is_training_mode'             => false,
                 'source'                       => 'offline_reconciliation',
@@ -395,6 +423,17 @@ class OfflineReconciliationService
                 'offline_local_created_at'     => $rawPayload['local_created_at'] ?? null,
                 'offline_posted_at'            => now(),
             ]);
+
+            // Create PriorPeriodAdjustment if it is a late sync
+            if ($isLateSync) {
+                $lateSyncService->createPriorPeriodAdjustment(
+                    $import,
+                    $sale,
+                    $originalZReadId,
+                    $adjustedSettlementPeriodId,
+                    $reportingBasisAt
+                );
+            }
 
             // Create items
             $saleItemsData = [];
@@ -449,7 +488,7 @@ class OfflineReconciliationService
             $sale->refresh();
 
             // Deduct inventory
-            $this->inventoryService->deductFromSale($sale);
+            \App\Jobs\Inventory\ProcessSaleInventoryDeductionJob::dispatch($sale->id)->afterCommit();
 
             // Process fully-paid payloads only.
             $salePayments = collect();

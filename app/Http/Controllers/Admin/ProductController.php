@@ -12,6 +12,7 @@ use App\Models\TaxCategory;
 use App\Services\AuditLogger;
 use App\Services\Catalog\CatalogCsvExportService;
 use App\Services\Catalog\CatalogImportPreviewService;
+use App\Services\Inventory\RecipeCostingService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -281,6 +282,22 @@ class ProductController extends Controller
         }
 
         return redirect()->back()->with('success', 'Product recipe updated successfully.');
+    }
+
+    /**
+     * Return the WAC-based recipe cost for the given product.
+     *
+     * GET /admin/products/{product}/recipe-cost?branch_id={uuid}
+     */
+    public function recipeCost(Request $request, Product $product, RecipeCostingService $costingService)
+    {
+        $validated = $request->validate([
+            'branch_id' => 'nullable|exists:branches,id',
+        ]);
+
+        $result = $costingService->compute($product, $validated['branch_id'] ?? null);
+
+        return response()->json($result);
     }
 
     /**

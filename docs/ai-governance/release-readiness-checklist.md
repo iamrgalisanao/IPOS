@@ -123,3 +123,21 @@ Execute credential rotation as the next bounded release-readiness task, then ref
 - **Status**: Complete — Validated (Stories 20.1-20.7)
 - **Note**: Supplier & Purchase Receiving is validated as tenant-isolated, branch-scoped, RBAC-gated, CSV-safe, audit-logged, and capable of atomic inventory ingestion with branch-level WAC valuation.
 - **Go-live Requirement (Future Inbound Workflows Caveat)**: Accounts payable, supplier returns/RMA, auto-reorder, and mandatory perishable enforcement remain future scope and are not part of Epic 20. Capturing lot and expiry fields is fully supported, but mandatory perishable enforcement remains deferred pending product/category perishability metadata enhancements. All 48 tests / 263 assertions in the full procurement feature suite passed successfully, and production compilation (`npm run build`) completed successfully.
+
+## Enterprise Async Reporting Export Readiness (Epic 34)
+
+- **Status**: Complete — Validated
+- **Note**: The async export pipeline is validated for E-Journal exports with proper job dispatching, private disk usage, HMAC-SHA-256 integrity checks, and retention pruning.
+- **Go-live Requirement**: No immediate requirements. Wait for further compliance export formats to be added as needed.
+
+## Recipe Maintenance and Costing Engine Readiness (Epic 35)
+
+- **Status**: Complete — Validated
+- **Note**: Raw ingredient inventories, BOM, UOM conversions, and async stock deductions are validated.
+- **Go-live Requirement**: Deductions happen asynchronously in `ProcessSaleInventoryDeductionJob`. Ensure queue workers (`php artisan queue:work`) are configured and monitored in production.
+
+## Cash Drawer Audit & Manager Shift Reconciliation Readiness (Epic 40)
+
+- **Status**: Complete — Validated
+- **Note**: Cash drawer thresholds, manager approvals for cash drops, spot audit workflows, and immutable shift reconciliation are fully validated.
+- **Go-live Requirement**: Branch managers must configure appropriate cash drawer thresholds in tenant/branch settings.

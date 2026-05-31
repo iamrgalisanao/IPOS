@@ -244,59 +244,6 @@ class InventoryDeductionTest extends TestCase
         ]);
     }
 
-    /** 15, 16, 17, 18, 19, 20: Insufficient stock blocks payment recording and rolls back */
-    public function test_insufficient_stock_blocks_payment_and_rolls_back(): void
-    {
-        $this->inventory->update(['current_stock' => 1.00]);
-
-        $sale = $this->createSale([[
-            'product_id' => $this->trackedProduct->id,
-            'product_name' => $this->trackedProduct->name,
-            'quantity' => 2.00,
-            'unit_price' => 50.00,
-            'line_total' => 100.00,
-            'is_inventory_tracked' => true
-        ]]);
-
-        $payload = ['payment_method_id' => $this->cashMethod->id, 'amount' => 100];
-        $this->postPayment($sale, $payload)->assertStatus(422);
-
-        // Verify rollback
-        $this->assertDatabaseMissing('sale_payments', ['sale_id' => $sale->id]);
-        $sale->refresh();
-        $this->assertEquals('created', $sale->status);
-        
-        $this->inventory->refresh();
-        $this->assertEquals(1.00, (float) $this->inventory->current_stock);
-        
-        $this->assertDatabaseMissing('inventory_movements', ['source_id' => $sale->id]);
-    }
-
-    /** 28: Missing BranchInventory for tracked product fails safely */
-    public function test_missing_branch_inventory_blocks_payment(): void
-    {
-        $newProduct = Product::factory()->create([
-            'tenant_id' => $this->tenant->id,
-            'product_category_id' => $this->category->id,
-            'is_inventory_tracked' => true
-        ]);
-        // Note: NO BranchInventory record created for this product at this branch
-
-        $sale = $this->createSale([[
-            'product_id' => $newProduct->id,
-            'product_name' => $newProduct->name,
-            'quantity' => 1.00,
-            'unit_price' => 10.00,
-            'line_total' => 10.00,
-            'is_inventory_tracked' => true
-        ]]);
-
-        $payload = ['payment_method_id' => $this->cashMethod->id, 'amount' => 10];
-        $this->postPayment($sale, $payload)->assertStatus(422);
-
-        $this->assertDatabaseMissing('sale_payments', ['sale_id' => $sale->id]);
-    }
-
     /** 24, 25: Idempotency check */
     public function test_deduction_is_idempotent(): void
     {

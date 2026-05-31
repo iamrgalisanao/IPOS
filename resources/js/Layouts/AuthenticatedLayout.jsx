@@ -23,8 +23,11 @@ import {
     RotateCcw,
     ChevronLeft,
     ChevronRight,
-    Scale,
-    AlertTriangle
+    ChevronDown,
+    AlertTriangle,
+    Monitor,
+    RefreshCw,
+    Scale
 } from 'lucide-react';
 
 export default function AuthenticatedLayout({ header, children }) {
@@ -93,6 +96,10 @@ export default function AuthenticatedLayout({ header, children }) {
     }
     if ((permissions.includes('pos-layouts.view') || permissions.includes('pos-layouts.manage')) && hasFeature('layout.custom')) {
         operationsItems.push({ name: 'POS Layouts', href: route('admin.pos-layouts.index'), icon: LayoutGrid, active: route().current('admin.pos-layouts.*') });
+    }
+    if (permissions.includes('review_offline_sync_conflicts')) {
+        operationsItems.push({ name: 'Terminal Sync Monitor', href: route('admin.terminal-sync-monitor.index'), icon: Monitor, active: route().current('admin.terminal-sync-monitor.*') });
+        operationsItems.push({ name: 'Prior Period Adjustments', href: route('admin.prior-period-adjustments.index'), icon: RefreshCw, active: route().current('admin.prior-period-adjustments.*') });
     }
 
     // Dynamically filter Catalog & Stock Items
@@ -192,14 +199,22 @@ export default function AuthenticatedLayout({ header, children }) {
             active: route().current('reports.cashier-accountability.*')
         });
     }
+    // Dynamically filter Inventory Report Items
+    const inventoryReportItems = [];
     if (permissions.includes('view_inventory_reports') || permissions.includes('audit_inventory')) {
-        salesAndFinanceItems.push({
+        inventoryReportItems.push({
             name: 'Inventory Visibility',
             href: route('inventory.reports.visibility.index'),
             icon: Package,
             active: route().current('inventory.reports.visibility.*')
         });
-        salesAndFinanceItems.push({
+        inventoryReportItems.push({
+            name: 'Product Composition',
+            href: route('inventory.reports.product-composition.index'),
+            icon: Layers,
+            active: route().current('inventory.reports.product-composition.*')
+        });
+        inventoryReportItems.push({
             name: 'Variance Logs',
             href: route('inventory.reports.variance-logs.index'),
             icon: AlertTriangle,
@@ -226,10 +241,84 @@ export default function AuthenticatedLayout({ header, children }) {
             items: procurementItems
         },
         {
+            label: 'Inventory Reports',
+            items: inventoryReportItems
+        },
+        {
             label: 'Sales & Finance',
             items: salesAndFinanceItems
         }
     ].filter(group => group.items.length > 0);
+
+    const [openGroups, setOpenGroups] = useState(() => {
+        if (typeof window === 'undefined') {
+            return {};
+        }
+
+        try {
+            return JSON.parse(localStorage.getItem('sidebar_open_groups') || '{}');
+        } catch {
+            return {};
+        }
+    });
+
+    const isGroupActive = (group) => group.items.some((item) => item.active);
+    const isGroupOpen = (group) => {
+        if (sidebarCollapsed || isGroupActive(group)) {
+            return true;
+        }
+
+        return openGroups[group.label] === true;
+    };
+
+    const toggleGroup = (group) => {
+        if (isGroupActive(group)) {
+            return;
+        }
+
+        setOpenGroups((current) => {
+            const next = {
+                ...current,
+                [group.label]: !isGroupOpen(group),
+            };
+
+            if (typeof window !== 'undefined') {
+                localStorage.setItem('sidebar_open_groups', JSON.stringify(next));
+            }
+
+            return next;
+        });
+    };
+
+    useEffect(() => {
+        if (typeof window === 'undefined') {
+            return;
+        }
+
+        const next = navigationGroups.reduce((state, group) => ({
+            ...state,
+            [group.label]: isGroupActive(group),
+        }), {});
+
+        localStorage.setItem('sidebar_open_groups', JSON.stringify(next));
+        setOpenGroups(next);
+    }, [page.url]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') {
+            return;
+        }
+
+        const validLabels = new Set(navigationGroups.map((group) => group.label));
+        const next = Object.fromEntries(
+            Object.entries(openGroups).filter(([label]) => validLabels.has(label))
+        );
+
+        if (Object.keys(next).length !== Object.keys(openGroups).length) {
+            localStorage.setItem('sidebar_open_groups', JSON.stringify(next));
+            setOpenGroups(next);
+        }
+    }, [navigationGroups.length]);
 
     return (
         <div className="min-h-screen bg-gray-50 flex">
@@ -270,26 +359,46 @@ export default function AuthenticatedLayout({ header, children }) {
                         {navigationGroups.map((group) => (
                             <div key={group.label} className="transition-all duration-300">
                                 {!sidebarCollapsed ? (
-                                    <h3 className="px-3 mb-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 whitespace-nowrap transition-all duration-300">
-                                        {group.label}
-                                    </h3>
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleGroup(group)}
+                                        className={`mb-2 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.2em] transition-all duration-300 ${
+                                            isGroupActive(group)
+                                                ? 'bg-slate-900 text-cyan-300'
+                                                : 'text-slate-500 hover:bg-slate-900 hover:text-slate-300'
+                                        }`}
+                                        aria-expanded={isGroupOpen(group)}
+                                        title={isGroupActive(group) ? 'Current section stays open' : `Toggle ${group.label}`}
+                                    >
+                                        <span className="whitespace-nowrap">{group.label}</span>
+                                        <ChevronDown
+                                            size={14}
+                                            className={`transition-transform duration-200 ${isGroupOpen(group) ? 'rotate-180' : ''}`}
+                                        />
+                                    </button>
                                 ) : (
                                     <div className="h-px bg-slate-900 my-4 mx-2 transition-all duration-300" />
                                 )}
-                                <div className="space-y-1">
-                                    {group.items.map((item) => (
-                                        <Link
-                                            key={item.name}
-                                            href={item.href}
-                                            onMouseDown={persistSidebarScroll}
-                                            className={`flex items-center ${
-                                                sidebarCollapsed ? 'justify-center px-0 py-3 rounded-xl' : 'gap-3 px-3 py-2.5 rounded-xl'
-                                            } text-xs font-bold uppercase tracking-widest transition-all duration-300 relative group ${
-                                                item.active 
-                                                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' 
-                                                    : 'text-slate-400 hover:text-white hover:bg-slate-900'
-                                            }`}
-                                        >
+                                <div
+                                    className={`overflow-hidden transition-all duration-200 ease-out ${
+                                        isGroupOpen(group) ? 'opacity-100' : 'opacity-0'
+                                    }`}
+                                    style={{ maxHeight: isGroupOpen(group) ? `${group.items.length * 48 + 8}px` : '0px' }}
+                                >
+                                    <div className="space-y-1">
+                                        {group.items.map((item) => (
+                                            <Link
+                                                key={item.name}
+                                                href={item.href}
+                                                onMouseDown={persistSidebarScroll}
+                                                className={`flex items-center ${
+                                                    sidebarCollapsed ? 'justify-center px-0 py-3 rounded-xl' : 'gap-3 px-3 py-2.5 rounded-xl'
+                                                } text-xs font-bold uppercase tracking-widest transition-all duration-300 relative group ${
+                                                    item.active
+                                                        ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20'
+                                                        : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                                                }`}
+                                            >
                                             <item.icon 
                                                 size={18} 
                                                 className={`transition-all duration-300 ${
@@ -310,8 +419,9 @@ export default function AuthenticatedLayout({ header, children }) {
                                                     <div className="absolute right-full top-0 w-0 h-0 border-r-[8px] border-r-slate-800/50 border-b-[8px] border-b-transparent -z-10 blur-[1px]" />
                                                 </div>
                                             )}
-                                        </Link>
-                                    ))}
+                                            </Link>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
                         ))}

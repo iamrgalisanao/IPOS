@@ -133,8 +133,60 @@ class ShiftController extends Controller
             abort(403, 'Unauthorized.');
         }
 
+        $validated = $request->validate([
+            'manager_notes' => 'nullable|string',
+            'deposit_amount' => 'required|numeric|min:0',
+            'variance_explanation' => 'nullable|string',
+            'bank_name' => 'nullable|string|max:100',
+            'reference_number' => 'nullable|string|max:100',
+            'deposited_at' => 'nullable|date',
+        ]);
+
+        if ($shift->depositRecord()->exists()) {
+            return back()->with('error', 'A deposit record already exists for this shift.');
+        }
+
         try {
-            $shiftService->approveShift($shift, $request->user(), $request->manager_notes);
+            \Illuminate\Support\Facades\DB::transaction(function () use ($shift, $request, $shiftService, $validated) {
+                // Call original shift approval
+                $shiftService->approveShift($shift, $request->user(), $validated['manager_notes']);
+
+                // Calculate cash drop total
+                $cashDropTotal = $shift->cashDrawerEvents()
+                    ->where('event_type', \App\Models\CashDrawerEvent::TYPE_CASH_DROP)
+                    ->sum('amount') ?: '0.0000';
+
+                $depositedAt = isset($validated['deposited_at']) ? \Carbon\Carbon::parse($validated['deposited_at']) : now();
+
+                // Create immutable ShiftDepositRecord
+                $deposit = \App\Models\ShiftDepositRecord::create([
+                    'tenant_id' => $shift->tenant_id,
+                    'branch_id' => $shift->branch_id,
+                    'shift_id' => $shift->id,
+                    'manager_id' => $request->user()->id,
+                    'deposit_amount' => $validated['deposit_amount'],
+                    'expected_cash_amount' => $shift->expected_cash_amount,
+                    'counted_cash_amount' => $shift->counted_cash_amount,
+                    'cash_drop_total' => $cashDropTotal,
+                    'variance_amount' => $shift->variance_amount,
+                    'variance_explanation' => $validated['variance_explanation'] ?? null,
+                    'bank_name' => $validated['bank_name'] ?? null,
+                    'reference_number' => $validated['reference_number'] ?? null,
+                    'deposited_at' => $depositedAt,
+                    'approved_at' => now(),
+                ]);
+
+                // Log audit events
+                app(\App\Services\AuditLogger::class)->log(
+                    'shift_deposit_record_created',
+                    $deposit,
+                    null,
+                    $deposit->toArray(),
+                    'SHIFT_DEPOSIT',
+                    'Shift deposit record created on approval.'
+                );
+            });
+
             return back()->with('success', 'Shift approved and finalized.');
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
@@ -144,7 +196,7 @@ class ShiftController extends Controller
     /**
      * Record a cash drawer operational event.
      */
-    public function recordDrawerEvent(Request $request, ShiftService $shiftService)
+    public function recordDrawerEvent(Request $request, ShiftService $shiftService, \App\Services\Shift\CashDropService $cashDropService)
     {
         $request->validate([
             'shift_id' => 'required|uuid|exists:shifts,id',
@@ -152,19 +204,33 @@ class ShiftController extends Controller
             'amount' => 'required|numeric|min:0.01',
             'reason_code' => 'required|string|max:50',
             'reason_notes' => 'nullable|string|max:255',
+            'manager_email' => 'nullable|email',
+            'manager_password' => 'nullable|string',
         ]);
 
         $shift = Shift::findOrFail($request->shift_id);
 
         try {
-            $shiftService->recordDrawerEvent(
-                $shift,
-                $request->user(),
-                $request->event_type,
-                (string) $request->amount,
-                $request->reason_code,
-                $request->reason_notes
-            );
+            if ($request->event_type === \App\Models\CashDrawerEvent::TYPE_CASH_DROP) {
+                $cashDropService->recordCashDrop(
+                    $shift,
+                    $request->user(),
+                    (string) $request->amount,
+                    $request->reason_code,
+                    $request->reason_notes,
+                    $request->manager_email,
+                    $request->manager_password
+                );
+            } else {
+                $shiftService->recordDrawerEvent(
+                    $shift,
+                    $request->user(),
+                    $request->event_type,
+                    (string) $request->amount,
+                    $request->reason_code,
+                    $request->reason_notes
+                );
+            }
 
             return back()->with('success', 'Cash drawer event recorded successfully.');
         } catch (\Exception $e) {

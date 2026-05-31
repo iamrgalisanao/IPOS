@@ -1,0 +1,28 @@
+{
+  "name": "IPOS Terminal",
+  "short_name": "IPOS",
+  "description": "Tablet POS Terminal for IPOS",
+  "start_url": "/pos/terminal/checkout",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "orientation": "landscape",
+  "icons": [
+    {
+      "src": "/pwa/ipos-pos-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/pwa/ipos-pos-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/pwa/ipos-pos-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
