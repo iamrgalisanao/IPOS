@@ -90,6 +90,7 @@ class EJournalExportTest extends TestCase
 
     public function test_authorized_users_can_download_ejournal_with_correct_headers(): void
     {
+        \Illuminate\Support\Facades\Storage::fake('exports');
         $dateFrom = now()->toDateString();
         $dateTo = now()->toDateString();
 
@@ -100,16 +101,28 @@ class EJournalExportTest extends TestCase
                 'date_to' => $dateTo,
             ]));
 
-        $response->assertOk();
-        $response->assertHeader('Content-Type', 'text/plain; charset=UTF-8');
-        $response->assertHeader('Content-Disposition', 'attachment; filename="ipos-electronic-journal-'.$dateFrom.'-to-'.$dateTo.'.txt"');
+        $response->assertRedirect(route('reports.exports.index'));
         
-        $content = $response->getContent();
+        $export = \App\Models\DataExport::firstOrFail();
+        $job = new \App\Jobs\Reports\ProcessDataExportJob($export);
+        $job->handle(app(\App\Services\POS\EJournalExportService::class));
+
+        $downloadResponse = $this->actingAs($this->owner)
+            ->withHeader('X-Tenant-ID', $this->tenant->id)
+            ->get(route('reports.exports.download', $export));
+
+        $downloadResponse->assertOk();
+        $downloadResponse->assertHeader('Content-Type', 'text/plain; charset=UTF-8');
+        $downloadResponse->assertHeader('Content-Disposition', 'attachment; filename=' . basename($export->file_path));
+        
+        $content = \Illuminate\Support\Facades\Storage::disk('exports')->get($export->file_path);
         $this->assertStringContainsString('Timestamp|Record Type|Invoice Number|Cashier|Gross Amount|VATable Sales', $content);
     }
 
     public function test_ejournal_export_enforces_branch_scope(): void
     {
+        \Illuminate\Support\Facades\Storage::fake('exports');
+        
         // Branch manager for Branch A should not be able to export Branch B
         $this->actingAs($this->branchManager)
             ->withHeader('X-Tenant-ID', $this->tenant->id)
@@ -124,7 +137,7 @@ class EJournalExportTest extends TestCase
             ->get(route('reports.tax.export.ejournal', [
                 'branch_id' => $this->branchA->id,
             ]))
-            ->assertOk();
+            ->assertRedirect(route('reports.exports.index'));
     }
 
     public function test_ejournal_export_enforces_tenant_isolation(): void
@@ -146,6 +159,7 @@ class EJournalExportTest extends TestCase
 
     public function test_ejournal_contains_various_records_and_hashes(): void
     {
+        \Illuminate\Support\Facades\Storage::fake('exports');
         app(TenantContext::class)->setTenant($this->tenant);
         app(BranchContext::class)->setBranch($this->branchA);
 
@@ -220,10 +234,23 @@ class EJournalExportTest extends TestCase
 
         $response = $this->actingAs($this->owner)
             ->withHeader('X-Tenant-ID', $this->tenant->id)
-            ->get(route('reports.tax.export.ejournal'));
+            ->get(route('reports.tax.export.ejournal', [
+                'date_from' => now()->toDateString(),
+                'date_to' => now()->toDateString(),
+            ]));
 
-        $response->assertOk();
-        $content = $response->getContent();
+        $response->assertRedirect(route('reports.exports.index'));
+
+        $export = \App\Models\DataExport::firstOrFail();
+        $job = new \App\Jobs\Reports\ProcessDataExportJob($export);
+        $job->handle(app(\App\Services\POS\EJournalExportService::class));
+
+        $downloadResponse = $this->actingAs($this->owner)
+            ->withHeader('X-Tenant-ID', $this->tenant->id)
+            ->get(route('reports.exports.download', $export));
+
+        $downloadResponse->assertOk();
+        $content = \Illuminate\Support\Facades\Storage::disk('exports')->get($export->file_path);
 
         // Should contain standard SALE
         $this->assertStringContainsString('SALE|INV-TERM01-0000000001|', $content);

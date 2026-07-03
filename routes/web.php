@@ -219,8 +219,6 @@ Route::middleware(['auth', 'tenant'])->group(function () {
 
     // Reports
     Route::prefix('reports')->name('reports.')->group(function () {
-        Route::get('/sales-summary', [ReportController::class, 'salesSummary'])->name('sales_summary');
-        
         // Data Exports
         Route::get('/exports', [\App\Http\Controllers\Reports\DataExportController::class, 'index'])->name('exports.index');
         Route::get('/exports/{export}/download', [\App\Http\Controllers\Reports\DataExportController::class, 'download'])->name('exports.download');

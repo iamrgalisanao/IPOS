@@ -16,6 +16,11 @@ All notable changes to the IPOS platform, modules, and user workflows are docume
   * Interactive Recipe / BOM editor UI in product management.
   * Real-time WAC-based recipe cost estimator (`RecipeCostingService`) calculating cost based on branch-specific WAC or catalog fallbacks.
   * Robust inventory deduction engine during POS checkout.
+* **Epic 41: POS Terminal Production Hardening for Android Tablet** (Validated)
+  * Hardened the POS checkout UI for Android tablet devices (`TabletPOSLayout.jsx`).
+  * Configured PWA Manifest and Service Worker for offline availability (`manifest.json`, `sw.js`).
+  * Implemented hardware integration adapter (`PosHardwareAdapter.js`) for Bluetooth, USB, and network receipt printers.
+  * Added the [Android Kiosk Deployment Guide](file:///Users/teamsolo/Documents/Dev/IPOS/docs/deployment/android-kiosk-deployment.md) for locking down tablet terminals in production.
 
 ---
 
