@@ -267,25 +267,6 @@ class OfflineReconciliationService
             return true;
         }
 
-        // Alternate duplicate check: same sequence number for this terminal/machine profile (catches timezone shift duplicates)
-        if (!empty($import->offline_sequence_number)) {
-            $existingSeq = OfflineSalesImport::withoutGlobalScopes()
-                ->where('tenant_id', $import->tenant_id)
-                ->where('sales_machine_profile_id', $import->sales_machine_profile_id)
-                ->where('offline_sequence_number', $import->offline_sequence_number)
-                ->where('id', '!=', $import->id)
-                ->whereNotIn('status', [
-                    OfflineSalesImport::STATUS_REJECTED,
-                    OfflineSalesImport::STATUS_DUPLICATE
-                ])
-                ->first();
-
-            if ($existingSeq !== null) {
-                $import->update(['status' => OfflineSalesImport::STATUS_DUPLICATE]);
-                return true;
-            }
-        }
-
         return false;
     }
 
