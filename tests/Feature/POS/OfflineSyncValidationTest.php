@@ -360,6 +360,45 @@ class OfflineSyncValidationTest extends TestCase
         $this->assertContains('duplicate', $allImports->pluck('status')->toArray());
     }
 
+    /** @test */
+    public function test_duplicate_sequence_number_with_different_timestamps_is_saved_as_duplicate(): void
+    {
+        // First import (original)
+        $importA = $this->validImport('0002', [
+            'submitted_at' => '2026-06-15T07:01:36Z'
+        ]);
+
+        $this->postSync([
+            'batch_reference' => 'BATCH-TIMEZONE-A',
+            'imports'         => [$importA],
+        ]);
+
+        // Second import (resubmitted with timezone offset shift, e.g. -8 hours)
+        $importB = $this->validImport('0002', [
+            'submitted_at' => '2026-06-14T23:01:36Z'
+        ]);
+
+        $response = $this->postSync([
+            'batch_reference' => 'BATCH-TIMEZONE-B',
+            'imports'         => [$importB],
+        ]);
+
+        $response->assertStatus(202);
+
+        $imports = collect($response->json('imports'));
+        $this->assertEquals('duplicate', $imports->first()['status']);
+
+        // Both rows must exist
+        $allImports = OfflineSalesImport::withoutGlobalScopes()
+            ->where('offline_sequence_number', self::PREFIX . '0002')
+            ->where('tenant_id', $this->tenant->id)
+            ->get();
+
+        $this->assertCount(2, $allImports);
+        $this->assertContains('server_verified', $allImports->pluck('status')->toArray());
+        $this->assertContains('duplicate', $allImports->pluck('status')->toArray());
+    }
+
     // =========================================================================
     // TC-28.7-06: Import missing items is rejected
     // =========================================================================
