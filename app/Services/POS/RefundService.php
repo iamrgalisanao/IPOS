@@ -30,12 +30,12 @@ class RefundService
      * Perform a refund on a sale.
      * $itemsToRefund: Array of ['sale_item_id' => string, 'quantity' => float, 'restock_action' => string]
      */
-    public function refund(Sale $sale, array $itemsToRefund, string $reasonCode, ?string $reasonNotes = null): SaleRefund
+    public function refund(Sale $sale, array $itemsToRefund, string $reasonCode, ?string $reasonNotes = null, ?string $shiftId = null): SaleRefund
     {
         $this->validateSaleStatus($sale);
         $this->validateIsolation($sale);
 
-        return DB::transaction(function () use ($sale, $itemsToRefund, $reasonCode, $reasonNotes) {
+        return DB::transaction(function () use ($sale, $itemsToRefund, $reasonCode, $reasonNotes, $shiftId) {
             $user = Auth::user();
             $refundTotal = 0;
             $refundItemsData = [];
@@ -73,6 +73,7 @@ class RefundService
                 'tenant_id' => $sale->tenant_id,
                 'branch_id' => $sale->branch_id,
                 'sale_id' => $sale->id,
+                'shift_id' => $shiftId,
                 'reason_code' => $reasonCode,
                 'reason_notes' => $reasonNotes,
                 'refund_total' => $refundTotal,
@@ -109,6 +110,9 @@ class RefundService
                 ? 'refunded' 
                 : 'partially_refunded';
             $sale->update(['status' => $newStatus]);
+
+            // 14a. Reverse Statutory Discount proportionally for refunded items
+            $this->reverseStatutoryDiscountOnRefund($sale, $refund, $refundTotal, $itemsToRefund);
 
             // 7. Audit Logging
             $this->auditLogger->log(
@@ -164,6 +168,72 @@ class RefundService
 
             return $refund;
         });
+    }
+
+    /**
+     * Reverse statutory discount proportionally when items are refunded.
+     *
+     * For partial refunds, the statutory discount is reversed proportionally
+     * based on the ratio of refunded total to original sale total.
+     * For full refunds, the entire statutory discount is reversed.
+     *
+     * This ensures the Z-Reading and accounting outbox correctly reflect
+     * the reduced statutory discount after a refund.
+     */
+    protected function reverseStatutoryDiscountOnRefund(
+        Sale $sale,
+        SaleRefund $refund,
+        float $refundTotal,
+        array $itemsToRefund
+    ): void {
+        if (!$sale->contains_statutory_discount) {
+            return;
+        }
+
+        $statutoryDiscount = \App\Models\SaleStatutoryDiscount::where('sale_id', $sale->id)->first();
+
+        if (!$statutoryDiscount) {
+            return;
+        }
+
+        // Compute the refund ratio against the original gross eligible amount
+        // (discount_basis_amount), NOT the net sale total. The refund total is
+        // a gross line amount, so the denominator must also be gross to avoid
+        // mixing net and gross figures which produces an incorrect ratio.
+        $originalGrossBasis = (float) $statutoryDiscount->discount_basis_amount;
+        $refundRatio = $originalGrossBasis > 0 ? ($refundTotal / $originalGrossBasis) : 0;
+
+        $reversedDiscountAmount = (float) $statutoryDiscount->discount_amount * $refundRatio;
+        $reversedVatExemptAmount = (float) $statutoryDiscount->vat_exempt_amount * $refundRatio;
+
+        // Update the Sale's aggregate totals
+        // Use raw DB to bypass the Sale model's immutability guard on financial fields
+        // (refund reversals are legitimate financial corrections per BIR rules)
+        $newStatutoryTotal = max(0, (float) $sale->statutory_discount_total - $reversedDiscountAmount);
+        $newVatExemptAmount = max(0, (float) $sale->vat_exempt_sales_amount - $reversedVatExemptAmount);
+        $newVatableAmount = (float) $sale->vatable_sales_amount + $reversedVatExemptAmount;
+        $newVatAmount = (float) $sale->vat_amount + $reversedVatExemptAmount;
+
+        DB::table('sales')->where('id', $sale->id)->update([
+            'statutory_discount_total' => number_format($newStatutoryTotal, 4, '.', ''),
+            'vat_exempt_sales_amount' => number_format($newVatExemptAmount, 4, '.', ''),
+            'vatable_sales_amount' => number_format($newVatableAmount, 4, '.', ''),
+            'vat_amount' => number_format($newVatAmount, 4, '.', ''),
+            'contains_statutory_discount' => $newStatutoryTotal > 0,
+        ]);
+
+        // Log the proportional reversal for audit compliance
+        $this->auditLogger->log(
+            action: 'statutory_discount_reversed_refund',
+            auditable: $sale,
+            metadata: [
+                'refund_id' => $refund->id,
+                'refund_ratio' => number_format($refundRatio, 6, '.', ''),
+                'reversed_discount_amount' => number_format($reversedDiscountAmount, 4, '.', ''),
+                'reversed_vat_exempt_amount' => number_format($reversedVatExemptAmount, 4, '.', ''),
+                'remaining_statutory_discount_total' => number_format($newStatutoryTotal, 4, '.', ''),
+            ]
+        );
     }
 
     protected function validateSaleStatus(Sale $sale): void

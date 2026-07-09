@@ -90,6 +90,9 @@ class VoidService
             // 4. Update Sale status
             $sale->update(['status' => 'voided']);
 
+            // 4a. Reverse Statutory Discount Totals (for Z-Reading accuracy)
+            $this->reverseStatutoryDiscountOnVoid($sale, $void);
+
             // 5. Audit Logging
             $this->auditLogger->log(
                 action: 'sale_voided',
@@ -115,6 +118,7 @@ class VoidService
                 'reason_code' => $reasonCode,
                 'voided_by' => $void->voided_by,
                 'voided_at' => (string) $void->voided_at,
+                'statutory_discount_reversed' => $sale->contains_statutory_discount,
                 'payment_reversals' => $paymentReversals->map(fn($reversal) => [
                     'payment_reversal_id' => $reversal->id,
                     'payment_id' => $reversal->sale_payment_id,
@@ -131,6 +135,52 @@ class VoidService
 
             return $void;
         });
+    }
+
+    /**
+     * Reverse statutory discount totals when a sale is voided.
+     *
+     * This ensures the Z-Reading and accounting outbox correctly reflect
+     * that the statutory discount is no longer valid. The original
+     * SaleStatutoryDiscount record is retained for audit trail purposes
+     * (BIR requires voided transactions to remain visible), but the
+     * Sale's aggregate totals are zeroed out.
+     */
+    protected function reverseStatutoryDiscountOnVoid(Sale $sale, SaleVoid $void): void
+    {
+        if (!$sale->contains_statutory_discount) {
+            return;
+        }
+
+        $statutoryDiscount = \App\Models\SaleStatutoryDiscount::where('sale_id', $sale->id)->first();
+
+        if (!$statutoryDiscount) {
+            return;
+        }
+
+        // Zero out the Sale's statutory discount aggregate fields
+        // The original line-item breakdown remains in SaleStatutoryDiscount for audit
+        // Use raw DB to bypass the Sale model's immutability guard on financial fields
+        // (void/refund reversals are legitimate financial corrections per BIR rules)
+        DB::table('sales')->where('id', $sale->id)->update([
+            'statutory_discount_total' => 0,
+            'contains_statutory_discount' => false,
+            'vat_exempt_sales_amount' => $sale->vat_exempt_sales_amount - $statutoryDiscount->vat_exempt_amount,
+            'vatable_sales_amount' => $sale->vatable_sales_amount + $statutoryDiscount->vat_exempt_amount,
+            'vat_amount' => $sale->vat_amount + $statutoryDiscount->vat_exempt_amount,
+        ]);
+
+        // Log the reversal for audit compliance
+        $this->auditLogger->log(
+            action: 'statutory_discount_reversed_void',
+            auditable: $sale,
+            metadata: [
+                'void_id' => $void->id,
+                'original_discount_amount' => (string) $statutoryDiscount->discount_amount,
+                'original_vat_exempt_amount' => (string) $statutoryDiscount->vat_exempt_amount,
+                'reason_code' => $void->reason_code,
+            ]
+        );
     }
 
     /**

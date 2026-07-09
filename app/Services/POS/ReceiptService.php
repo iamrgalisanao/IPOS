@@ -16,7 +16,7 @@ class ReceiptService
      */
     public function getReceiptData(Sale $sale): array
     {
-        $sale->load(['items', 'tenant', 'branch', 'user', 'payments.paymentMethod']);
+        $sale->load(['items', 'tenant', 'branch', 'user', 'payments.paymentMethod', 'saleDiscounts.discountType', 'saleDiscounts.beneficiaries']);
 
         return [
             'sale_id'             => $sale->id,
@@ -68,6 +68,30 @@ class ReceiptService
                 'total'          => (float) $sale->total,
                 'total_paid'     => (float) $sale->payments->sum('amount'),
             ],
+
+            'contains_statutory_discount' => (bool) $sale->contains_statutory_discount,
+            'statutory_discount' => $sale->contains_statutory_discount && $sale->saleDiscounts->isNotEmpty()
+                ? [
+                    'discount_type' => [
+                        'name' => $sale->saleDiscounts->first()->discountType?->name,
+                        'code' => $sale->saleDiscounts->first()->discountType?->code,
+                        'statutory_category' => $sale->saleDiscounts->first()->discountType?->statutory_category,
+                    ],
+                    'application_mode'    => $sale->saleDiscounts->first()->application_mode,
+                    'base_amount'         => (float) $sale->saleDiscounts->first()->base_amount,
+                    'discount_amount'     => (float) $sale->saleDiscounts->first()->discount_amount,
+                    'vat_exempt_amount'   => (float) $sale->saleDiscounts->first()->vat_exempt_amount,
+                    'eligible_person_count' => (int) $sale->saleDiscounts->first()->eligible_person_count,
+                    'total_pax_count'     => $sale->saleDiscounts->first()->total_pax_count ? (int) $sale->saleDiscounts->first()->total_pax_count : null,
+                    'beneficiaries'       => $sale->saleDiscounts->first()->beneficiaries->map(fn($b) => [
+                        'beneficiary_name' => $b->beneficiary_name,
+                        'id_number'        => $b->id_number ? '***' . substr($b->id_number, -4) : null,
+                        'tin'              => $b->tin ? '***' . substr($b->tin, -4) : null,
+                        'spic_number'      => $b->spic_number ? '***' . substr($b->spic_number, -4) : null,
+                        'child_name'       => $b->child_name,
+                    ])->toArray(),
+                ]
+                : null,
 
             'payments' => $sale->payments->map(fn($payment) => [
                 'payment_id'       => $payment->id,

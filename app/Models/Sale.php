@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+
 class Sale extends Model
 {
     use HasFactory, HasUuids, BelongsToTenant, BelongsToBranch;
@@ -146,6 +147,11 @@ class Sale extends Model
     public function statutoryDiscounts(): HasMany
     {
         return $this->hasMany(SaleStatutoryDiscount::class);
+    }
+
+    public function saleDiscounts(): HasMany
+    {
+        return $this->hasMany(SaleDiscount::class);
     }
 
     public function reversalOfSale(): BelongsTo

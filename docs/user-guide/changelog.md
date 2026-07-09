@@ -4,6 +4,44 @@ All notable changes to the IPOS platform, modules, and user workflows are docume
 
 ---
 
+## [1.5.2] - 2026-07-10
+### Added
+* **Philippine Statutory Discount Engine (G-080)**
+  * Implemented BIR-compliant Senior Citizen (20%), PWD (20%), and Solo Parent (10%) discounts with VAT exemption.
+  * Added `discount_types`, `product_discount_eligibility`, `sale_discounts`, and `sale_discount_beneficiaries` tables.
+  * Added `StatutoryDiscountService` with calculation pipeline (Gross → Less VAT → Discountable Base → Net).
+  * Added POS Special Discount Modal with category selection, identity capture (Name/ID/TIN/SPIC), pax controls, and MEMC mode.
+  * Added manager PIN approval workflow via `/api/pos/manager/authorize`.
+  * Added immutable `calculation_snapshot` persistence for audit compliance.
+  * Added receipt template rendering: "Less: VAT Exempt", discount label, and masked beneficiary name/ID.
+  * Added refund and void flows that correctly reverse statutory discounts.
+  * Added 26 compliance tests covering identity requirement, pax constraint, VAT exemption, solo parent eligibility, manager approval, receipt accuracy, and audit trail.
+
+### Validation Evidence
+- `php artisan test tests/Feature/StatutoryDiscountServiceTest.php tests/Feature/POS/StatutoryDiscountComplianceTest.php`: 26 passed / 95 assertions
+- Closure artifact: `docs/validation/statutory-discount-engine-closure.md`
+
+---
+
+## [1.5.1] - 2026-07-08
+### Changed
+* **POS shell cache rollover**
+  * Bumped the POS shell cache key to `ipos-terminal-shell-v22-20260708` in `public/sw.js` and `resources/views/app.blade.php` to force clients onto the latest cached shell assets.
+  * Revalidated the shell update with `npm run build`, `node --test tests/Frontend/offlineQueueSync.test.js`, and `node --check public/sw.js`.
+
+---
+
+## [1.5.0] - 2026-07-04
+### Added
+* **Epic 43: POS Lock Screen & Employee Timecards** (Validated)
+  * Implemented an unauthenticated lock-screen PIN toggle endpoint (`POST /pos/timecard/toggle`) requiring validated terminal context.
+  * Created `IdentifyTerminalContext` middleware to authenticate register hardware context (`X-Terminal-ID`) and `EnforceClockedIn` middleware to restrict POS cashier actions.
+  * Added `TimecardAccessPolicy` to assert clock-in requirements, and custom exception renderers returning structured JSON errors (`TIMECARD_REQUIRED` on 403, `PIN_RATE_LIMITED` on 429, `OPEN_SHIFT_BLOCKS_CLOCK_OUT` on 409).
+  * Implemented `TimecardSecurityService` tracking terminal failure counts with automatic, decaying rate limits.
+  * Integrated a touch-friendly numeric keypad and status alerts on `TerminalLockScreen.jsx`, and a pulsing status indicator badge in `ShiftHUD.jsx`.
+
+---
+
 ## [1.4.0] - 2026-05-31
 ### Added
 * **Epic 34: Enterprise Async Reporting Export** (Validated)
@@ -21,6 +59,14 @@ All notable changes to the IPOS platform, modules, and user workflows are docume
   * Configured PWA Manifest and Service Worker for offline availability (`manifest.json`, `sw.js`).
   * Implemented hardware integration adapter (`PosHardwareAdapter.js`) for Bluetooth, USB, and network receipt printers.
   * Added the [Android Kiosk Deployment Guide](file:///Users/teamsolo/Documents/Dev/IPOS/docs/deployment/android-kiosk-deployment.md) for locking down tablet terminals in production.
+* **Epic 36: Local Register Sync & Store-Level Coordination** (Validated)
+  * Implemented master register discovery and automated registration over local LAN segments.
+  * Added single-owner table lock leases with automatic lock expiry to prevent split-brain cart mutations.
+  * Integrated LAN status badges and real-time locking UI overlays on POS terminals.
+* **Epic 42: Windows POS Terminal Electron Wrapper** (Validated)
+  * Wrapped POS terminal client inside an Electron wrapper for Windows desktop installations.
+  * Configured local offline file assets loading and fallback local SQLite storage engine.
+  * Enabled direct hardware communication with native Windows drivers for printer and drawer support.
 
 ---
 

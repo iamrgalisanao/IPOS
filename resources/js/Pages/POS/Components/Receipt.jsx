@@ -370,7 +370,28 @@ function ReceiptContent({ data, isPrint = false }) {
                     <span>Subtotal</span>
                     <span>{Number(totals.subtotal).toFixed(2)}</span>
                 </div>
-                {totals.discount_total > 0 && (
+                {data.contains_statutory_discount && data.statutory_discount && (
+                    <>
+                        <div className="flex justify-between text-[10px] text-slate-500 italic">
+                            <span>Less: VAT Exempt</span>
+                            <span>-{Number(data.statutory_discount.vat_exempt_amount).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between font-bold text-emerald-700">
+                            <span>{data.statutory_discount.discount_type?.name || 'Statutory Discount'}</span>
+                            <span>-{Number(data.statutory_discount.discount_amount).toFixed(2)}</span>
+                        </div>
+                        {data.statutory_discount.beneficiaries && data.statutory_discount.beneficiaries.length > 0 && (
+                            <div className="text-[9px] text-slate-600 italic mt-1 border-t border-dotted border-slate-300 pt-1">
+                                {data.statutory_discount.beneficiaries.map((b, idx) => (
+                                    <div key={idx} className="flex justify-between">
+                                        <span>Beneficiary: {b.beneficiary_name}{b.id_number ? ` (ID: ${b.id_number})` : ''}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </>
+                )}
+                {totals.discount_total > 0 && (!data.contains_statutory_discount || totals.discount_total > Number(data.statutory_discount?.discount_amount || 0)) && (
                     <div className="flex justify-between">
                         <span>Discount</span>
                         <span>-{Number(totals.discount_total).toFixed(2)}</span>
