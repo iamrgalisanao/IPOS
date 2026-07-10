@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ValidateCheckoutRequest;
+use App\Exceptions\Inventory\InsufficientStockException;
 use App\Models\BranchInventory;
 use App\Models\CheckoutRequest;
+use App\Models\ExpiryLot;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Services\BranchContext;
@@ -29,7 +31,9 @@ class CheckoutController extends Controller
         
         // If the posController returns an Inertia response, change its component
         if ($response instanceof \Inertia\Response) {
-            $response->component('POS/Terminal/Checkout');
+            (function() {
+                $this->component = 'POS/Terminal/Checkout';
+            })->call($response);
         }
         
         return $response;
@@ -73,7 +77,8 @@ class CheckoutController extends Controller
             tenantId: $tenantId,
             branchId: $branchId,
             userId: $userId,
-            isTrainingMode: $isTrainingMode
+            isTrainingMode: $isTrainingMode,
+            statutoryDiscount: $request->input('statutory_discount', []),
         );
 
         // --- 2. Idempotency Lookup ---
@@ -155,6 +160,18 @@ class CheckoutController extends Controller
                         'reason'       => 'Insufficient or unavailable branch inventory.',
                     ];
                     continue;
+                }
+
+                if ($product->expiry_tracking_enabled) {
+                    $unexpiredQuantity = $this->getUnexpiredLotQuantity($branchId, $product->id);
+                    if (bccomp($unexpiredQuantity, number_format($quantity, 4, '.', ''), 4) === -1) {
+                        $inventoryErrors[] = [
+                            'product_id'   => $product->id,
+                            'product_name' => $product->name,
+                            'reason'       => 'Insufficient unexpired stock available.',
+                        ];
+                        continue;
+                    }
                 }
             }
 
@@ -248,7 +265,8 @@ class CheckoutController extends Controller
         string $tenantId,
         string $branchId,
         string $userId,
-        bool $isTrainingMode = false
+        bool $isTrainingMode = false,
+        array $statutoryDiscount = []
     ): string {
         $canonicalItems = collect($items)
             ->map(fn($item) => [
@@ -266,6 +284,7 @@ class CheckoutController extends Controller
             'user_id'             => $userId,
             'items'               => $canonicalItems,
             'is_training_mode'    => $isTrainingMode,
+            'statutory_discount'  => $statutoryDiscount,
         ];
 
         return hash('sha256', json_encode($canonical));
@@ -299,15 +318,45 @@ class CheckoutController extends Controller
         $clientUuid = $request->input('client_request_uuid');
         $rawItems   = $request->input('items');
         $isTrainingMode = (bool) $request->input('is_training_mode', false);
+        $inventoryErrors = $this->validateInventoryAvailability($tenantId, $branchId, $rawItems);
 
-        $result = $saleCreationService->createFromPayload(
-            tenantId: $tenantId,
-            branchId: $branchId,
-            userId: $userId,
-            clientRequestUuid: $clientUuid,
-            rawItems: $rawItems,
-            isTrainingMode: $isTrainingMode
-        );
+        if (!empty($inventoryErrors)) {
+            return response()->json([
+                'message' => 'One or more inventory-tracked products are unavailable at this branch.',
+                'inventory_errors' => $inventoryErrors,
+            ], 422);
+        }
+
+        try {
+            $result = $saleCreationService->createFromPayload(
+                tenantId: $tenantId,
+                branchId: $branchId,
+                userId: $userId,
+                clientRequestUuid: $clientUuid,
+                rawItems: $rawItems,
+                statutoryDiscount: $request->input('statutory_discount', []),
+                isTrainingMode: $isTrainingMode
+            );
+        } catch (InsufficientStockException $exception) {
+            $productIds = collect($rawItems)->pluck('product_id')->unique()->values()->all();
+            $products = Product::where('tenant_id', $tenantId)
+                ->whereIn('id', $productIds)
+                ->get(['id', 'name'])
+                ->keyBy('id');
+
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'inventory_errors' => collect($rawItems)->map(function ($item) use ($products, $exception) {
+                    $productId = $item['product_id'] ?? null;
+
+                    return [
+                        'product_id' => $productId,
+                        'product_name' => $products->get($productId)?->name ?? 'Unknown item',
+                        'reason' => $exception->getMessage(),
+                    ];
+                })->values(),
+            ], 422);
+        }
 
         return match ($result['status']) {
             'created' => $this->buildSaleResponse($result['sale'], $clientUuid, 'created'),
@@ -473,5 +522,67 @@ class CheckoutController extends Controller
         }
 
         return null;
+    }
+
+    private function validateInventoryAvailability(string $tenantId, string $branchId, array $rawItems): array
+    {
+        $productIds = collect($rawItems)->pluck('product_id')->unique()->values()->all();
+
+        $products = Product::where('tenant_id', $tenantId)
+            ->whereIn('id', $productIds)
+            ->active()
+            ->get()
+            ->keyBy('id');
+
+        $inventoryErrors = [];
+
+        foreach ($rawItems as $item) {
+            $product = $products->get($item['product_id'] ?? null);
+            if (!$product || !$product->is_inventory_tracked) {
+                continue;
+            }
+
+            $quantity = number_format((float) ($item['quantity'] ?? 0), 4, '.', '');
+            $inventory = BranchInventory::where('product_id', $product->id)
+                ->where('branch_id', $branchId)
+                ->active()
+                ->first();
+
+            if (!$inventory || bccomp((string) $inventory->current_stock, $quantity, 4) === -1) {
+                $inventoryErrors[] = [
+                    'product_id' => $product->id,
+                    'product_name' => $product->name,
+                    'reason' => 'Insufficient or unavailable branch inventory.',
+                ];
+                continue;
+            }
+
+            if ($product->expiry_tracking_enabled) {
+                $unexpiredQuantity = $this->getUnexpiredLotQuantity($branchId, $product->id);
+                if (bccomp($unexpiredQuantity, $quantity, 4) === -1) {
+                    $inventoryErrors[] = [
+                        'product_id' => $product->id,
+                        'product_name' => $product->name,
+                        'reason' => 'Insufficient unexpired stock available.',
+                    ];
+                }
+            }
+        }
+
+        return $inventoryErrors;
+    }
+
+    private function getUnexpiredLotQuantity(string $branchId, string $productId): string
+    {
+        return ExpiryLot::where('branch_id', $branchId)
+            ->where('product_id', $productId)
+            ->where('status', 'active')
+            ->where('quantity_remaining', '>', 0)
+            ->where('expiry_date', '>', now()->toDateString())
+            ->get()
+            ->reduce(
+                fn (string $carry, ExpiryLot $lot) => bcadd($carry, $lot->quantity_remaining, 4),
+                '0.0000'
+            );
     }
 }

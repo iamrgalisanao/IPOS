@@ -114,6 +114,7 @@ class SaleCreationFefoTest extends TestCase
             'user_id'             => $this->cashier->id,
             'items'               => $canonicalItems,
             'is_training_mode'    => false,
+            'statutory_discount'  => [],
         ];
 
         return hash('sha256', json_encode($canonical));
