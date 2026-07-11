@@ -60,6 +60,17 @@ class IdentifyTerminalContext
             return $this->respondForbidden($request, 'Invalid terminal context.');
         }
 
+        // Verify activation status
+        if ($terminal->activation_status !== SalesMachineProfile::STATUS_ACTIVE) {
+            return $this->respondForbidden($request, "Terminal activation status is {$terminal->activation_status}.");
+        }
+
+        // Verify device ID if one is bound to the profile
+        $deviceId = $request->header('X-Device-ID');
+        if ($terminal->activated_device_id && $deviceId !== $terminal->activated_device_id) {
+            return $this->respondForbidden($request, 'Terminal device ID mismatch.');
+        }
+
         // Attach terminal profile to request
         $request->attributes->set('terminal_profile', $terminal);
 

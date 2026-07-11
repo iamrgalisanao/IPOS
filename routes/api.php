@@ -52,6 +52,10 @@ Route::middleware(['tenant', 'branch'])->get('/branch-test', function () {
     ];
 });
 
+// Epic 44 - POS Register Activation
+Route::post('/pos/activate', [\App\Http\Controllers\POS\RegisterActivationController::class, 'activate'])
+    ->name('pos.activate');
+
 // Epic 28 Phase 2 — Offline Sync Stub (Story 28.6)
 // Returns 503 until reconciliation engine is implemented (Story 28.7+).
 Route::middleware(['auth:sanctum', 'tenant', 'branch', 'terminal', 'permission:create_sale', 'subscription.feature:sales.pos'])

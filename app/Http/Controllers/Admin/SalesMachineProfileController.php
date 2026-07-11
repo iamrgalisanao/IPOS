@@ -123,4 +123,59 @@ class SalesMachineProfileController extends Controller
             'offline_status'  => $result,
         ]);
     }
+
+    /**
+     * Generate a short-lived activation code for a terminal profile.
+     */
+    public function generateActivationCode(SalesMachineProfile $salesMachineProfile)
+    {
+        $code = \Illuminate\Support\Str::upper(\Illuminate\Support\Str::random(8));
+        $hash = hash('sha256', $code);
+
+        $salesMachineProfile->update([
+            'activation_token_hash'       => $hash,
+            'activation_token_expires_at' => now()->addHours(24),
+            'activation_status'           => SalesMachineProfile::STATUS_PENDING_ACTIVATION,
+            'activated_at'                => null,
+            'activated_device_id'         => null,
+        ]);
+
+        app(\App\Services\AuditLogger::class)->log(
+            'terminal_activation_code_generated',
+            $salesMachineProfile,
+            null,
+            ['activation_status' => $salesMachineProfile->activation_status],
+            null,
+            "Generated activation code: {$code} for terminal {$salesMachineProfile->profile_code}"
+        );
+
+        return back()->with([
+            'success'             => "Activation code generated for terminal {$salesMachineProfile->profile_code}.",
+            'activation_code_raw' => $code,
+        ]);
+    }
+
+    /**
+     * Revoke activation for a terminal profile.
+     */
+    public function revokeActivation(SalesMachineProfile $salesMachineProfile)
+    {
+        $salesMachineProfile->update([
+            'activation_status'           => SalesMachineProfile::STATUS_REVOKED,
+            'activation_token_hash'       => null,
+            'activation_token_expires_at' => null,
+            'activated_device_id'         => null,
+        ]);
+
+        app(\App\Services\AuditLogger::class)->log(
+            'terminal_activation_revoked',
+            $salesMachineProfile,
+            null,
+            ['activation_status' => $salesMachineProfile->activation_status],
+            null,
+            "Revoked activation for terminal {$salesMachineProfile->profile_code}"
+        );
+
+        return back()->with('success', "Activation revoked for terminal {$salesMachineProfile->profile_code}.");
+    }
 }

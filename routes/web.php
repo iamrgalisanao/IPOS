@@ -731,6 +731,10 @@ Route::middleware(['auth', 'tenant'])->group(function () {
             ->name('admin.sales-machine-profiles.edit');
         Route::put('/admin/sales-machine-profiles/{salesMachineProfile}', [\App\Http\Controllers\Admin\SalesMachineProfileController::class, 'update'])
             ->name('admin.sales-machine-profiles.update');
+        Route::post('/admin/sales-machine-profiles/{salesMachineProfile}/activation-code', [\App\Http\Controllers\Admin\SalesMachineProfileController::class, 'generateActivationCode'])
+            ->name('admin.sales-machine-profiles.activation-code');
+        Route::post('/admin/sales-machine-profiles/{salesMachineProfile}/revoke-activation', [\App\Http\Controllers\Admin\SalesMachineProfileController::class, 'revokeActivation'])
+            ->name('admin.sales-machine-profiles.revoke-activation');
         Route::get('/api/admin/sales-machine-profiles/{salesMachineProfile}/offline-status', [\App\Http\Controllers\Admin\SalesMachineProfileController::class, 'offlineStatus'])
             ->name('admin.sales-machine-profiles.offline-status');
     });

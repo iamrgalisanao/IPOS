@@ -68,6 +68,8 @@ class SalesMachineProfile extends Model
         'offline_sales_enabled' => 'boolean',
         'offline_sequence_next_value' => 'integer',
         'last_offline_sync_at' => 'datetime',
+        'activation_token_expires_at' => 'datetime',
+        'activated_at' => 'datetime',
     ];
 
     protected static function booted()
