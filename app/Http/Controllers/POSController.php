@@ -6,6 +6,9 @@ use App\Services\CatalogService;
 use App\Services\ConfigurationService;
 use App\Models\PaymentMethod;
 use App\Models\ProductCategory;
+use App\Models\SalesMachineProfile;
+use App\Services\POS\TerminalLayoutResolver;
+use App\Services\POS\OfflineReadiness\CacheBootstrapService;
 use App\Services\TenantContext;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -16,7 +19,9 @@ class POSController extends Controller
         protected CatalogService $catalogService,
         protected TenantContext $tenantContext,
         protected ConfigurationService $configurationService,
-        protected \App\Services\BranchContext $branchContext
+        protected \App\Services\BranchContext $branchContext,
+        protected TerminalLayoutResolver $layoutResolver,
+        protected CacheBootstrapService $bootstrapService
     ) {}
 
     /**
@@ -148,11 +153,29 @@ class POSController extends Controller
             return response()->json(['fallback' => true, 'layout' => null, 'products' => []]);
         }
 
-        $activeLayout = $branch->posLayouts()
-            ->where('is_active', true)
-            ->where('status', \App\Models\PosLayout::STATUS_PUBLISHED)
-            ->latest()
-            ->first();
+        // Resolve terminal profile for per-terminal layout override
+        $terminalId = $request->header('X-Terminal-ID') ?? $request->input('terminal_id');
+        $profile = $request->attributes->get('terminal_profile');
+
+        if (!$profile && $terminalId) {
+            $profile = SalesMachineProfile::where('tenant_id', $tenantId)
+                ->where('branch_id', $branchId)
+                ->where('status', 'active')
+                ->where(function ($q) use ($terminalId) {
+                    $q->where('id', $terminalId)
+                      ->orWhere('terminal_identifier', $terminalId);
+                })
+                ->first();
+        }
+
+        // Resolve layout using TerminalLayoutResolver (terminal override → branch fallback)
+        $activeLayout = $profile
+            ? $this->layoutResolver->resolveForProfile($profile)
+            : $this->layoutResolver->resolveBranchLayout($branchId, $tenantId);
+
+        $resolutionSource = $profile
+            ? $this->layoutResolver->getResolutionSource($profile)
+            : TerminalLayoutResolver::SOURCE_BRANCH_DEFAULT;
 
         if (!$activeLayout) {
             return response()->json(['fallback' => true, 'layout' => null, 'products' => []]);
@@ -162,6 +185,9 @@ class POSController extends Controller
         if (!\App\Services\POS\PosLayoutSchemaValidator::validate($activeLayout->schema)) {
             return response()->json(['fallback' => true, 'layout' => null, 'products' => []]);
         }
+
+        // Build the terminal-specific layout hash
+        $layoutVersionHash = $this->bootstrapService->calculateLayoutVersionHashFromLayout($activeLayout);
 
         // Resolve products in the layout
         $productIds = collect($activeLayout->schema['tiles'])
@@ -173,14 +199,20 @@ class POSController extends Controller
         $products = $this->catalogService->getByIds($productIds);
 
         return response()->json([
-            'fallback' => false,
-            'layout' => [
-                'id' => $activeLayout->id,
-                'name' => $activeLayout->name,
+            'fallback'             => false,
+            'layout'               => [
+                'id'      => $activeLayout->id,
+                'name'    => $activeLayout->name,
                 'version' => $activeLayout->version,
-                'schema' => $activeLayout->schema,
+                'schema'  => $activeLayout->schema,
             ],
-            'products' => $products
+            'layout_version_hash'  => $layoutVersionHash,
+            'layout_resolution'    => [
+                'source'         => $resolutionSource,
+                'pos_layout_id'  => $activeLayout->id,
+                'layout_name'    => $activeLayout->name,
+            ],
+            'products'             => $products,
         ]);
     }
 

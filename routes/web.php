@@ -602,6 +602,25 @@ Route::middleware(['auth', 'tenant'])->group(function () {
                 ->middleware('permission:pos-layouts.publish')
                 ->name('rollback');
         });
+
+        // Terminal Layout Assignment (per-register override)
+        Route::prefix('admin/sales-machine-profiles')
+            ->name('admin.sales-machine-profiles.')
+            ->group(function () {
+                Route::put(
+                    '/{profile}/layout-assignment',
+                    [\App\Http\Controllers\Admin\LayoutAssignmentController::class, 'update']
+                )
+                    ->middleware('permission:pos-layouts.manage')
+                    ->name('layout-assignment.update');
+
+                Route::delete(
+                    '/{profile}/layout-assignment',
+                    [\App\Http\Controllers\Admin\LayoutAssignmentController::class, 'destroy']
+                )
+                    ->middleware('permission:pos-layouts.manage')
+                    ->name('layout-assignment.destroy');
+            });
     });
 
 

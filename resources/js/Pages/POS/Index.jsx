@@ -26,6 +26,7 @@ import { offlineSyncManager } from '@/POS/offline/offlineSyncManager';
 import { offlinePaymentQueue } from '@/POS/offline/offlinePaymentQueue';
 import { useConnectivityStore } from '@/POS/offline/connectivityStore';
 import ConnectivityBanner from './Components/ConnectivityBanner';
+import StaleLayoutBanner from './Components/StaleLayoutBanner';
 
 export default function Index({ categories, initial_products, payment_methods, discount_types = [], tenant_id, branch_id, terminal_id, user_id, is_admin_mode }) {
     const activeShiftCacheKey = `ipos_active_shift_${tenant_id || 'tenant'}_${branch_id || 'branch'}_${user_id || 'user'}`;
@@ -72,6 +73,10 @@ export default function Index({ categories, initial_products, payment_methods, d
     const [timecardStatus, setTimecardStatus] = useState({ clocked_in: false, clocked_in_at: null });
     const [activeLayout, setActiveLayout] = useState(null);
     const [isLayoutLoading, setIsLayoutLoading] = useState(false);
+    // Layout drift: set to true when heartbeat response reports server layout has changed
+    const [layoutDrift, setLayoutDrift] = useState(false);
+    const [layoutDriftName, setLayoutDriftName] = useState(null);
+    const [layoutDriftDismissed, setLayoutDriftDismissed] = useState(false);
     const [terminalLocked, setTerminalLocked] = useState(() => {
         return localStorage.getItem(`terminal_locked_${user_id}`) === 'true';
     });
@@ -789,9 +794,54 @@ export default function Index({ categories, initial_products, payment_methods, d
 
         resolveLocalSync();
 
-        // Optional: Send heartbeats/refresh every 2 minutes
+        // Send heartbeat and check for layout drift every 2 minutes
+        const sendHeartbeat = async () => {
+            if (!isOnline || !offlineCaptureReadiness.machineProfile) return;
+            try {
+                const { catalogCache } = await import('@/POS/offline/catalogCache');
+                const cached = await catalogCache.getConfigSnapshotMetadata();
+                const clientSnapshot = {
+                    ...(cached?.config_snapshot || {}),
+                    layout_version_hash: cached?.layout_version_hash ?? cached?.config_snapshot?.layout_version_hash ?? null,
+                    catalog_version_hash: cached?.catalog_version_hash ?? cached?.config_snapshot?.catalog_version_hash ?? null,
+                    tax_configuration_version_hash: cached?.tax_configuration_version_hash ?? cached?.config_snapshot?.tax_configuration_version_hash ?? null,
+                    discount_rules_version_hash: cached?.discount_rules_version_hash ?? cached?.config_snapshot?.discount_rules_version_hash ?? null,
+                    payment_methods_version_hash: cached?.payment_methods_version_hash ?? cached?.config_snapshot?.payment_methods_version_hash ?? null,
+                    terminal_policy_version_hash: cached?.terminal_policy_version_hash ?? cached?.config_snapshot?.terminal_policy_version_hash ?? null,
+                    printer_profile_version_hash: cached?.printer_profile_version_hash ?? cached?.config_snapshot?.printer_profile_version_hash ?? null,
+                    config_snapshot_hash: cached?.config_snapshot_hash ?? cached?.config_snapshot?.config_snapshot_hash ?? null,
+                };
+
+                const hbRes = await axios.post('/api/pos/heartbeat', {
+                    app_version: window.__IPOS_VERSION__ ?? null,
+                    device_id: offlineCaptureReadiness.machineProfile?.activated_device_id ?? null,
+                    queue_count: offlineQueueSummary.pending + offlineQueueSummary.failed,
+                    connection_state: isOnline ? 'online' : 'offline',
+                    reported_at: new Date().toISOString(),
+                    config_snapshot: clientSnapshot,
+                }, {
+                    headers: buildPosHeaders(),
+                });
+
+                if (hbRes.data?.layout_drift === true) {
+                    setLayoutDrift(true);
+                    setLayoutDriftName(hbRes.data?.server_layout_name ?? null);
+                    setLayoutDriftDismissed(false);
+                } else if (hbRes.data?.layout_drift === false) {
+                    // Heartbeat confirmed we are in sync — clear any stale drift state
+                    setLayoutDrift(false);
+                }
+            } catch (err) {
+                if (!isExpectedStartupFetchFailure(err)) {
+                    console.warn('Heartbeat failed:', err);
+                }
+            }
+        };
+
+        sendHeartbeat();
         const interval = setInterval(() => {
             resolveLocalSync();
+            sendHeartbeat();
         }, 120000);
 
         return () => clearInterval(interval);
@@ -1398,6 +1448,21 @@ export default function Index({ categories, initial_products, payment_methods, d
             <Head title="POS Terminal" />
 
             <ConnectivityBanner />
+
+            {layoutDrift && !layoutDriftDismissed && (
+                <StaleLayoutBanner
+                    layoutName={layoutDriftName}
+                    onReloaded={(data) => {
+                        // Update activeLayout WITHOUT touching the cart
+                        if (data?.layout) {
+                            setActiveLayout(data);
+                        }
+                        setLayoutDrift(false);
+                        setLayoutDriftName(null);
+                    }}
+                    onDismiss={() => setLayoutDriftDismissed(true)}
+                />
+            )}
 
             {posAccessIssue && (
                 <div className={`shrink-0 z-40 border-b px-4 py-3 ${

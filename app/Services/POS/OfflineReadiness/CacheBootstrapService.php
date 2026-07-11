@@ -27,7 +27,7 @@ class CacheBootstrapService
     /**
      * Generate the complete read-only bootstrap cache payload.
      */
-    public function generatePayload(Tenant $tenant, Branch $branch, $user): array
+    public function generatePayload(Tenant $tenant, Branch $branch, $user, ?SalesMachineProfile $machineProfile = null): array
     {
         $originalTenant = $this->tenantContext->getTenant();
         $originalBranch = $this->branchContext->getBranch();
@@ -80,9 +80,11 @@ class CacheBootstrapService
             ];
 
             // 5. Sales machine profile display context
-            $machineProfile = SalesMachineProfile::where('branch_id', $branch->id)
-                ->where('status', 'active')
-                ->first();
+            if (!$machineProfile) {
+                $machineProfile = SalesMachineProfile::where('branch_id', $branch->id)
+                    ->where('status', 'active')
+                    ->first();
+            }
 
             $machineProfileContext = $machineProfile ? [
                 'id' => $machineProfile->id,
@@ -117,7 +119,7 @@ class CacheBootstrapService
             // 7. Calculate version hashes
             $taxHash = $this->calculateTaxConfigHash($tenant->id, $branch->id);
             $catalogHash = $this->calculateCatalogVersionHash($tenant->id, $branch->id);
-            $layoutHash = $this->calculateLayoutVersionHash($tenant->id, $branch->id);
+            $layoutHash = $this->calculateLayoutVersionHash($tenant->id, $branch->id, $machineProfile);
             $discountRulesHash = $this->calculateDiscountRulesVersionHash($tenant->id);
             $paymentMethodsHash = $this->calculatePaymentMethodsVersionHash($tenant->id);
             $terminalPolicyHash = $this->calculateTerminalPolicyVersionHash($tenant, $branch, $machineProfile);
@@ -262,8 +264,20 @@ class CacheBootstrapService
         ]);
     }
 
-    public function calculateLayoutVersionHash(string $tenantId, string $branchId): string
+    public function calculateLayoutVersionHash(string $tenantId, string $branchId, ?SalesMachineProfile $profile = null): string
     {
+        if ($profile?->pos_layout_id) {
+            $terminalLayout = PosLayout::query()
+                ->where('tenant_id', $tenantId)
+                ->where('id', $profile->pos_layout_id)
+                ->where('status', PosLayout::STATUS_PUBLISHED)
+                ->first();
+
+            if ($terminalLayout) {
+                return $this->calculateLayoutVersionHashFromLayout($terminalLayout);
+            }
+        }
+
         $layout = PosLayout::query()
             ->join('branch_pos_layout', 'branch_pos_layout.pos_layout_id', '=', 'pos_layouts.id')
             ->where('pos_layouts.tenant_id', $tenantId)
@@ -286,17 +300,43 @@ class CacheBootstrapService
             ])
             ->first();
 
+        return $this->calculateLayoutVersionHashFromLayout($layout);
+    }
+
+    /**
+     * Build a canonical layout version hash from a pre-resolved PosLayout model.
+     *
+     * This is the authoritative hash method. All consumers (TerminalLayoutResolver,
+     * TerminalConfigDriftService, TerminalHeartbeatController) must call this to
+     * guarantee consistent hashing regardless of how the layout was resolved.
+     *
+     * The hash covers layout identity AND content so that:
+     *   - Content changes         → new hash
+     *   - Different layout ID     → new hash (even if content is identical)
+     *   - Layout archived/deleted → terminal detects drift on next heartbeat
+     *
+     * @param  PosLayout|null  $layout  Already-resolved layout (null when no layout exists)
+     * @return string
+     */
+    public function calculateLayoutVersionHashFromLayout(?PosLayout $layout): string
+    {
         return $this->hashCanonical([
             'layout' => $layout ? [
-                'id' => $layout->id,
-                'name' => $layout->name,
+                'id'      => $layout->id,
+                'name'    => $layout->name,
                 'version' => (int) $layout->version,
-                'status' => $layout->status,
-                'schema' => $this->decodeJsonValue($layout->schema),
+                'status'  => $layout->status,
+                'schema'  => $this->decodeJsonValue($layout->schema),
                 'updated_at' => $this->isoDate($layout->updated_at),
-                'assignment_id' => $layout->assignment_id,
-                'published_at' => $this->isoDate($layout->published_at),
-                'assignment_updated_at' => $this->isoDate($layout->assignment_updated_at),
+                // assignment_id / published_at are present on branch-resolved rows;
+                // terminal-override layouts may not carry them, so fall back to null.
+                'assignment_id' => $layout->assignment_id ?? null,
+                'published_at'  => isset($layout->published_at)
+                    ? $this->isoDate($layout->published_at)
+                    : null,
+                'assignment_updated_at' => isset($layout->assignment_updated_at)
+                    ? $this->isoDate($layout->assignment_updated_at)
+                    : null,
             ] : null,
         ]);
     }

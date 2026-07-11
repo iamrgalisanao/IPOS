@@ -7,11 +7,18 @@ use App\Traits\BelongsToTenant;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class SalesMachineProfile extends Model
 {
     use HasFactory, HasUuids, BelongsToTenant, BelongsToBranch;
+
+    public const STATUS_PENDING_ACTIVATION = 'pending_activation';
+    public const STATUS_ACTIVE = 'active';
+    public const STATUS_SUSPENDED = 'suspended';
+    public const STATUS_REVOKED = 'revoked';
+    public const STATUS_EXPIRED = 'expired';
 
     protected $fillable = [
         'tenant_id',
@@ -39,6 +46,15 @@ class SalesMachineProfile extends Model
         'offline_sequence_next_value',
         'offline_sequence_status',
         'last_offline_sync_at',
+        'activation_token_hash',
+        'activation_token_expires_at',
+        'activated_at',
+        'activated_by',
+        'activated_device_id',
+        'activation_status',
+        'last_activated_ip',
+        // Optional per-terminal layout override (null → falls back to branch-active layout)
+        'pos_layout_id',
     ];
 
     protected $casts = [
@@ -84,5 +100,15 @@ class SalesMachineProfile extends Model
     public function sales(): HasMany
     {
         return $this->hasMany(Sale::class, 'sales_machine_profile_id');
+    }
+
+    /**
+     * The optional per-terminal layout override.
+     * If set and the layout is published/active, this layout is used instead of the branch-active layout.
+     * Returns null (nullOnDelete) when the assigned layout is deleted, causing fallback to branch layout.
+     */
+    public function posLayout(): BelongsTo
+    {
+        return $this->belongsTo(PosLayout::class, 'pos_layout_id');
     }
 }

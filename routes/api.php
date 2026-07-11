@@ -69,6 +69,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'branch', 'terminal', 'permission:c
             ->name('submissions.show');
         Route::get('/submissions/sequence/{offline_sequence_number}', [\App\Http\Controllers\POS\SubmissionLookupController::class, 'bySequence'])
             ->name('submissions.by-sequence');
+        Route::post('/heartbeat', [\App\Http\Controllers\POS\TerminalHeartbeatController::class, 'store'])
+            ->name('heartbeat');
 
         // Epic 40 — Cash Drawer Audit & Manager Shift Reconciliation
         Route::get('/drawer-status', [\App\Http\Controllers\POS\POSDrawerController::class, 'drawerStatus'])
