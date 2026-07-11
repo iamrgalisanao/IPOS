@@ -116,6 +116,57 @@ class OfflineImportReviewTest extends TestCase
     }
 
     /** @test */
+    public function test_admin_can_search_import_review_records_by_sequence_batch_or_terminal()
+    {
+        $first = $this->createImport('conflict');
+        $first->update([
+            'offline_sequence_number' => 'INV-SEARCH-001',
+            'raw_payload' => [
+                'client_total' => '140.00',
+                'local_transaction_reference' => 'OFF-TERM-01-000001',
+                'payment_method' => 'cash',
+            ],
+            'server_recalculation' => [
+                'server_total' => '140.00',
+            ],
+        ]);
+
+        $otherBatch = OfflineSyncBatch::create([
+            'tenant_id'                => $this->tenant->id,
+            'branch_id'                => $this->branch->id,
+            'sales_machine_profile_id' => $this->profile->id,
+            'batch_reference'          => 'BATCH-REVIEW-XYZ',
+            'status'                   => OfflineSyncBatch::STATUS_COMPLETED,
+            'submitted_import_count'   => 1,
+        ]);
+
+        $second = $this->createImport('hold');
+        $second->update([
+            'batch_id' => $otherBatch->id,
+            'offline_sequence_number' => 'INV-SEARCH-002',
+        ]);
+
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->getJson('/api/admin/offline-sync/imports?q=BATCH-REVIEW-XYZ&status=conflict,hold');
+
+        $response->assertStatus(200);
+        $response->assertJsonCount(1, 'data');
+        $response->assertJsonPath('data.0.id', $second->id);
+        $response->assertJsonPath('data.0.batch.batch_reference', 'BATCH-REVIEW-XYZ');
+        $response->assertJsonPath('data.0.terminal.profile_code', 'MAIN-POS');
+
+        $sequenceResponse = $this->actingAs($this->admin, 'sanctum')
+            ->getJson('/api/admin/offline-sync/imports?q=INV-SEARCH-001&status=conflict,hold');
+
+        $sequenceResponse->assertStatus(200);
+        $sequenceResponse->assertJsonCount(1, 'data');
+        $sequenceResponse->assertJsonPath('data.0.id', $first->id);
+        $sequenceResponse->assertJsonPath('data.0.client_total', '140.00');
+        $sequenceResponse->assertJsonPath('data.0.server_total', '140.00');
+        $sequenceResponse->assertJsonPath('data.0.local_transaction_reference', 'OFF-TERM-01-000001');
+    }
+
+    /** @test */
     public function test_tc_28_9_02_admin_can_view_import_details()
     {
         $import = $this->createImport('conflict');

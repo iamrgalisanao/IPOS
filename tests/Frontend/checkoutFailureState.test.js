@@ -1,4 +1,4 @@
-import { getCheckoutErrorMessage, shouldClearCart } from '../../resources/js/Pages/POS/helpers/checkoutFailureHelper.js';
+import { getCheckoutErrorMessage, getPosAccessIssue, shouldClearCart } from '../../resources/js/Pages/POS/helpers/checkoutFailureHelper.js';
 
 function assert(condition, message) {
     if (!condition) {
@@ -35,14 +35,53 @@ assert(
     'Should return permission message for 403'
 );
 
-// 5. Test Generic Error
+// 5. Test Stale Session
+assert(
+    getCheckoutErrorMessage(419, {}) === 'Your POS session has expired. Reconnect or sign in again before continuing.',
+    'Should return stale session message for 419'
+);
+
+// 6. Test Terminal Context Error
+assert(
+    getCheckoutErrorMessage(403, { code: 'TERMINAL_CONTEXT_INVALID', message: 'Terminal context missing.' }) === 'Terminal context missing.',
+    'Should return terminal context message for terminal binding failures'
+);
+
+// 7. Test Timecard Required Error
+assert(
+    getCheckoutErrorMessage(403, { code: 'TIMECARD_REQUIRED' }) === 'You must be clocked in before completing this sale.',
+    'Should return timecard-required message for clock-in failures'
+);
+
+// 8. Test Generic Error
 assert(
     getCheckoutErrorMessage(500, {}) === 'The sale could not be completed. Your cart is safe. Please try again.',
     'Should return generic message for other errors'
 );
 
-// 6. Test Cart Preservation Logic
+// 9. Test Cart Preservation Logic
 assert(shouldClearCart(true) === true, 'Should clear cart on success');
 assert(shouldClearCart(false) === false, 'Should NOT clear cart on failure');
+
+// 10. Test POS Access Issue Classification
+assert(
+    getPosAccessIssue(401, {})?.code === 'SESSION_EXPIRED',
+    'Should classify 401 as a stale POS session access issue'
+);
+
+assert(
+    getPosAccessIssue(403, { code: 'TERMINAL_CONTEXT_INVALID' })?.action === 'retry',
+    'Should classify terminal context failures as retryable POS access issues'
+);
+
+assert(
+    getPosAccessIssue(403, { code: 'TIMECARD_REQUIRED' })?.code === 'TIMECARD_REQUIRED',
+    'Should classify timecard failures as POS access issues'
+);
+
+assert(
+    getPosAccessIssue(422, {}) === null,
+    'Should not classify validation errors as POS access issues'
+);
 
 console.log('\nAll Frontend Logic Tests Passed!');

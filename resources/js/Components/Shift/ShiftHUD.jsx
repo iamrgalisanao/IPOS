@@ -1,19 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from '@inertiajs/react';
-import { 
-    Clock, 
-    User, 
-    Wallet, 
-    ChevronDown, 
-    ArrowDownCircle, 
-    FileText, 
+import {
+    Clock,
+    User,
+    Wallet,
+    ChevronDown,
+    ArrowDownCircle,
+    FileText,
     LogOut,
     Eye,
     EyeOff,
     Lock
 } from 'lucide-react';
 
-export default function ShiftHUD({ shift, onRecordEvent, onSpotAudit, onCloseShift, onLockTerminal }) {
+export default function ShiftHUD({ shift, timecardStatus, onRecordEvent, onSpotAudit, onCloseShift, onLockTerminal }) {
     const [duration, setDuration] = useState('');
     const [showActions, setShowActions] = useState(false);
     const [showFinancials, setShowFinancials] = useState(false);
@@ -71,8 +71,15 @@ export default function ShiftHUD({ shift, onRecordEvent, onSpotAudit, onCloseShi
                         <User className="w-3.5 h-3.5 text-indigo-400" />
                     </div>
                     <div>
-                        <p className="text-[10px] uppercase tracking-tighter text-slate-500 font-bold leading-none mb-0.5">Cashier</p>
-                        <p className="text-xs font-bold text-slate-200 leading-none">{shift.cashier_name}</p>
+                        <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-slate-200 leading-none">{shift.cashier_name}</span>
+                            {timecardStatus && (
+                                <span
+                                    className={`inline-block w-2.5 h-2.5 rounded-full ${timecardStatus.clocked_in ? 'bg-emerald-500 animate-pulse shadow-lg shadow-emerald-500/50' : 'bg-amber-500 shadow-lg shadow-amber-500/50'}`}
+                                    title={timecardStatus.clocked_in ? 'Timecard Clocked In' : 'Timecard Clocked Out'}
+                                />
+                            )}
+                        </div>
                     </div>
                 </div>
 
@@ -103,13 +110,13 @@ export default function ShiftHUD({ shift, onRecordEvent, onSpotAudit, onCloseShi
                     <div className="flex items-center gap-2">
                         <div className="w-7 h-7 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
                             {showFinancials ? (
-                                <EyeOff 
-                                    className="w-3.5 h-3.5 text-indigo-400 cursor-pointer" 
+                                <EyeOff
+                                    className="w-3.5 h-3.5 text-indigo-400 cursor-pointer"
                                     onClick={() => setShowFinancials(false)}
                                 />
                             ) : (
-                                <Eye 
-                                    className="w-3.5 h-3.5 text-indigo-400 cursor-pointer" 
+                                <Eye
+                                    className="w-3.5 h-3.5 text-indigo-400 cursor-pointer"
                                     onClick={() => setShowFinancials(true)}
                                 />
                             )}
@@ -157,7 +164,7 @@ export default function ShiftHUD({ shift, onRecordEvent, onSpotAudit, onCloseShi
                             <Eye className="w-4 h-4 text-indigo-400" />
                             Perform Spot Audit
                         </button>
-                        
+
                         {shift?.id && (
                             <Link
                                 href={route('shifts.show', shift.id)}

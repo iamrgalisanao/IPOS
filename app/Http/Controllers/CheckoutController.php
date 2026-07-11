@@ -9,15 +9,19 @@ use App\Models\CheckoutRequest;
 use App\Models\ExpiryLot;
 use App\Models\Product;
 use App\Models\Sale;
+use App\Models\SalesMachineProfile;
 use App\Services\BranchContext;
 use App\Services\Observability\RequestCorrelation;
 use App\Services\POS\SaleCreationService;
+use App\Services\POS\TimecardService;
+use App\Services\Shift\ShiftService;
 use App\Services\TenantContext;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Inertia\Inertia;
 
 class CheckoutController extends Controller
 {
@@ -37,6 +41,93 @@ class CheckoutController extends Controller
         }
         
         return $response;
+    }
+
+    public function shift(Request $request, ShiftService $shiftService, TimecardService $timecardService, BranchContext $branchContext, TenantContext $tenantContext)
+    {
+        $branch = $branchContext->getBranch();
+        $user = $request->user();
+        $activeShift = ($branch && $user) ? $shiftService->getActiveShiftFor($user, $branch) : null;
+        $activeTimecard = ($branch && $user) ? $timecardService->getActiveTimecard($tenantContext->getTenantId(), $branch->id, $user->id) : null;
+
+        return Inertia::render('POS/Terminal/Shift', array_merge($this->terminalContext($request, $branchContext, $tenantContext), [
+            'active_shift' => $activeShift ? [
+                'id' => $activeShift->id,
+                'status' => $activeShift->status,
+                'opened_at' => optional($activeShift->opened_at)->toIso8601String(),
+                'opening_cash_amount' => $activeShift->opening_cash_amount,
+            ] : null,
+            'active_timecard' => $activeTimecard ? [
+                'id' => $activeTimecard->id,
+                'clocked_in_at' => optional($activeTimecard->clocked_in_at)->toIso8601String(),
+                'terminal_id' => $activeTimecard->terminal_id,
+            ] : null,
+        ]));
+    }
+
+    public function syncStatus(Request $request, BranchContext $branchContext, TenantContext $tenantContext)
+    {
+        return Inertia::render('POS/Terminal/SyncStatus', array_merge($this->terminalContext($request, $branchContext, $tenantContext), [
+            'sync_guidance' => [
+                'cashier_message' => 'Use the checkout queue drawer for local pending items. Conflicts require admin review before posting.',
+                'admin_review_route' => route('admin.terminal-sync-monitor.index'),
+            ],
+        ]));
+    }
+
+    public function settings(Request $request, BranchContext $branchContext, TenantContext $tenantContext)
+    {
+        $terminal = $request->attributes->get('terminal_profile');
+
+        return Inertia::render('POS/Terminal/Settings', array_merge($this->terminalContext($request, $branchContext, $tenantContext), [
+            'hardware' => [
+                'adapter' => 'noop',
+                'status' => 'not_configured',
+                'message' => 'Browser hardware adapter selection is not configured on this terminal yet.',
+            ],
+            'service_worker' => [
+                'expected_cache' => 'ipos-terminal-shell-v31-20260711',
+                'health_url' => '/__ipos-sw-health',
+            ],
+            'offline_profile' => $terminal instanceof SalesMachineProfile ? [
+                'offline_sales_enabled' => (bool) $terminal->offline_sales_enabled,
+                'offline_sequence_prefix' => $terminal->offline_sequence_prefix,
+                'offline_sequence_status' => $terminal->offline_sequence_status,
+                'offline_sequence_next_value' => $terminal->offline_sequence_next_value,
+                'last_offline_sync_at' => optional($terminal->last_offline_sync_at)->toIso8601String(),
+            ] : null,
+        ]));
+    }
+
+    private function terminalContext(Request $request, BranchContext $branchContext, TenantContext $tenantContext): array
+    {
+        $terminal = $request->attributes->get('terminal_profile');
+        $branch = $branchContext->getBranch();
+        $tenant = $tenantContext->getTenant();
+
+        return [
+            'terminal_context' => [
+                'tenant' => $tenant ? [
+                    'id' => $tenant->id,
+                    'name' => $tenant->name,
+                ] : null,
+                'branch' => $branch ? [
+                    'id' => $branch->id,
+                    'name' => $branch->name,
+                ] : null,
+                'terminal' => $terminal instanceof SalesMachineProfile ? [
+                    'id' => $terminal->id,
+                    'profile_code' => $terminal->profile_code,
+                    'terminal_identifier' => $terminal->terminal_identifier,
+                    'machine_identification_number' => $terminal->machine_identification_number,
+                    'status' => $terminal->status,
+                ] : null,
+                'user' => $request->user() ? [
+                    'id' => $request->user()->id,
+                    'name' => $request->user()->name,
+                ] : null,
+            ],
+        ];
     }
 
     /**

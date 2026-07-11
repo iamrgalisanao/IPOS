@@ -1,13 +1,12 @@
 import { v4 as uuidv4 } from 'uuid';
 
-export type OfflineSyncStatus = 
-    | 'queued' 
-    | 'syncing' 
-    | 'accepted' 
-    | 'duplicate' 
-    | 'rejected' 
-    | 'conflict' 
-    | 'failed' 
+export type OfflineSyncStatus =
+    | 'pending'
+    | 'syncing'
+    | 'synced'
+    | 'failed'
+    | 'conflict'
+    | 'accepted_with_warning'
     | 'cancelled';
 
 export interface OfflineTransactionEnvelope {
@@ -32,21 +31,58 @@ export interface OfflineTransactionEnvelope {
 }
 
 export interface OfflineQueueSummary {
-    queued: number;
+    pending: number;
     syncing: number;
-    accepted: number;
-    duplicate: number;
-    rejected: number;
-    conflict: number;
+    synced: number;
     failed: number;
+    conflict: number;
+    accepted_with_warning: number;
     cancelled: number;
     total: number;
     lastSyncAttemptAt: string | null;
     lastSuccessfulSyncAt: string | null;
 }
 
+export interface OfflineQueueDiagnosticRecord {
+    id: string;
+    batch_reference: string;
+    offline_sequence: string;
+    status: OfflineSyncStatus;
+    created_at: string;
+    updated_at: string;
+    last_sync_attempt_at?: string | null;
+    last_synced_at?: string | null;
+    local_transaction_reference?: string | null;
+    terminal_id?: string | null;
+    branch_id?: string | null;
+    cashier_shift_id?: string | null;
+    gross_amount_centavos?: number | string | null;
+    client_total?: string | null;
+    error_message?: string | null;
+    payload_hash: string;
+    previous_hash: string | null;
+    row_hash: string;
+}
+
+export interface OfflineQueueDiagnosticsBundle {
+    generated_at: string;
+    storage: {
+        indexed_db_available: boolean;
+        database_name: string;
+        database_version: number;
+        object_stores: string[];
+    };
+    summary: OfflineQueueSummary;
+    hash_chain_valid: boolean;
+    active_record_count: number;
+    historical_record_count: number;
+    records: OfflineQueueDiagnosticRecord[];
+}
+
 const DB_NAME = 'ipos_pos_offline_queue';
 const DB_VERSION = 1;
+const UNRESOLVED_STATUSES: OfflineSyncStatus[] = ['pending', 'syncing', 'failed', 'conflict', 'accepted_with_warning'];
+const PRUNABLE_STATUSES: OfflineSyncStatus[] = ['synced', 'cancelled'];
 const listeners = new Set<() => void>();
 
 export class OfflineSalesQueueService {
@@ -139,7 +175,10 @@ export class OfflineSalesQueueService {
     }
 
     private async computePayloadHash(payload: any): Promise<string> {
-        return this.computeSHA256(JSON.stringify(this.canonicalize(payload)));
+        const payloadForHash = this.cloneValue(payload);
+        delete (payloadForHash as Record<string, any>).payload_hash;
+
+        return this.computeSHA256(JSON.stringify(this.canonicalize(payloadForHash)));
     }
 
     private async computeRowHash(previousHash: string | null, payloadHash: string, sequence: string, batchReference: string): Promise<string> {
@@ -189,7 +228,7 @@ export class OfflineSalesQueueService {
         });
     }
 
-    public async getNextOfflineSequence(prefix: string, initialNextValue = 1): Promise<string> {
+    public async getNextOfflineSequence(prefix: string, initialNextValue = 1, padLength = 6): Promise<string> {
         const db = await this.initDb();
         return new Promise((resolve, reject) => {
             const tx = db.transaction(['metadata'], 'readwrite');
@@ -201,8 +240,8 @@ export class OfflineSalesQueueService {
                 const nextVal = Number.isInteger(request.result) && request.result > 0
                     ? request.result
                     : initialNextValue;
-                const formattedSequence = `${prefix}${String(nextVal).padStart(8, '0')}`;
-                
+                const formattedSequence = `${prefix}${String(nextVal).padStart(padLength, '0')}`;
+
                 // Advance the sequence
                 const putReq = store.put(nextVal + 1, sequenceKey);
                 putReq.onsuccess = () => resolve(formattedSequence);
@@ -212,8 +251,31 @@ export class OfflineSalesQueueService {
         });
     }
 
+    public async checkDuplicateLocalReference(ref: string): Promise<boolean> {
+        const db = await this.initDb();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(['transactions'], 'readonly');
+            const store = tx.objectStore('transactions');
+            const request = store.openCursor();
+
+            request.onsuccess = (event: any) => {
+                const cursor = event.target.result;
+                if (cursor) {
+                    const record = cursor.value;
+                    if (record.payload?.local_transaction_reference === ref) {
+                        return resolve(true);
+                    }
+                    cursor.continue();
+                } else {
+                    resolve(false);
+                }
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
     public async appendTransaction(
-        payload: any, 
+        payload: any,
         clientTotals: { total: string, tax: string, subtotal: string },
         options: { prefix: string, initialNextValue?: number, batchReference?: string }
     ): Promise<OfflineTransactionEnvelope> {
@@ -230,13 +292,24 @@ export class OfflineSalesQueueService {
         const batchReference = options.batchReference || uuidv4();
         const now = new Date().toISOString();
         const immutablePayload = this.cloneValue(payload);
-        const sequence = await this.getNextOfflineSequence(options.prefix, options.initialNextValue || 1);
+        const sequence = await this.getNextOfflineSequence(options.prefix, options.initialNextValue || 1, 6);
+
+        // Check local duplicate reference
+        const isDupRef = await this.checkDuplicateLocalReference(sequence);
+        if (isDupRef) {
+            throw new Error(`Duplicate local transaction reference detected: ${sequence}`);
+        }
+
+        // Inject reference and receipt metadata into the payload
+        immutablePayload.local_transaction_reference = sequence;
+        immutablePayload.local_receipt_number = sequence;
 
         const payloadHash = await this.computePayloadHash(immutablePayload);
+        immutablePayload.payload_hash = payloadHash;
 
         return new Promise((resolve, reject) => {
             const tx = db.transaction(['transactions', 'metadata'], 'readwrite');
-            
+
             this.getLastHash(tx).then(async (previousHash) => {
                 const rowHash = await this.computeRowHash(previousHash, payloadHash, sequence, batchReference);
                 const envelope: OfflineTransactionEnvelope = {
@@ -247,7 +320,7 @@ export class OfflineSalesQueueService {
                     payload_hash: payloadHash,
                     previous_hash: previousHash,
                     row_hash: rowHash,
-                    status: 'queued',
+                    status: 'pending',
                     created_at: now,
                     updated_at: now,
                     last_sync_attempt_at: null,
@@ -279,9 +352,9 @@ export class OfflineSalesQueueService {
 
             request.onsuccess = () => {
                 const results = request.result || [];
-                // Filter by queued or failed
-                const pending = results.filter((r: OfflineTransactionEnvelope) => 
-                    ['queued', 'failed'].includes(r.status)
+                // Filter by pending or failed
+                const pending = results.filter((r: OfflineTransactionEnvelope) =>
+                    ['pending', 'failed'].includes(r.status)
                 );
                 resolve(pending.map((record: OfflineTransactionEnvelope) => this.freezeDeep(this.cloneValue(record))));
             };
@@ -312,8 +385,11 @@ export class OfflineSalesQueueService {
                 record.updated_at = new Date().toISOString();
                 if (newStatus === 'syncing') {
                     record.last_sync_attempt_at = record.updated_at;
+                    if (record.payload) {
+                        record.payload.sync_attempt_count = (record.payload.sync_attempt_count || 0) + 1;
+                    }
                 }
-                if (['accepted', 'duplicate', 'rejected', 'conflict'].includes(newStatus)) {
+                if (['synced', 'conflict', 'accepted_with_warning'].includes(newStatus)) {
                     record.last_synced_at = record.updated_at;
                 }
                 if (errorMessage !== undefined) {
@@ -337,14 +413,13 @@ export class OfflineSalesQueueService {
         if (current === next) return true;
 
         const allowedTransitions: Record<OfflineSyncStatus, OfflineSyncStatus[]> = {
-            'queued': ['syncing', 'cancelled'],
-            'syncing': ['accepted', 'duplicate', 'rejected', 'conflict', 'failed'],
-            'failed': ['syncing', 'cancelled'],
-            'accepted': [], // blocked from moving to queued or cancelled
-            'rejected': [], // blocked from moving to queued
-            'conflict': [], // blocked from moving to queued
-            'cancelled': [],
-            'duplicate': []
+            'pending': ['syncing', 'cancelled'],
+            'syncing': ['synced', 'failed', 'conflict', 'accepted_with_warning'],
+            'failed': ['syncing', 'cancelled', 'conflict'],
+            'synced': [],
+            'conflict': [],
+            'accepted_with_warning': [],
+            'cancelled': []
         };
 
         return allowedTransitions[current]?.includes(next) ?? false;
@@ -360,6 +435,69 @@ export class OfflineSalesQueueService {
             request.onsuccess = () => resolve((request.result || []).map((record: OfflineTransactionEnvelope) => this.freezeDeep(this.cloneValue(record))));
             request.onerror = () => reject(request.error);
         });
+    }
+
+    public async getDiagnosticsBundle(): Promise<OfflineQueueDiagnosticsBundle> {
+        const db = await this.initDb();
+        const records = await this.getAllTransactions();
+        const summary = await this.getStatusSummary();
+        const hashChainValid = await this.verifyHashChain();
+
+        return {
+            generated_at: new Date().toISOString(),
+            storage: {
+                indexed_db_available: true,
+                database_name: DB_NAME,
+                database_version: DB_VERSION,
+                object_stores: Array.from(db.objectStoreNames as any),
+            },
+            summary,
+            hash_chain_valid: hashChainValid,
+            active_record_count: records.filter((record) => UNRESOLVED_STATUSES.includes(record.status)).length,
+            historical_record_count: records.length,
+            records: records.map((record) => this.toDiagnosticRecord(record)),
+        };
+    }
+
+    public async pruneResolvedTransactions(retentionDays = 7, now = new Date()): Promise<{ pruned: number; retained: number }> {
+        const db = await this.initDb();
+        const records = await this.getAllTransactions();
+        const cutoff = now.getTime() - (Math.max(0, retentionDays) * 24 * 60 * 60 * 1000);
+        const prunable = records.filter((record) => {
+            if (!PRUNABLE_STATUSES.includes(record.status)) {
+                return false;
+            }
+
+            const timestamp = record.last_synced_at || record.updated_at || record.created_at;
+            const time = Date.parse(timestamp);
+
+            return Number.isFinite(time) && time < cutoff;
+        });
+
+        if (prunable.length === 0) {
+            return { pruned: 0, retained: records.length };
+        }
+
+        await new Promise<void>((resolve, reject) => {
+            const tx = db.transaction(['transactions'], 'readwrite');
+            const store = tx.objectStore('transactions');
+            let remaining = prunable.length;
+
+            prunable.forEach((record) => {
+                const request = store.delete(record.id);
+                request.onsuccess = () => {
+                    remaining -= 1;
+                    if (remaining === 0) {
+                        resolve();
+                    }
+                };
+                request.onerror = () => reject(request.error);
+            });
+        });
+
+        this.emitChange();
+
+        return { pruned: prunable.length, retained: records.length - prunable.length };
     }
 
     public async recordSyncAttempt(at: string): Promise<void> {
@@ -378,17 +516,18 @@ export class OfflineSalesQueueService {
         const lastSuccessfulSyncAt = await this.getMetadataValue<string>('last_successful_sync_at');
 
         const summary = records.reduce((acc, record) => {
-            acc[record.status] += 1;
+            if (acc[record.status] !== undefined) {
+                acc[record.status] += 1;
+            }
             acc.total += 1;
             return acc;
         }, {
-            queued: 0,
+            pending: 0,
             syncing: 0,
-            accepted: 0,
-            duplicate: 0,
-            rejected: 0,
-            conflict: 0,
+            synced: 0,
             failed: 0,
+            conflict: 0,
+            accepted_with_warning: 0,
             cancelled: 0,
             total: 0,
         });
@@ -417,6 +556,29 @@ export class OfflineSalesQueueService {
         }
 
         return true;
+    }
+
+    private toDiagnosticRecord(record: OfflineTransactionEnvelope): OfflineQueueDiagnosticRecord {
+        return {
+            id: record.id,
+            batch_reference: record.batch_reference,
+            offline_sequence: record.offline_sequence,
+            status: record.status,
+            created_at: record.created_at,
+            updated_at: record.updated_at,
+            last_sync_attempt_at: record.last_sync_attempt_at,
+            last_synced_at: record.last_synced_at,
+            local_transaction_reference: record.payload?.local_transaction_reference || null,
+            terminal_id: record.payload?.terminal_id || null,
+            branch_id: record.payload?.branch_id || null,
+            cashier_shift_id: record.payload?.cashier_shift_id || null,
+            gross_amount_centavos: record.payload?.gross_amount_centavos ?? null,
+            client_total: record.client_totals?.total ?? null,
+            error_message: record.error_message || null,
+            payload_hash: record.payload_hash,
+            previous_hash: record.previous_hash,
+            row_hash: record.row_hash,
+        };
     }
 }
 

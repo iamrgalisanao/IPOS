@@ -29,13 +29,13 @@ class ShiftReportTest extends TestCase
         app(\App\Services\TenantContext::class)->setTenant($tenant);
         (new \App\Services\RbacSeeder())->seedForTenant($tenant);
         app(\App\Services\TenantContext::class)->setTenant($tenant);
-        
+
         $branch = Branch::create([
             'tenant_id' => $tenant->id,
             'name' => 'Test Branch',
             'branch_code' => 'TEST01',
         ]);
-        
+
         $manager = User::factory()->create(['tenant_id' => $tenant->id]);
         $manager->assignRole(Role::where('name', 'Branch Manager')->first());
         $manager->branches()->attach($branch);
@@ -78,7 +78,7 @@ class ShiftReportTest extends TestCase
             'name' => 'Test Branch',
             'branch_code' => 'TEST01',
         ]);
-        
+
         $cashier = User::factory()->create(['tenant_id' => $tenant->id]);
         $cashier->assignRole(Role::where('name', 'Cashier')->first());
         $cashier->branches()->attach($branch);
@@ -115,7 +115,7 @@ class ShiftReportTest extends TestCase
         app(\App\Services\TenantContext::class)->setTenant($tenantA);
         (new \App\Services\RbacSeeder())->seedForTenant($tenantA);
         app(\App\Services\TenantContext::class)->setTenant($tenantA);
-        
+
         $tenantB = Tenant::factory()->create();
         app(\App\Services\TenantContext::class)->setTenant($tenantB);
         (new \App\Services\RbacSeeder())->seedForTenant($tenantB);
@@ -131,7 +131,7 @@ class ShiftReportTest extends TestCase
             'name' => 'Test Branch B',
             'branch_code' => 'TEST02',
         ]);
-        
+
         $userB = User::factory()->create(['tenant_id' => $tenantB->id]);
 
         $shiftB = Shift::create([
@@ -163,7 +163,7 @@ class ShiftReportTest extends TestCase
             'name' => 'Test Branch',
             'branch_code' => 'TEST01',
         ]);
-        
+
         $manager = User::factory()->create(['tenant_id' => $tenant->id]);
         $manager->assignRole(Role::where('name', 'Branch Manager')->first());
         $manager->branches()->attach($branch);
@@ -229,7 +229,7 @@ class ShiftReportTest extends TestCase
             'name' => 'Test Branch',
             'branch_code' => 'TEST01',
         ]);
-        
+
         $manager = User::factory()->create(['tenant_id' => $tenant->id]);
         $manager->assignRole(Role::where('name', 'Branch Manager')->first());
         $manager->branches()->attach($branch);
@@ -251,5 +251,104 @@ class ShiftReportTest extends TestCase
             ->get(route('shifts.z-report', $shift->id));
 
         $this->assertEquals($originalUpdatedAt->toDateTimeString(), $shift->fresh()->updated_at->toDateTimeString());
+    }
+
+    public function test_report_aggregates_voids_and_refunds_separately()
+    {
+        $tenant = Tenant::factory()->create();
+        app(\App\Services\TenantContext::class)->setTenant($tenant);
+        (new \App\Services\RbacSeeder())->seedForTenant($tenant);
+        app(\App\Services\TenantContext::class)->setTenant($tenant);
+
+        $branch = Branch::create([
+            'tenant_id' => $tenant->id,
+            'name' => 'Test Branch',
+            'branch_code' => 'TEST01',
+        ]);
+
+        $manager = User::factory()->create(['tenant_id' => $tenant->id]);
+        $manager->assignRole(Role::where('name', 'Branch Manager')->first());
+        $manager->branches()->attach($branch);
+
+        $shift = Shift::create([
+            'tenant_id' => $tenant->id,
+            'branch_id' => $branch->id,
+            'cashier_id' => $manager->id,
+            'opened_by' => $manager->id,
+            'status' => Shift::STATUS_CLOSED,
+            'opened_at' => now(),
+            'opening_cash_amount' => 1000.00,
+        ]);
+
+        $pm = PaymentMethod::create([
+            'tenant_id' => $tenant->id,
+            'code' => 'CASH',
+            'name' => 'Cash',
+            'type' => 'cash',
+            'status' => 'active',
+        ]);
+
+        // Sale 1: Voided
+        $sale1 = Sale::factory()->create([
+            'tenant_id' => $tenant->id,
+            'branch_id' => $branch->id,
+            'user_id' => $manager->id,
+            'total' => 300.00,
+            'status' => 'voided',
+        ]);
+        SalePayment::create([
+            'tenant_id' => $tenant->id,
+            'branch_id' => $branch->id,
+            'shift_id' => $shift->id,
+            'sale_id' => $sale1->id,
+            'payment_method_id' => $pm->id,
+            'payment_type' => 'cash',
+            'amount' => 300.00,
+            'status' => 'recorded',
+        ]);
+
+        // Sale 2: Paid, with partial refund
+        $sale2 = Sale::factory()->create([
+            'tenant_id' => $tenant->id,
+            'branch_id' => $branch->id,
+            'user_id' => $manager->id,
+            'total' => 500.00,
+            'status' => 'paid',
+        ]);
+        SalePayment::create([
+            'tenant_id' => $tenant->id,
+            'branch_id' => $branch->id,
+            'shift_id' => $shift->id,
+            'sale_id' => $sale2->id,
+            'payment_method_id' => $pm->id,
+            'payment_type' => 'cash',
+            'amount' => 500.00,
+            'status' => 'recorded',
+        ]);
+
+        // Refund linked to Sale 2
+        \App\Models\SaleRefund::create([
+            'tenant_id' => $tenant->id,
+            'branch_id' => $branch->id,
+            'sale_id' => $sale2->id,
+            'shift_id' => $shift->id,
+            'reason_code' => 'RETURN',
+            'refund_total' => 150.00,
+            'refunded_by' => $manager->id,
+        ]);
+
+        $response = $this->actingAs($manager)
+            ->withHeaders(['X-Tenant-ID' => $tenant->id, 'X-Branch-ID' => $branch->id])
+            ->get(route('shifts.z-report', $shift->id));
+
+        $response->assertStatus(200);
+        $response->assertInertia(fn ($page) => $page
+            ->where('report.sales.gross_sales', '800.0000')
+            ->where('report.sales.less_voids', '300.0000')
+            ->where('report.sales.less_refunds', '150.0000')
+            ->where('report.sales.net_total', '350.0000')
+            ->where('report.sales.void_count', 1)
+            ->where('report.sales.refund_count', 1)
+        );
     }
 }

@@ -43,6 +43,14 @@ trait HasRoles
     }
 
     /**
+     * Check if the user has a specific role.
+     */
+    public function hasRole(string $roleName): bool
+    {
+        return $this->roles()->where('name', $roleName)->exists();
+    }
+
+    /**
      * Securely assign a role to the user.
      */
     public function assignRole(Role $role): void

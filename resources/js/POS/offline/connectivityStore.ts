@@ -10,21 +10,51 @@ export interface ConnectivityState {
     lastSyncedAt: string | null;
 }
 
-export let globalState: ConnectivityState = {
-    status: typeof navigator !== 'undefined' && navigator.onLine ? 'online' : 'offline',
+const getInitialConnectivityStatus = (): ConnectivityStatus => {
+    if (typeof navigator === 'undefined') {
+        return 'checking';
+    }
+
+    return navigator.onLine ? 'checking' : 'offline';
+};
+
+export const globalState: ConnectivityState = {
+    status: getInitialConnectivityStatus(),
     isStale: false,
     lastSyncedAt: null,
 };
 
 const listeners = new Set<(state: ConnectivityState) => void>();
+let inFlightConnectivityCheck: Promise<boolean> | null = null;
+let lastConnectivityFailureAt = 0;
+const OFFLINE_RECHECK_COOLDOWN_MS = 10000;
 
 function setGlobalState(newState: Partial<ConnectivityState>) {
-    globalState = { ...globalState, ...newState };
+    Object.assign(globalState, newState);
     listeners.forEach((listener) => listener(globalState));
 }
 
+function isExpectedReachabilityFailure(error: any): boolean {
+    return (
+        error?.response?.status === 401 ||
+        error?.response?.status === 419 ||
+        error?.message === 'Network Error' ||
+        error?.code === 'ERR_NETWORK' ||
+        error?.code === 'ECONNABORTED' ||
+        (error?.request && !error?.response)
+    );
+}
+
 // Function to perform real end-to-end network ping check
-export async function checkConnectivity(currentTaxHash?: string): Promise<boolean> {
+export async function checkConnectivity(currentTaxHash?: string, options: { force?: boolean } = {}): Promise<boolean> {
+    if (inFlightConnectivityCheck) {
+        return inFlightConnectivityCheck;
+    }
+
+    if (!options.force && globalState.status === 'offline' && Date.now() - lastConnectivityFailureAt < OFFLINE_RECHECK_COOLDOWN_MS) {
+        return false;
+    }
+
     const isNavOffline = typeof navigator !== 'undefined' && !navigator.onLine;
     if (isNavOffline) {
         setGlobalState({ status: 'offline' });
@@ -32,32 +62,46 @@ export async function checkConnectivity(currentTaxHash?: string): Promise<boolea
     }
 
     setGlobalState({ status: 'checking' });
+
+    inFlightConnectivityCheck = (async () => {
     try {
         const res = await axios.get('/api/pos/bootstrap-cache', { timeout: 4000 });
         if (res.status === 200) {
-            const serverHash = res.data?.tax_configuration_version_hash || null;
-            // Check staleness of cache using the retrieved server hash
-            const stale = await catalogCache.isStale(serverHash);
-            setGlobalState({
-                status: 'online',
-                isStale: stale,
-                lastSyncedAt: res.data?.generated_at || null,
-            });
-            return true;
+             const serverHash = res.data?.tax_configuration_version_hash || null;
+             // Check staleness of cache using the retrieved server hash
+             const stale = await catalogCache.isStale(serverHash);
+             if (stale) {
+                 await catalogCache.writeBootstrapPayload(res.data);
+             }
+             setGlobalState({
+                 status: 'online',
+                 isStale: false,
+                 lastSyncedAt: res.data?.generated_at || null,
+             });
+             return true;
         } else {
             setGlobalState({ status: 'offline' });
             return false;
         }
     } catch (err) {
+        if (!isExpectedReachabilityFailure(err)) {
+            console.error('checkConnectivity failed:', err);
+        }
+        lastConnectivityFailureAt = Date.now();
         setGlobalState({ status: 'offline' });
         return false;
+    } finally {
+        inFlightConnectivityCheck = null;
     }
+    })();
+
+    return inFlightConnectivityCheck;
 }
 
 // Initialize listeners for browser-level events
 if (typeof window !== 'undefined') {
     window.addEventListener('online', () => {
-        checkConnectivity();
+        checkConnectivity(undefined, { force: true });
     });
 
     window.addEventListener('offline', () => {
@@ -65,7 +109,7 @@ if (typeof window !== 'undefined') {
     });
 
     // Check on startup
-    checkConnectivity();
+    checkConnectivity(undefined, { force: true });
 }
 
 export function useConnectivityStore() {
@@ -73,13 +117,10 @@ export function useConnectivityStore() {
 
     useEffect(() => {
         const handleChange = (newState: ConnectivityState) => {
-            setState(newState);
+            setState({ ...newState });
         };
         listeners.add(handleChange);
         
-        // Trigger check on mount
-        checkConnectivity();
-
         // Periodically verify connectivity every 30 seconds if tab is active
         const interval = setInterval(() => {
             if (typeof document !== 'undefined' && !document.hidden && globalState.status !== 'offline') {
@@ -121,7 +162,7 @@ export function useConnectivityStore() {
         isChecking: state.status === 'checking',
         isStale: state.isStale,
         lastSyncedAt: state.lastSyncedAt,
-        checkConnectivity,
+        checkConnectivity: () => checkConnectivity(undefined, { force: true }),
         triggerSync,
     };
 }

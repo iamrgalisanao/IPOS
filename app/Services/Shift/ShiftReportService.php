@@ -11,7 +11,7 @@ class ShiftReportService
 {
     /**
      * Generate a comprehensive shift summary for reporting.
-     * 
+     *
      * This service aggregates data from immutable sales, payments, and drawer events.
      * It does NOT mutate any records.
      */
@@ -30,7 +30,7 @@ class ShiftReportService
         $salesSummary = Sale::whereIn('id', $saleIds)
             ->where('tenant_id', $shift->tenant_id)
             ->select([
-                DB::raw('SUM(gross_sales_amount) as gross_sales'),
+                DB::raw('SUM(total) as gross_sales'),
                 DB::raw('SUM(vatable_sales_amount) as vatable_sales'),
                 DB::raw('SUM(vat_exempt_sales_amount) as vat_exempt_sales'),
                 DB::raw('SUM(zero_rated_sales_amount) as zero_rated_sales'),
@@ -38,9 +38,53 @@ class ShiftReportService
                 DB::raw('SUM(vat_amount) as vat_amount'),
                 DB::raw('SUM(statutory_discount_total) as statutory_discounts'),
                 DB::raw('SUM(commercial_discount_total) as commercial_discounts'),
-                DB::raw('SUM(total) as net_total'),
                 DB::raw('COUNT(id) as transaction_count'),
             ])->first();
+
+        // Aggregate Voids
+        $voidsSummary = Sale::whereIn('id', $saleIds)
+            ->where('tenant_id', $shift->tenant_id)
+            ->where('status', 'voided')
+            ->select([
+                DB::raw('SUM(total) as total_voided'),
+                DB::raw('COUNT(id) as count_voided'),
+            ])->first();
+
+        // Aggregate Refunds linked to this shift
+        $refunds = \App\Models\SaleRefund::where('shift_id', $shift->id)
+            ->where('tenant_id', $shift->tenant_id)
+            ->with(['sale.payments.paymentMethod'])
+            ->get();
+
+        $totalRefunds = 0;
+        $countRefunds = $refunds->count();
+        $cashRefundsTotal = 0;
+        $gatewayRefundsTotal = 0;
+        $manualElectronicRefundsTotal = 0;
+
+        foreach ($refunds as $ref) {
+            $totalRefunds += (float)$ref->refund_total;
+
+            $hasManualRequest = \App\Models\ManualRefundRequest::where('sale_refund_id', $ref->id)->exists();
+
+            $hasCashDrawerEvent = $shift->cashDrawerEvents()
+                ->where('event_type', 'payout')
+                ->where('description', 'like', "%Refund Cash Payout - Sale: {$ref->sale->sale_number}%")
+                ->exists();
+
+            if ($hasCashDrawerEvent) {
+                $cashRefundsTotal += (float)$ref->refund_total;
+            } elseif ($hasManualRequest) {
+                $manualElectronicRefundsTotal += (float)$ref->refund_total;
+            } else {
+                $gatewayRefundsTotal += (float)$ref->refund_total;
+            }
+        }
+
+        $grossSales = (float)($salesSummary->gross_sales ?? 0);
+        $totalVoids = (float)($voidsSummary->total_voided ?? 0);
+        $countVoids = (int)($voidsSummary->count_voided ?? 0);
+        $netSales = $grossSales - $totalVoids - $totalRefunds;
 
         // 3. Payment Method Breakdown
         $paymentBreakdown = SalePayment::where('shift_id', $shift->id)
@@ -76,9 +120,16 @@ class ShiftReportService
                 'closing_denominations' => $shift->closing_denominations,
             ],
             'sales' => [
-                'gross_sales' => $this->formatDecimal($salesSummary->gross_sales),
-                'net_total' => $this->formatDecimal($salesSummary->net_total),
+                'gross_sales' => $this->formatDecimal($grossSales),
+                'less_voids' => $this->formatDecimal($totalVoids),
+                'less_refunds' => $this->formatDecimal($totalRefunds),
+                'net_total' => $this->formatDecimal($netSales),
                 'transaction_count' => (int) $salesSummary->transaction_count,
+                'void_count' => $countVoids,
+                'refund_count' => $countRefunds,
+                'cash_refunds' => $this->formatDecimal($cashRefundsTotal),
+                'manual_electronic_refunds' => $this->formatDecimal($manualElectronicRefundsTotal),
+                'gateway_refunds' => $this->formatDecimal($gatewayRefundsTotal),
                 'tax_breakdown' => [
                     'vatable' => $this->formatDecimal($salesSummary->vatable_sales),
                     'vat_amount' => $this->formatDecimal($salesSummary->vat_amount),

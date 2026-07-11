@@ -156,13 +156,17 @@ class OfflineImportRecalculationService
         ];
 
         if ($isMatch) {
+            $newStatus = $import->status === OfflineSalesImport::STATUS_ACCEPTED_WITH_WARNING
+                ? OfflineSalesImport::STATUS_ACCEPTED_WITH_WARNING
+                : OfflineSalesImport::STATUS_SERVER_VERIFIED;
+
             $import->update([
-                'status'               => OfflineSalesImport::STATUS_SERVER_VERIFIED,
+                'status'               => $newStatus,
                 'server_recalculation' => $serverRecalculation,
             ]);
 
             return [
-                'status'               => OfflineSalesImport::STATUS_SERVER_VERIFIED,
+                'status'               => $newStatus,
                 'server_subtotal'      => $serverRecalculation['server_subtotal'],
                 'server_tax_total'     => $serverRecalculation['server_tax_total'],
                 'server_total'         => $serverRecalculation['server_total'],

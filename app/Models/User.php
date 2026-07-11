@@ -69,6 +69,7 @@ class User extends Authenticatable
         'actor_type',
         'tenant_id',
         'status',
+        'pos_pin_hash',
     ];
 
     /**
@@ -79,7 +80,35 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'pos_pin_hash',
     ];
+
+    /**
+     * Set the user POS PIN securely with checks.
+     */
+    public function setPosPin(string $pin): void
+    {
+        if (!preg_match('/^[0-9]{4,6}$/', $pin)) {
+            throw new \InvalidArgumentException('PIN must be 4 to 6 digits.');
+        }
+
+        $weakPins = ['0000', '1111', '2222', '3333', '4444', '5555', '6666', '7777', '8888', '9999', '1234', '4321', '12345', '54321', '123456', '654321'];
+        if (in_array($pin, $weakPins)) {
+            throw new \InvalidArgumentException('PIN is too weak.');
+        }
+
+        $collides = User::where('tenant_id', $this->tenant_id)
+            ->where('id', '!=', $this->id)
+            ->whereNotNull('pos_pin_hash')
+            ->get()
+            ->contains(fn($u) => \Illuminate\Support\Facades\Hash::check($pin, $u->pos_pin_hash));
+
+        if ($collides) {
+            throw new \RuntimeException('Proposed PIN collides with another user PIN in the tenant.');
+        }
+
+        $this->pos_pin_hash = \Illuminate\Support\Facades\Hash::make($pin);
+    }
 
     /**
      * Get the attributes that should be cast.

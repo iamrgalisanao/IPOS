@@ -1,5 +1,104 @@
 import React from 'react';
-import { Plus, PackageSearch, AlertCircle } from 'lucide-react';
+import { Plus, PackageSearch, AlertCircle, Ban, Clock3, TriangleAlert } from 'lucide-react';
+
+const formatQuantity = (value) => {
+    const quantity = Number(value);
+    if (!Number.isFinite(quantity)) return '0';
+    return Number.isInteger(quantity) ? String(quantity) : quantity.toFixed(2).replace(/\.?0+$/, '');
+};
+
+const getStockPresentation = (product, qtyInCart = 0) => {
+    if (!product.is_inventory_tracked) {
+        return {
+            label: null,
+            tone: 'normal',
+            disabled: false,
+            icon: null,
+            detail: null,
+        };
+    }
+
+    const currentStock = Number(product.current_stock ?? 0);
+    const availableToSell = Number(product.available_to_sell ?? currentStock);
+    const state = product.stock_state || (availableToSell > 0 ? 'normal' : 'out_of_stock');
+    const noMoreAvailable = Number.isFinite(availableToSell) && availableToSell > 0 && qtyInCart >= availableToSell;
+
+    if (state === 'expired') {
+        return {
+            label: 'Expired',
+            tone: 'blocked',
+            disabled: true,
+            icon: Ban,
+            detail: 'Blocked from sale',
+        };
+    }
+
+    if (state === 'out_of_stock' || availableToSell <= 0) {
+        return {
+            label: 'Out of Stock',
+            tone: 'blocked',
+            disabled: true,
+            icon: Ban,
+            detail: 'Unavailable',
+        };
+    }
+
+    if (noMoreAvailable) {
+        return {
+            label: `${formatQuantity(availableToSell)} Available`,
+            tone: 'blocked',
+            disabled: true,
+            icon: Ban,
+            detail: 'All available units are in cart',
+        };
+    }
+
+    if (state === 'near_expiry') {
+        return {
+            label: 'Near Expiry',
+            tone: 'warning',
+            disabled: false,
+            icon: Clock3,
+            detail: product.next_expiry_date ? `Expires ${product.next_expiry_date}` : null,
+        };
+    }
+
+    if (state === 'critical_stock') {
+        return {
+            label: `Last ${formatQuantity(availableToSell)}`,
+            tone: 'critical',
+            disabled: false,
+            icon: TriangleAlert,
+            detail: `${formatQuantity(availableToSell)} left`,
+        };
+    }
+
+    if (state === 'low_stock') {
+        return {
+            label: `Only ${formatQuantity(availableToSell)} left`,
+            tone: 'warning',
+            disabled: false,
+            icon: TriangleAlert,
+            detail: `${formatQuantity(availableToSell)} in stock`,
+        };
+    }
+
+    return {
+        label: `${formatQuantity(availableToSell)} In Stock`,
+        tone: 'healthy',
+        disabled: false,
+        icon: null,
+        detail: null,
+    };
+};
+
+const badgeClassByTone = {
+    healthy: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+    warning: 'bg-amber-500/15 text-amber-300 border-amber-500/25',
+    critical: 'bg-orange-500/15 text-orange-300 border-orange-500/25',
+    blocked: 'bg-rose-500/15 text-rose-300 border-rose-500/25',
+    normal: 'bg-slate-700/60 text-slate-300 border-slate-600/60',
+};
 
 export default function ProductGrid({ products, loading, onSelect, activeLayout, isSearchActive, cart = [], gridColsClass = "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" }) {
     if (loading && products.length === 0) {
@@ -105,11 +204,25 @@ export default function ProductGrid({ products, loading, onSelect, activeLayout,
 }
 
 function ProductCard({ product, onSelect, qtyInCart = 0, style = {} }) {
+    const stockPresentation = getStockPresentation(product, qtyInCart);
+    const StockIcon = stockPresentation.icon;
+    const productName = product.display_name || product.name || 'Product';
+
     return (
         <button
-            onClick={() => onSelect(product)}
+            onClick={() => {
+                if (!stockPresentation.disabled) {
+                    onSelect(product);
+                }
+            }}
+            disabled={stockPresentation.disabled}
             style={style}
-            className="group flex flex-col bg-slate-900/35 backdrop-blur-md border border-white/5 rounded-2xl overflow-hidden hover:border-indigo-500/50 hover:bg-slate-900/55 hover:shadow-xl hover:shadow-indigo-500/10 transition-all text-left relative active:scale-95 h-36"
+            title={stockPresentation.detail || undefined}
+            className={`group flex flex-col bg-slate-900/35 backdrop-blur-md border border-white/5 rounded-2xl overflow-hidden transition-all text-left relative h-36 ${
+                stockPresentation.disabled
+                    ? 'opacity-60 cursor-not-allowed grayscale-[0.35]'
+                    : 'hover:border-indigo-500/50 hover:bg-slate-900/55 hover:shadow-xl hover:shadow-indigo-500/10 active:scale-95'
+            }`}
         >
             {/* Quantity Badge for instant visual feedback */}
             {qtyInCart > 0 && (
@@ -118,36 +231,45 @@ function ProductCard({ product, onSelect, qtyInCart = 0, style = {} }) {
                 </div>
             )}
 
-            {/* Stock Badge */}
-            {product.is_inventory_tracked && (
-                <div className={`absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold z-10 ${
-                    product.current_stock > 0 
-                    ? 'bg-emerald-500/10 text-emerald-500' 
-                    : 'bg-rose-500/10 text-rose-500'
-                }`}>
-                    {product.current_stock > 0 ? `${product.current_stock} In Stock` : 'Out of Stock'}
+            {stockPresentation.label && (
+                <div className={`absolute top-2 right-2 inline-flex max-w-[72%] items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold leading-none z-10 ${badgeClassByTone[stockPresentation.tone] || badgeClassByTone.normal}`}>
+                    {StockIcon && <StockIcon className="h-3 w-3 shrink-0" />}
+                    <span className="truncate">{stockPresentation.label}</span>
                 </div>
             )}
 
             {/* Placeholder for Product Image */}
-            <div className="h-14 bg-slate-800/30 flex items-center justify-center group-hover:bg-slate-700/40 transition-colors shrink-0 border-b border-slate-800/40">
-                <span className="text-xl font-bold opacity-30 group-hover:opacity-50 transition-opacity">{product.display_name.charAt(0)}</span>
+            <div className={`h-14 flex items-center justify-center transition-colors shrink-0 border-b border-slate-800/40 ${
+                stockPresentation.disabled ? 'bg-slate-900/60' : 'bg-slate-800/30 group-hover:bg-slate-700/40'
+            }`}>
+                <span className="text-xl font-bold opacity-30 group-hover:opacity-50 transition-opacity">{productName.charAt(0)}</span>
             </div>
 
             <div className="p-2.5 flex-1 flex flex-col justify-between overflow-hidden">
                 <div className="min-h-0">
                     <h3 className="font-semibold text-xs text-slate-200 leading-tight group-hover:text-white transition-colors line-clamp-2">
-                        {product.display_name}
+                        {productName}
                     </h3>
+                    {stockPresentation.detail && (
+                        <p className="mt-1 truncate text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                            {stockPresentation.detail}
+                        </p>
+                    )}
                 </div>
                 
                 <div className="mt-auto flex items-center justify-between">
-                    <span className="text-indigo-400 font-bold text-xs">
+                    <span className={`font-bold text-xs ${stockPresentation.disabled ? 'text-slate-500' : 'text-indigo-400'}`}>
                         ₱{Number(product.selling_price).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </span>
-                    <div className="p-1 bg-indigo-600/10 text-indigo-400 rounded-md group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-sm">
-                        <Plus className="w-4 h-4" />
-                    </div>
+                    {stockPresentation.disabled ? (
+                        <div className="p-1 bg-slate-800/70 text-slate-500 rounded-md shadow-sm">
+                            <Ban className="w-4 h-4" />
+                        </div>
+                    ) : (
+                        <div className="p-1 bg-indigo-600/10 text-indigo-400 rounded-md group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-sm">
+                            <Plus className="w-4 h-4" />
+                        </div>
+                    )}
                 </div>
             </div>
         </button>

@@ -101,6 +101,9 @@ export default function AuthenticatedLayout({ header, children }) {
         operationsItems.push({ name: 'Terminal Sync Monitor', href: route('admin.terminal-sync-monitor.index'), icon: Monitor, active: route().current('admin.terminal-sync-monitor.*') });
         operationsItems.push({ name: 'Prior Period Adjustments', href: route('admin.prior-period-adjustments.index'), icon: RefreshCw, active: route().current('admin.prior-period-adjustments.*') });
     }
+    if (permissions.includes('manage_users')) {
+        operationsItems.push({ name: 'User Management', href: route('admin.users.index'), icon: Users, active: route().current('admin.users.*') });
+    }
 
     // Dynamically filter Catalog & Stock Items
     const catalogAndStockItems = [];

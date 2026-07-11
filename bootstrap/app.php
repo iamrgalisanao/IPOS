@@ -37,6 +37,9 @@ return Application::configure(basePath: dirname(__DIR__))
             'support.assisted' => \App\Http\Middleware\IdentifySupportAssistedContext::class,
             'permission' => \App\Http\Middleware\CheckPermission::class,
             'subscription.feature' => \App\Http\Middleware\EnforceSubscriptionGate::class,
+            'idempotent' => \App\Http\Middleware\VerifyIdempotency::class,
+            'terminal' => \App\Http\Middleware\IdentifyTerminalContext::class,
+            'timecard.clocked_in' => \App\Http\Middleware\EnforceClockedIn::class,
         ]);
 
         $middleware->prependToPriorityList(

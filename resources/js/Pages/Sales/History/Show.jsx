@@ -1,15 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link } from '@inertiajs/react';
-import { 
-    ArrowLeft, 
-    Clock, 
-    User as UserIcon, 
-    Store, 
-    Receipt, 
-    CreditCard, 
-    CheckCircle2, 
-    XCircle, 
+import VoidRefundModal from './Components/VoidRefundModal';
+import { useConnectivityStore } from '@/POS/offline/connectivityStore';
+import {
+    Clock,
+    User as UserIcon,
+    Store,
+    Receipt,
+    CreditCard,
+    CheckCircle2,
+    XCircle,
     History,
     Package,
     ShieldCheck,
@@ -36,6 +37,15 @@ const StatusBadge = ({ status }) => {
 };
 
 export default function Show({ auth, sale }) {
+    const { isOffline } = useConnectivityStore();
+    const [modalOpen, setModalOpen] = useState(false);
+    const [modalMode, setModalMode] = useState('void'); // 'void' or 'refund'
+
+    const handleOpenModal = (mode) => {
+        setModalMode(mode);
+        setModalOpen(true);
+    };
+
     const formatCurrency = (val) => {
         return new Intl.NumberFormat('en-PH', {
             style: 'currency',
@@ -44,9 +54,9 @@ export default function Show({ auth, sale }) {
     };
 
     const formatDate = (dateStr) => {
-        if (!dateStr) return 'N/A';
-        return new Date(dateStr).toLocaleString('en-PH', {
-            month: 'long',
+        const date = new Date(dateStr);
+        return date.toLocaleString('en-US', {
+            month: 'short',
             day: 'numeric',
             year: 'numeric',
             hour: '2-digit',
@@ -75,6 +85,24 @@ export default function Show({ auth, sale }) {
                     </div>
                     <div className="flex items-center gap-3">
                         <StatusBadge status={sale.status} />
+                        {sale.status === 'paid' && (
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => handleOpenModal('void')}
+                                    disabled={isOffline}
+                                    className="px-4 py-2 text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 hover:bg-rose-100 disabled:opacity-50 disabled:bg-slate-100 disabled:border-slate-200 disabled:text-slate-400 rounded-xl transition-all"
+                                >
+                                    Void Sale
+                                </button>
+                                <button
+                                    onClick={() => handleOpenModal('refund')}
+                                    disabled={isOffline}
+                                    className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:bg-slate-300 disabled:text-slate-400 rounded-xl transition-all"
+                                >
+                                    Refund Items
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             }
@@ -288,6 +316,12 @@ export default function Show({ auth, sale }) {
                     </div>
                 </div>
             </div>
+            <VoidRefundModal
+                isOpen={modalOpen}
+                onClose={() => setModalOpen(false)}
+                sale={sale}
+                mode={modalMode}
+            />
         </AuthenticatedLayout>
     );
 }

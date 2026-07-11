@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
-import { ShoppingCart, Trash2, Plus, Minus, CreditCard, ChevronRight, Calculator, X, Loader2, AlertTriangle, RefreshCw, WifiOff } from 'lucide-react';
+import { ShoppingCart, Trash2, Plus, Minus, CreditCard, ChevronRight, Calculator, X, Loader2, AlertTriangle, RefreshCw, WifiOff, ShieldCheck } from 'lucide-react';
 import StatusUncertainPanel from './StatusUncertainPanel';
 
-export default function Cart({ items, onUpdateQuantity, onClear, onCheckout, isSubmitting, checkoutError, submissionFailed, onClose, checkoutState = 'draft', isCheckingStatus = false, onCheckStatus, onRetryCheckout, isOffline = false, isStale = false, offlineCaptureAllowed = false, offlineQueueSummary = null, onRetryOfflineSync }) {
+export default function Cart({ items, onUpdateQuantity, onClear, onCheckout, isSubmitting, checkoutError, submissionFailed, onClose, checkoutState = 'draft', isCheckingStatus = false, onCheckStatus, onRetryCheckout, isOffline = false, isStale = false, offlineCaptureAllowed = false, offlineQueueSummary = null, onRetryOfflineSync, onOpenSpecialDiscount, appliedStatutoryDiscount }) {
     const totals = useMemo(() => {
         const subtotal = items.reduce((sum, item) => sum + (Number(item.selling_price || item.unit_price || 0) * item.quantity), 0);
         // VAT included in price for now
@@ -11,30 +11,105 @@ export default function Cart({ items, onUpdateQuantity, onClear, onCheckout, isS
         return { subtotal, tax, total };
     }, [items]);
 
+    // Compute adjusted totals when a statutory discount is applied
+    const adjustedTotals = useMemo(() => {
+        if (!appliedStatutoryDiscount?.result?.is_valid) {
+            return { discountAmount: 0, netPayable: totals.total };
+        }
+        const result = appliedStatutoryDiscount.result;
+        return {
+            discountAmount: Number(result.discount_amount || 0),
+            vatExemptAmount: Number(result.vat_exempt_amount || 0),
+            vatRemoved: Number(result.vat_amount_removed || 0),
+            netPayable: Number(result.net_payable || totals.total),
+        };
+    }, [appliedStatutoryDiscount, totals.total]);
+
     const queueSummary = offlineQueueSummary || {
-        queued: 0,
+        pending: 0,
         syncing: 0,
-        accepted: 0,
-        duplicate: 0,
-        rejected: 0,
+        synced: 0,
         conflict: 0,
+        accepted_with_warning: 0,
         failed: 0,
         cancelled: 0,
         total: 0,
         lastSyncAttemptAt: null,
         lastSuccessfulSyncAt: null,
     };
+    const queueCounts = {
+        pending: Number(queueSummary.pending ?? queueSummary.queued ?? 0),
+        syncing: Number(queueSummary.syncing ?? 0),
+        synced: Number(queueSummary.synced ?? queueSummary.accepted ?? 0),
+        failed: Number(queueSummary.failed ?? 0),
+        conflict: Number(queueSummary.conflict ?? 0),
+        acceptedWithWarning: Number(queueSummary.accepted_with_warning ?? 0),
+        cancelled: Number(queueSummary.cancelled ?? 0),
+    };
+    const reviewCount = queueCounts.conflict + queueCounts.acceptedWithWarning;
+    const actionableSyncCount = queueCounts.pending + queueCounts.syncing + queueCounts.failed + reviewCount;
+    const activeItems = items.filter((item) => Number(item.quantity || 0) > 0);
+    const activeItemCount = activeItems.length;
+    const isActivelySubmitting = isSubmitting && activeItemCount > 0;
 
-    const checkoutDisabled = items.length === 0
-        || isSubmitting
+    const hasBlockingStockIssue = items.some((item) => {
+        if (!item?.is_inventory_tracked) return false;
+
+        const currentStock = Number(item.current_stock ?? 0);
+        const availableToSell = Number(item.available_to_sell ?? currentStock);
+
+        return item.stock_state === 'expired'
+            || item.stock_state === 'out_of_stock'
+            || item.stock_available === false
+            || availableToSell <= 0
+            || Number(item.quantity || 0) > availableToSell;
+    });
+
+    const checkoutDisabled = activeItemCount === 0
+        || isActivelySubmitting
         || isCheckingStatus
         || checkoutState === 'checking'
+        || hasBlockingStockIssue
         || (isOffline ? !offlineCaptureAllowed : isStale);
 
-    const shouldShowSyncPanel = queueSummary.total > 0;
+    const shouldShowSyncPanel = actionableSyncCount > 0;
+    const formatQuantity = (value) => {
+        const quantity = Number(value);
+        if (!Number.isFinite(quantity)) return '0';
+        return Number.isInteger(quantity) ? String(quantity) : quantity.toFixed(2).replace(/\.?0+$/, '');
+    };
+
+    const getItemStockWarning = (item) => {
+        if (!item?.is_inventory_tracked) return null;
+
+        const currentStock = Number(item.current_stock ?? 0);
+        const availableToSell = Number(item.available_to_sell ?? currentStock);
+
+        if (item.stock_state === 'expired') {
+            return 'Expired item. Remove before completing sale.';
+        }
+
+        if (item.stock_state === 'out_of_stock' || availableToSell <= 0 || item.stock_available === false) {
+            return 'Out of stock. Remove before completing sale.';
+        }
+
+        if (item.quantity > availableToSell) {
+            return `Only ${formatQuantity(availableToSell)} available to sell.`;
+        }
+
+        if (item.stock_state === 'near_expiry') {
+            return item.next_expiry_date ? `Near expiry: ${item.next_expiry_date}` : 'Near expiry.';
+        }
+
+        if (item.stock_state === 'critical_stock') {
+            return `Last ${formatQuantity(availableToSell)} available.`;
+        }
+
+        return null;
+    };
 
     return (
-        <div className="flex flex-col h-full bg-slate-900 shadow-2xl relative">
+        <div className="flex min-h-0 h-full flex-col overflow-hidden bg-slate-900 shadow-2xl relative">
             {/* Cart Header */}
             <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900 sticky top-0 z-10 shrink-0">
                 <div className="flex items-center gap-2">
@@ -43,7 +118,7 @@ export default function Cart({ items, onUpdateQuantity, onClear, onCheckout, isS
                 </div>
                 <div className="flex items-center gap-2">
                     <span className="bg-slate-800 text-slate-400 px-2.5 py-1 rounded-md text-xs font-medium tracking-wide">
-                        {items.length} Items &middot; <span className="text-indigo-400 font-bold font-mono">₱{totals.total.toFixed(2)}</span>
+                        {activeItemCount} Items &middot; <span className="text-indigo-400 font-bold font-mono">₱{totals.total.toFixed(2)}</span>
                     </span>
                     {onClose && (
                         <button 
@@ -56,77 +131,70 @@ export default function Cart({ items, onUpdateQuantity, onClear, onCheckout, isS
                 </div>
             </div>
 
-            <StatusUncertainPanel
-                mode={checkoutState}
-                isCheckingStatus={isCheckingStatus}
-                onCheckStatus={onCheckStatus}
-                onRetry={onRetryCheckout}
-            />
+            <div className="min-h-0 flex-1 overflow-y-auto">
+                <StatusUncertainPanel
+                    mode={checkoutState}
+                    isCheckingStatus={isCheckingStatus}
+                    onCheckStatus={onCheckStatus}
+                    onRetry={onRetryCheckout}
+                />
 
-            {shouldShowSyncPanel && (
-                <div className="mx-4 mt-4 rounded-2xl border border-slate-700/70 bg-slate-950/60 p-4 shadow-xl">
+                {shouldShowSyncPanel && (
+                <div className="mx-4 mt-4 rounded-xl border border-slate-700/70 bg-slate-950/60 p-3 shadow-xl">
                     <div className="flex items-center justify-between gap-3">
-                        <div>
+                        <div className="min-w-0">
                             <h3 className="text-sm font-bold text-slate-100">Offline Sync Status</h3>
-                            <p className="mt-1 text-[11px] text-slate-400">Cashier-visible local queue and synchronization state for this terminal.</p>
+                            <p className="mt-1 truncate text-[11px] text-slate-400">Local queue and synchronization state.</p>
                         </div>
                         <button
                             type="button"
                             onClick={onRetryOfflineSync}
-                            disabled={!onRetryOfflineSync || isOffline || (queueSummary.queued + queueSummary.failed === 0)}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-600 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-200 transition hover:border-indigo-400 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={!onRetryOfflineSync || isOffline || (queueCounts.pending + queueCounts.failed === 0)}
+                            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-600 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-200 transition hover:border-indigo-400 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             <RefreshCw className="h-3.5 w-3.5" />
                             Retry Sync
                         </button>
                     </div>
 
-                    <div className="mt-4 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                    <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
                         {[
-                            ['Queued', queueSummary.queued],
-                            ['Syncing', queueSummary.syncing],
-                            ['Accepted', queueSummary.accepted],
-                            ['Duplicate', queueSummary.duplicate],
-                            ['Rejected', queueSummary.rejected],
-                            ['Conflict', queueSummary.conflict],
-                            ['Failed', queueSummary.failed],
-                            ['Cancelled', queueSummary.cancelled],
+                            ['Pending', queueCounts.pending],
+                            ['Syncing', queueCounts.syncing],
+                            ['Failed', queueCounts.failed],
+                            ['Review', reviewCount],
                         ].map(([label, value]) => (
-                            <div key={label} className="rounded-xl border border-slate-800 bg-slate-900/80 px-3 py-2">
-                                <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{label}</div>
-                                <div className="mt-1 text-lg font-black text-slate-100">{value}</div>
+                            <div key={label} className="rounded-lg border border-slate-800 bg-slate-900/80 px-2 py-2">
+                                <div className="text-[9px] font-semibold uppercase tracking-wider text-slate-500">{label}</div>
+                                <div className="mt-1 text-base font-black text-slate-100">{value}</div>
                             </div>
                         ))}
                     </div>
 
-                    <div className="mt-4 space-y-2 text-[11px] text-slate-400">
-                        <div>
-                            Last sync attempt: {queueSummary.lastSyncAttemptAt ? new Date(queueSummary.lastSyncAttemptAt).toLocaleString() : 'No sync attempt yet'}
-                        </div>
-                        <div>
-                            Last successful sync: {queueSummary.lastSuccessfulSyncAt ? new Date(queueSummary.lastSuccessfulSyncAt).toLocaleString() : 'No successful sync yet'}
-                        </div>
-                        {queueSummary.queued > 0 && (
+                    <div className="mt-3 space-y-2 text-[11px] text-slate-400">
+                        <div>Last attempt: {queueSummary.lastSyncAttemptAt ? new Date(queueSummary.lastSyncAttemptAt).toLocaleString() : 'No sync attempt yet'}</div>
+                        <div>Last success: {queueSummary.lastSuccessfulSyncAt ? new Date(queueSummary.lastSuccessfulSyncAt).toLocaleString() : 'No successful sync yet'}</div>
+                        {queueCounts.pending > 0 && (
                             <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-amber-100">
                                 Pending server synchronization and reconciliation. This is not final ledger posting.
                             </div>
                         )}
-                        {queueSummary.failed > 0 && (
+                        {queueCounts.failed > 0 && (
                             <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-rose-100">
                                 Sync failed. Transactions remain safely queued on this terminal. Reconnect and retry synchronization.
                             </div>
                         )}
-                        {(queueSummary.conflict > 0 || queueSummary.rejected > 0) && (
+                        {reviewCount > 0 && (
                             <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-amber-100">
                                 Some offline transactions require admin review before posting.
                             </div>
                         )}
                     </div>
                 </div>
-            )}
+                )}
 
-            {/* Error Message */}
-            {checkoutError && (
+                {/* Error Message */}
+                {checkoutError && (
                 <div className={`mx-4 mt-4 p-3 border rounded-xl text-xs flex flex-col gap-1 animate-in fade-in slide-in-from-top-2 shadow-lg transition-all duration-300 ${
                     submissionFailed 
                         ? 'bg-rose-600 border-rose-500 text-white' 
@@ -145,18 +213,22 @@ export default function Cart({ items, onUpdateQuantity, onClear, onCheckout, isS
                         </div>
                     )}
                 </div>
-            )}
+                )}
 
-            {/* Cart Items List */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                {items.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-slate-600">
+                {/* Cart Items List */}
+                <div className="p-4 space-y-3">
+                    {activeItemCount === 0 ? (
+                    <div className="flex min-h-48 flex-col items-center justify-center text-slate-600">
                         <Calculator className="w-12 h-12 mb-2 opacity-10" />
                         <p>Cart is currently empty</p>
                     </div>
                 ) : (
                     items.map((item, index) => {
                         const itemId = item.id || item.product_id;
+                        const stockWarning = getItemStockWarning(item);
+                        const canIncrease = !isActivelySubmitting
+                            && (!item.is_inventory_tracked
+                                || Number(item.available_to_sell ?? item.current_stock ?? 0) > Number(item.quantity || 0));
                         return (
                         <div key={itemId || `cart-item-${index}`} className="flex gap-3 bg-slate-800/50 p-3 rounded-xl border border-slate-700/50 group">
                             <div className="flex-1">
@@ -167,12 +239,17 @@ export default function Cart({ items, onUpdateQuantity, onClear, onCheckout, isS
                                         {item.sku}
                                     </span>
                                 </div>
+                                {stockWarning && (
+                                    <div className="mt-2 inline-flex rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold text-amber-200">
+                                        {stockWarning}
+                                    </div>
+                                )}
                             </div>
                             
                             <div className="flex items-center gap-1.5 bg-slate-900/50 rounded-xl p-1 border border-slate-700/50 shrink-0">
                                 <button 
                                     onClick={() => onUpdateQuantity(itemId, -1)}
-                                    disabled={isSubmitting}
+                                    disabled={isActivelySubmitting}
                                     className="w-9 h-9 flex items-center justify-center bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-all active:scale-90 disabled:opacity-50 disabled:cursor-not-allowed shadow-inner"
                                     type="button"
                                 >
@@ -181,7 +258,7 @@ export default function Cart({ items, onUpdateQuantity, onClear, onCheckout, isS
                                 <span className="text-sm font-black min-w-[1.75rem] text-center text-slate-200">{item.quantity}</span>
                                 <button 
                                     onClick={() => onUpdateQuantity(itemId, 1)}
-                                    disabled={isSubmitting}
+                                    disabled={!canIncrease}
                                     className="w-9 h-9 flex items-center justify-center bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-all active:scale-90 disabled:opacity-50 disabled:cursor-not-allowed shadow-inner"
                                     type="button"
                                 >
@@ -193,42 +270,49 @@ export default function Cart({ items, onUpdateQuantity, onClear, onCheckout, isS
                                 <p className="text-sm font-bold text-indigo-400">
                                     ₱{(Number(item.selling_price || item.unit_price) * item.quantity).toFixed(2)}
                                 </p>
+                                <button
+                                    onClick={() => onUpdateQuantity(itemId, -Number(item.quantity || 0))}
+                                    disabled={isActivelySubmitting}
+                                    className="mt-2 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-rose-500/20 bg-rose-500/10 text-rose-300 transition-all hover:border-rose-400/40 hover:bg-rose-500/20 hover:text-rose-100 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+                                    type="button"
+                                    title={`Remove ${item.name || item.display_name || 'item'}`}
+                                    aria-label={`Remove ${item.name || item.display_name || 'item'} from cart`}
+                                >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                </button>
                             </div>
                         </div>
                         );
                     })
                 )}
+                </div>
             </div>
 
             {/* Cart Footer / Totals */}
-            <div className="p-3 border-t border-slate-800 bg-slate-900/80 backdrop-blur-md space-y-3 shrink-0">
-                <div className="space-y-1.5 px-1">
-                    <div className="flex justify-between text-sm">
-                        <span className="text-slate-500">Subtotal</span>
-                        <span className="text-slate-300 font-mono">₱{totals.subtotal.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                        <span className="text-slate-500">VAT (12%)</span>
-                        <span className="text-slate-300 font-mono italic text-xs">Included</span>
-                    </div>
-                    <div className="flex justify-between items-center pt-2 mt-1 border-t border-slate-800/50">
-                        <span className="text-base font-bold text-white">Total</span>
-                        <span className="text-xl font-black text-white font-mono tracking-tight">
-                            ₱{totals.total.toFixed(2)}
-                        </span>
-                    </div>
-                </div>
-
-                {isOffline && offlineCaptureAllowed && (
-                    <div className="mx-1 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
-                        Offline capture is enabled. Transactions will be queued on this terminal and synchronized when connectivity returns.
-                    </div>
+            <div className="shrink-0 border-t border-slate-800 bg-slate-900/95 p-3 space-y-3 shadow-[0_-10px_30px_-18px_rgba(0,0,0,0.9)]">
+                {/* Special Discount Trigger */}
+                {onOpenSpecialDiscount && (
+                    <button
+                        onClick={onOpenSpecialDiscount}
+                        disabled={activeItemCount === 0 || isActivelySubmitting}
+                        className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                            appliedStatutoryDiscount
+                                ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
+                                : 'border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20'
+                        }`}
+                    >
+                        <ShieldCheck className="w-4 h-4 shrink-0" />
+                        {appliedStatutoryDiscount ? (
+                            <span>{appliedStatutoryDiscount.discountType?.name || 'Statutory Discount Applied'}</span>
+                        ) : (
+                            <span>Apply Special Discount</span>
+                        )}
+                    </button>
                 )}
-
                 <div className="flex gap-2">
                     <button
                         onClick={onClear}
-                        disabled={items.length === 0 || isSubmitting}
+                        disabled={activeItemCount === 0 || isActivelySubmitting}
                         className="flex-1 flex items-center justify-center gap-1.5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                     >
                         <Trash2 className="w-4 h-4 shrink-0" />
@@ -248,10 +332,15 @@ export default function Cart({ items, onUpdateQuantity, onClear, onCheckout, isS
                                     : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/20'
                         }`}
                     >
-                        {isSubmitting ? (
+                        {isActivelySubmitting ? (
                             <>
                                 <Loader2 className="w-4 h-4 animate-spin" />
-                                <span>Completing Sale...</span>
+                                <span>{isOffline ? 'Capturing Offline...' : 'Completing Sale...'}</span>
+                            </>
+                        ) : hasBlockingStockIssue ? (
+                            <>
+                                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+                                <span>Fix Stock Issue</span>
                             </>
                         ) : isOffline && !offlineCaptureAllowed ? (
                             <>
@@ -261,7 +350,8 @@ export default function Cart({ items, onUpdateQuantity, onClear, onCheckout, isS
                         ) : isOffline && offlineCaptureAllowed ? (
                             <>
                                 <WifiOff className="w-4 h-4 shrink-0 text-amber-300" />
-                                <span>Capture Offline</span>
+                                <span>Ready to Complete</span>
+                                <ChevronRight className="w-4 h-4 shrink-0" />
                             </>
                         ) : isStale ? (
                             <>
@@ -277,6 +367,41 @@ export default function Cart({ items, onUpdateQuantity, onClear, onCheckout, isS
                         )}
                     </button>
                 </div>
+
+                <div className="space-y-1.5 px-1">
+                    <div className="flex justify-between text-sm">
+                        <span className="text-slate-500">Subtotal</span>
+                        <span className="text-slate-300 font-mono">₱{totals.subtotal.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                        <span className="text-slate-500">VAT (12%)</span>
+                        <span className="text-slate-300 font-mono italic text-xs">Included</span>
+                    </div>
+                    {appliedStatutoryDiscount?.result?.is_valid && (
+                        <>
+                            <div className="flex justify-between text-sm">
+                                <span className="text-amber-400">Less: VAT Exempt</span>
+                                <span className="text-amber-400 font-mono">-₱{adjustedTotals.vatRemoved.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                                <span className="text-emerald-400">Less: Statutory Discount</span>
+                                <span className="text-emerald-400 font-mono">-₱{adjustedTotals.discountAmount.toFixed(2)}</span>
+                            </div>
+                        </>
+                    )}
+                    <div className="flex justify-between items-center pt-2 mt-1 border-t border-slate-800/50">
+                        <span className="text-base font-bold text-white">Total</span>
+                        <span className="text-xl font-black text-white font-mono tracking-tight">
+                            ₱{adjustedTotals.netPayable.toFixed(2)}
+                        </span>
+                    </div>
+                </div>
+
+                {isOffline && offlineCaptureAllowed && (
+                    <div className="mx-1 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+                        Offline capture is enabled. Transactions will be queued on this terminal and synchronized when connectivity returns.
+                    </div>
+                )}
             </div>
         </div>
     );

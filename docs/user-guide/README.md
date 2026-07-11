@@ -23,6 +23,9 @@ Welcome to the **IPOS User Guide**. This documentation provides store staff, bra
 * **[Terminal Sync Diagnostics & Reliability](file:///Users/teamsolo/Documents/Dev/IPOS/docs/user-guide/04-module-guides/terminal-sync-monitor.md)**: Monitoring POS terminal synchronization payload diagnostics, sequence verification, and sync status checks.
 * **[Cash Drawer Audit & Shift Reconciliation](file:///Users/teamsolo/Documents/Dev/IPOS/docs/user-guide/04-module-guides/cash-drawer-audit-shift-reconciliation.md)**: Open/close cashier shifts, record surprise spot audits, monitor warning limits, verify high-value drops, and approve bank deposits.
 
+### 4A. UAT and Validation References
+* **[POS Terminal Offline Checkout and Sync UAT](file:///Users/teamsolo/Documents/Dev/IPOS/docs/validation/pos-terminal-offline-uat-2026-07-11.md)**: Cashier and admin acceptance checklist for offline checkout, reconnect, sync queue, and service-worker shell rollover.
+
 ### 5. [Common Errors and Troubleshooting](file:///Users/teamsolo/Documents/Dev/IPOS/docs/user-guide/05-common-errors-and-troubleshooting.md)
 * Explanations and actions for common error codes, QBO mapping issues, tolerance mismatches, and offline warning indicators.
 

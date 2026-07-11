@@ -23,6 +23,7 @@ class OfflineSalesImport extends Model
     const STATUS_CONFLICT        = 'conflict';
     const STATUS_HOLD            = 'hold';
     const STATUS_OVERRIDE_APPROVED = 'override_approved';
+    const STATUS_ACCEPTED_WITH_WARNING = 'accepted_with_warning';
 
     protected $fillable = [
         'tenant_id',

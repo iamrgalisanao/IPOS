@@ -54,12 +54,12 @@ Route::middleware(['tenant', 'branch'])->get('/branch-test', function () {
 
 // Epic 28 Phase 2 — Offline Sync Stub (Story 28.6)
 // Returns 503 until reconciliation engine is implemented (Story 28.7+).
-Route::middleware(['auth:sanctum', 'tenant', 'branch', 'permission:create_sale', 'subscription.feature:sales.pos'])
+Route::middleware(['auth:sanctum', 'tenant', 'branch', 'terminal', 'permission:create_sale', 'subscription.feature:sales.pos'])
     ->post('/pos/offline-sync', [\App\Http\Controllers\POS\OfflineSyncController::class, 'sync'])
     ->name('pos.offline-sync');
 
 // Epic 32 — POS Terminal Sync Diagnostics & Reliability
-Route::middleware(['auth:sanctum', 'tenant', 'branch', 'permission:create_sale', 'subscription.feature:sales.pos', 'throttle:60,1'])
+Route::middleware(['auth:sanctum', 'tenant', 'branch', 'terminal', 'permission:create_sale', 'subscription.feature:sales.pos', 'throttle:60,1'])
     ->prefix('pos')
     ->name('pos.')
     ->group(function () {
@@ -77,6 +77,14 @@ Route::middleware(['auth:sanctum', 'tenant', 'branch', 'permission:create_sale',
             ->name('shifts.spot-audits');
         Route::post('/shifts/{shift}/drawer-events', [\App\Http\Controllers\POS\POSDrawerController::class, 'recordEvent'])
             ->name('shifts.drawer-events');
+
+        // Epic 42 — Statutory Discount Engine
+        Route::get('/discounts/types', [\App\Http\Controllers\Api\POS\StatutoryDiscountController::class, 'types'])
+            ->name('discounts.types');
+        Route::post('/discounts/calculate', [\App\Http\Controllers\Api\POS\StatutoryDiscountController::class, 'calculate'])
+            ->name('discounts.calculate');
+        Route::post('/manager/authorize', [\App\Http\Controllers\POS\ManagerApprovalController::class, 'authorize'])
+            ->name('manager.authorize');
     });
 
 // Epic 30 — System Admin Operational Dashboard (Slice B)

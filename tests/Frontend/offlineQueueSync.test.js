@@ -42,9 +42,41 @@ class MockIDBObjectStore {
         return req;
     }
 
+    delete(key) {
+        this.dataMap.delete(key);
+        const req = new MockIDBRequest();
+        queueMicrotask(() => req.onsuccess && req.onsuccess({ target: req }));
+        return req;
+    }
+
     getAll() {
         const req = new MockIDBRequest(Array.from(this.dataMap.values()));
         queueMicrotask(() => req.onsuccess && req.onsuccess({ target: req }));
+        return req;
+    }
+
+    openCursor() {
+        const req = new MockIDBRequest();
+        const values = Array.from(this.dataMap.values());
+        let index = 0;
+
+        const dispatch = () => {
+            if (index >= values.length) {
+                req.result = null;
+            } else {
+                req.result = {
+                    value: values[index],
+                    continue() {
+                        index += 1;
+                        queueMicrotask(dispatch);
+                    },
+                };
+            }
+
+            req.onsuccess && req.onsuccess({ target: req });
+        };
+
+        queueMicrotask(dispatch);
         return req;
     }
 }
@@ -123,6 +155,8 @@ global.window = {
     removeEventListener() {},
 };
 
+axios.get = async () => ({ status: 200, data: {} });
+
 const { catalogCache } = await import('../../resources/js/POS/offline/catalogCache.ts');
 const { offlineSalesQueue } = await import('../../resources/js/POS/offline/offlineSalesQueue.ts');
 const { offlineSyncManager } = await import('../../resources/js/POS/offline/offlineSyncManager.ts');
@@ -183,7 +217,7 @@ test('Story 28.11 offline queue and sync hardening', async (t) => {
             initialNextValue: 1,
         });
 
-        assert.match(envelope.offline_sequence, /^INV-T01-\d{8}$/);
+        assert.match(envelope.offline_sequence, /^INV-T01-\d{6}$/);
         assert.ok(envelope.payload_hash);
         assert.ok(envelope.row_hash);
         assert.throws(() => {
@@ -216,7 +250,7 @@ test('Story 28.11 offline queue and sync hardening', async (t) => {
         assert.strictEqual(await offlineSalesQueue.verifyHashChain(), false);
     });
 
-    await t.test('offline capture is blocked when prefix is missing or registration cache is stale', async () => {
+    await t.test('offline capture allows local prefix fallback but blocks stale registration cache', async () => {
         await catalogCache.writeBootstrapPayload({
             ...bootstrapPayload,
             machine_profile_context: {
@@ -225,9 +259,9 @@ test('Story 28.11 offline queue and sync hardening', async (t) => {
             },
         });
 
-        assert.strictEqual(await canCaptureOffline(), false);
+        assert.strictEqual(await canCaptureOffline(), true);
         const missingPrefix = await resolveOfflineCaptureReadiness();
-        assert.strictEqual(missingPrefix.reason, 'missing_prefix');
+        assert.strictEqual(missingPrefix.reason, 'allowed');
 
         await catalogCache.writeBootstrapPayload({
             ...bootstrapPayload,
@@ -260,7 +294,7 @@ test('Story 28.11 offline queue and sync hardening', async (t) => {
         globalState.status = 'online';
 
         axios.post = async (url, payload) => {
-            assert.strictEqual(url, '/api/pos/offline-sync');
+            assert.strictEqual(url, '/pos/offline-sync');
             const submittedSequence = payload.imports[0].offline_sequence_number;
             assert.ok([first.offline_sequence, second.offline_sequence].includes(submittedSequence));
             assert.ok(payload.imports[0].items.length > 0);
@@ -281,18 +315,17 @@ test('Story 28.11 offline queue and sync hardening', async (t) => {
         await offlineSyncManager.processQueue();
 
         const records = await offlineSalesQueue.getAllTransactions();
-        const accepted = records.find((record) => record.id === first.id);
+        const synced = records.find((record) => record.id === first.id);
         const duplicate = records.find((record) => record.id === second.id);
-        assert.strictEqual(accepted.status, 'accepted');
-        assert.strictEqual(duplicate.status, 'duplicate');
+        assert.strictEqual(synced.status, 'synced');
+        assert.strictEqual(duplicate.status, 'synced');
 
         const summary = await offlineSalesQueue.getStatusSummary();
-        assert.strictEqual(summary.accepted, 1);
-        assert.strictEqual(summary.duplicate, 1);
+        assert.strictEqual(summary.synced, 2);
         assert.ok(summary.lastSuccessfulSyncAt);
     });
 
-    await t.test('sync only runs online and network or 422 failures keep records retryable', async () => {
+    await t.test('sync only runs online, 422 moves to review, and network failures stay retryable', async () => {
         const record = await offlineSalesQueue.appendTransaction({
             submitted_at: '2026-05-20T12:00:00.000Z',
             items: [{ product_id: 'product-1', quantity: 1, unit_price: '125.00' }],
@@ -322,16 +355,134 @@ test('Story 28.11 offline queue and sync hardening', async (t) => {
 
         await offlineSyncManager.processQueue();
         let updated = (await offlineSalesQueue.getAllTransactions()).find((item) => item.id === record.id);
-        assert.strictEqual(updated.status, 'failed');
-        assert.match(updated.error_message, /queued on this terminal|rejected for now/i);
+        assert.strictEqual(updated.status, 'conflict');
+        assert.match(updated.error_message, /review|rejected for now/i);
 
+        const retryable = await offlineSalesQueue.getQueuedTransactions();
+        assert.strictEqual(retryable.some((item) => item.id === record.id), false);
+
+        const networkRecord = await offlineSalesQueue.appendTransaction({
+            submitted_at: '2026-05-20T12:01:00.000Z',
+            items: [{ product_id: 'product-2', quantity: 1, unit_price: '75.00' }],
+            client_subtotal: '66.96',
+            client_tax_total: '8.04',
+            client_total: '75.00',
+        }, { subtotal: '66.96', tax: '8.04', total: '75.00' }, { prefix: 'INV-T01-', initialNextValue: 2 });
+
+        sharedDb.stores.get('transactions').dataMap.get(networkRecord.id).last_sync_attempt_at = new Date(Date.now() - 60_000).toISOString();
         axios.post = async () => {
             throw new Error('network down');
         };
 
         await offlineSyncManager.retryFailed();
-        updated = (await offlineSalesQueue.getAllTransactions()).find((item) => item.id === record.id);
+        updated = (await offlineSalesQueue.getAllTransactions()).find((item) => item.id === networkRecord.id);
         assert.strictEqual(updated.status, 'failed');
         assert.match(updated.error_message, /remain safely queued/i);
+    });
+
+    await t.test('legacy failed 422 records move to review without another sync POST', async () => {
+        const record = await offlineSalesQueue.appendTransaction({
+            submitted_at: '2026-05-20T12:00:00.000Z',
+            items: [{ product_id: 'product-1', quantity: 1, unit_price: '125.00' }],
+            client_subtotal: '111.61',
+            client_tax_total: '13.39',
+            client_total: '125.00',
+        }, { subtotal: '111.61', tax: '13.39', total: '125.00' }, { prefix: 'INV-T01-', initialNextValue: 1 });
+
+        const storedRecord = sharedDb.stores.get('transactions').dataMap.get(record.id);
+        storedRecord.status = 'failed';
+        storedRecord.error_message = 'Request failed with status code 422';
+        storedRecord.last_sync_attempt_at = new Date(Date.now() - 60_000).toISOString();
+
+        navigator.onLine = true;
+        globalState.status = 'online';
+        let postCalled = false;
+        axios.post = async () => {
+            postCalled = true;
+            throw new Error('Legacy validation failures should not be posted again.');
+        };
+
+        await offlineSyncManager.retryFailed();
+
+        const updated = (await offlineSalesQueue.getAllTransactions()).find((item) => item.id === record.id);
+        assert.strictEqual(postCalled, false);
+        assert.strictEqual(updated.status, 'conflict');
+        assert.match(updated.error_message, /422/);
+    });
+
+    await t.test('diagnostics bundle is support-safe and includes hash-chain status', async () => {
+        const record = await offlineSalesQueue.appendTransaction({
+            submitted_at: '2026-05-20T12:00:00.000Z',
+            terminal_id: 'terminal-1',
+            branch_id: 'branch-1',
+            cashier_shift_id: 'shift-1',
+            items: [{ product_id: 'product-1', quantity: 1, unit_price: '125.00' }],
+            client_subtotal: '111.61',
+            client_tax_total: '13.39',
+            client_total: '125.00',
+            sensitive_customer_note: 'do not export this raw payload',
+        }, { subtotal: '111.61', tax: '13.39', total: '125.00' }, { prefix: 'INV-T01-', initialNextValue: 1 });
+
+        const bundle = await offlineSalesQueue.getDiagnosticsBundle();
+
+        assert.strictEqual(bundle.storage.indexed_db_available, true);
+        assert.strictEqual(bundle.storage.database_name, 'ipos_pos_offline_queue');
+        assert.strictEqual(bundle.storage.database_version, 1);
+        assert.strictEqual(bundle.hash_chain_valid, true);
+        assert.strictEqual(bundle.active_record_count, 1);
+        assert.strictEqual(bundle.historical_record_count, 1);
+        assert.strictEqual(bundle.records[0].offline_sequence, record.offline_sequence);
+        assert.strictEqual(bundle.records[0].terminal_id, 'terminal-1');
+        assert.strictEqual(bundle.records[0].branch_id, 'branch-1');
+        assert.strictEqual(bundle.records[0].cashier_shift_id, 'shift-1');
+        assert.ok(bundle.records[0].payload_hash);
+        assert.strictEqual(bundle.records[0].payload, undefined);
+        assert.strictEqual(JSON.stringify(bundle).includes('do not export this raw payload'), false);
+    });
+
+    await t.test('resolved-record pruning never removes unresolved queue records', async () => {
+        const oldSynced = await offlineSalesQueue.appendTransaction({
+            submitted_at: '2026-05-20T12:00:00.000Z',
+            items: [{ product_id: 'product-1', quantity: 1, unit_price: '125.00' }],
+            client_subtotal: '111.61',
+            client_tax_total: '13.39',
+            client_total: '125.00',
+        }, { subtotal: '111.61', tax: '13.39', total: '125.00' }, { prefix: 'INV-T01-', initialNextValue: 1 });
+
+        const failed = await offlineSalesQueue.appendTransaction({
+            submitted_at: '2026-05-20T12:01:00.000Z',
+            items: [{ product_id: 'product-2', quantity: 1, unit_price: '75.00' }],
+            client_subtotal: '66.96',
+            client_tax_total: '8.04',
+            client_total: '75.00',
+        }, { subtotal: '66.96', tax: '8.04', total: '75.00' }, { prefix: 'INV-T01-', initialNextValue: 2 });
+
+        const conflict = await offlineSalesQueue.appendTransaction({
+            submitted_at: '2026-05-20T12:02:00.000Z',
+            items: [{ product_id: 'product-1', quantity: 1, unit_price: '125.00' }],
+            client_subtotal: '111.61',
+            client_tax_total: '13.39',
+            client_total: '125.00',
+        }, { subtotal: '111.61', tax: '13.39', total: '125.00' }, { prefix: 'INV-T01-', initialNextValue: 3 });
+
+        await offlineSalesQueue.updateTransactionStatus(oldSynced.id, 'syncing');
+        await offlineSalesQueue.updateTransactionStatus(oldSynced.id, 'synced');
+        await offlineSalesQueue.updateTransactionStatus(failed.id, 'syncing');
+        await offlineSalesQueue.updateTransactionStatus(failed.id, 'failed', 'network down');
+        await offlineSalesQueue.updateTransactionStatus(conflict.id, 'syncing');
+        await offlineSalesQueue.updateTransactionStatus(conflict.id, 'conflict', 'sequence_out_of_order');
+
+        const oldDate = '2026-05-20T12:00:00.000Z';
+        const syncedRecord = sharedDb.stores.get('transactions').dataMap.get(oldSynced.id);
+        syncedRecord.updated_at = oldDate;
+        syncedRecord.last_synced_at = oldDate;
+
+        const result = await offlineSalesQueue.pruneResolvedTransactions(7, new Date('2026-06-01T12:00:00.000Z'));
+        const remaining = await offlineSalesQueue.getAllTransactions();
+
+        assert.deepStrictEqual(result, { pruned: 1, retained: 2 });
+        assert.strictEqual(remaining.some((record) => record.id === oldSynced.id), false);
+        assert.strictEqual(remaining.some((record) => record.id === failed.id), true);
+        assert.strictEqual(remaining.some((record) => record.id === conflict.id), true);
     });
 });

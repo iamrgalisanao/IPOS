@@ -30,6 +30,10 @@ class AppServiceProvider extends ServiceProvider
     {
         app(ProductionConfigurationGuard::class)->assertSafeConfiguration();
 
+        if (! $this->app->runningInConsole() && request()->is('pos/terminal/*')) {
+            return;
+        }
+
         Vite::prefetch(concurrency: 3);
     }
 }

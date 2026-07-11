@@ -111,8 +111,9 @@ class CacheBootstrapService
                     ->all();
             }
 
-            // 7. Calculate version hash
-            $hash = $this->calculateTaxConfigHash($tenant->id, $branch->id);
+            // 7. Calculate version hashes
+            $taxHash = $this->calculateTaxConfigHash($tenant->id, $branch->id);
+            $catalogHash = $this->calculateCatalogVersionHash($tenant->id, $branch->id);
 
             return [
                 'products' => $products->toArray(),
@@ -122,7 +123,8 @@ class CacheBootstrapService
                 'branch_context' => $branchContextData,
                 'machine_profile_context' => $machineProfileContext,
                 'permissions' => $permissions,
-                'tax_configuration_version_hash' => $hash,
+                'tax_configuration_version_hash' => $taxHash,
+                'catalog_version_hash' => $catalogHash,
                 'generated_at' => now()->toIso8601String(),
                 'cache_ttl_seconds' => 3600,
             ];
@@ -169,22 +171,47 @@ class CacheBootstrapService
             'updated_at' => $tenant->updated_at?->toIso8601String(),
         ] : [];
 
-        // 3. Product tax assignments
-        $productTaxAssignments = Product::active()
+        $serialized = json_encode([
+            'tax_categories' => $taxCategories,
+            'tenant_settings' => $tenantTaxSettings,
+        ]);
+
+        return hash('sha256', $serialized);
+    }
+
+    /**
+     * Compute a canonical SHA-256 hash of the product catalog configuration.
+     */
+    public function calculateCatalogVersionHash(string $tenantId, string $branchId): string
+    {
+        // 1. Categories
+        $categories = ProductCategory::active()
+            ->where('tenant_id', $tenantId)
+            ->orderBy('id')
+            ->get(['id', 'code', 'name', 'updated_at'])
+            ->map(fn($c) => [
+                'id' => $c->id,
+                'code' => $c->code,
+                'name' => $c->name,
+                'updated_at' => $c->updated_at?->toIso8601String(),
+            ])
+            ->toArray();
+
+        // 2. Products
+        $products = Product::active()
             ->where('is_sellable', true)
             ->where('tenant_id', $tenantId)
             ->orderBy('id')
-            ->get(['id', 'tax_category_id', 'selling_price', 'status', 'updated_at'])
+            ->get(['id', 'selling_price', 'status', 'updated_at'])
             ->map(fn($p) => [
                 'id' => $p->id,
-                'tax_category_id' => $p->tax_category_id,
                 'selling_price' => number_format((float) $p->selling_price, 4, '.', ''),
                 'status' => $p->status,
                 'updated_at' => $p->updated_at?->toIso8601String(),
             ])
             ->toArray();
 
-        // 4. Branch pricing overrides
+        // 3. Branch pricing overrides
         $branchPricingOverrides = BranchProductPricing::where('tenant_id', $tenantId)
             ->where('branch_id', $branchId)
             ->where('status', 'active')
@@ -199,9 +226,8 @@ class CacheBootstrapService
             ->toArray();
 
         $serialized = json_encode([
-            'tax_categories' => $taxCategories,
-            'tenant_settings' => $tenantTaxSettings,
-            'product_tax_assignments' => $productTaxAssignments,
+            'categories' => $categories,
+            'products' => $products,
             'branch_pricing_overrides' => $branchPricingOverrides,
         ]);
 

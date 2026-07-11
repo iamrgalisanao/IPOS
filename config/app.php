@@ -123,4 +123,13 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    'enforce_timecards' => env('ENFORCE_TIMECARDS', true),
+
+    // Terminal identity binding for /pos/terminal/* routes. When true, the
+    // IdentifyTerminalContext middleware requires a valid X-Terminal-ID header
+    // and fails closed when terminal context is missing or invalid. Set to false
+    // during active POS terminal development to allow shell access without a
+    // bound terminal identity. Reference: docs/implementation-plans/epic-41-terminal-identity-binding-planning-lock.md
+    'enforce_terminal_binding' => env('ENFORCE_TERMINAL_BINDING', true),
+
 ];

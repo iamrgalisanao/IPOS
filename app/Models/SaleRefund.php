@@ -16,6 +16,7 @@ class SaleRefund extends Model
         'tenant_id',
         'branch_id',
         'sale_id',
+        'shift_id',
         'refund_number',
         'reason_code',
         'reason_notes',
@@ -48,5 +49,10 @@ class SaleRefund extends Model
     public function sale(): BelongsTo
     {
         return $this->belongsTo(Sale::class);
+    }
+
+    public function shift(): BelongsTo
+    {
+        return $this->belongsTo(Shift::class);
     }
 }

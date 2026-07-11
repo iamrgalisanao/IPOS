@@ -25,6 +25,7 @@ class POSController extends Controller
     public function index(Request $request)
     {
         $tenant = $this->tenantContext->getTenant();
+        $tenantId = $this->tenantContext->getTenantId();
 
         if ($tenant) {
             $this->configurationService->ensureDefaultPaymentMethods($tenant);
@@ -32,14 +33,42 @@ class POSController extends Controller
 
         $user = $request->user();
         $isAdminMode = $user && $user->hasPermission('pos-layouts.manage');
+        $branchId = $this->branchContext->getBranchId() ?: $user?->branches()->first()?->id;
+
+        // Terminal identity resolution: prefer the terminal profile attached by
+        // the `terminal` middleware (IdentifyTerminalContext), then fall back to
+        // an explicit X-Terminal-ID header. Do NOT implicitly select the first
+        // active branch terminal profile — that is unsafe for multi-terminal
+        // branches. Reference: docs/implementation-plans/epic-41-terminal-identity-binding-planning-lock.md
+        $terminalProfile = $request->attributes->get('terminal_profile');
+        $terminalId = $terminalProfile?->id;
+        if (!$terminalId) {
+            $headerTerminalId = $request->header('X-Terminal-ID') ?: $request->query('test_terminal_id');
+            if ($headerTerminalId && $branchId && $tenantId) {
+                $terminalId = \App\Models\SalesMachineProfile::where('tenant_id', $tenantId)
+                    ->where('branch_id', $branchId)
+                    ->where(function ($query) use ($headerTerminalId) {
+                        $query->where('id', $headerTerminalId)
+                              ->orWhere('terminal_identifier', $headerTerminalId);
+                    })
+                    ->where('status', 'active')
+                    ->value('id');
+            }
+        }
 
         return Inertia::render('POS/Index', [
             'tenant' => $tenant,
-            'tenant_id' => $this->tenantContext->getTenantId(),
-            'branch_id' => $this->branchContext->getBranchId() ?: $user?->branches()->first()?->id,
+            'tenant_id' => $tenantId,
+            'branch_id' => $branchId,
+            'terminal_id' => $terminalId,
+            'discount_types' => \App\Models\DiscountType::active()->get(),
             'user_id' => $user?->id,
             'is_admin_mode' => $isAdminMode,
-            'categories' => ProductCategory::active()->get(),
+            'categories' => ProductCategory::active()
+                ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+                ->orderBy('name')
+                ->get(),
+            'initial_products' => $tenantId ? $this->catalogService->search('')->values() : [],
             'payment_methods' => PaymentMethod::active()
                 ->orderByDesc('is_default')
                 ->orderBy('name')
@@ -198,4 +227,3 @@ class POSController extends Controller
         ], 422);
     }
 }
-

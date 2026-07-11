@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { X, Plus, Trash2, CreditCard, Banknote, AlertCircle, CheckCircle2, Loader2, Wallet, Landmark, Layers } from 'lucide-react';
 import { calculatePaymentTotals, calculatePaymentProgress, validatePaymentRows, buildSplitPaymentPayload, requiresReference, isCashPayment, calculateCashChange } from '../helpers/splitPaymentHelper';
 import { isOffline } from '@/POS/offline/offlineGuards';
+import { offlinePaymentQueue } from '@/POS/offline/offlinePaymentQueue';
 
 // Helper to map DB payment methods to one of the 5 standard categories
 const getMappedMethod = (methodNameOrCode) => {
@@ -21,7 +22,7 @@ const BUTTONS = [
     { key: 'other', icon: Layers, label: 'Other', color: 'text-slate-400' }
 ];
 
-export default function SplitPayWizard({ sale, paymentMethods = [], onClose, onPaymentRecorded, tenantId, branchId, initialRows = null, onRowsChange = null, shift = null, isAdmin = false }) {
+export default function SplitPayWizard({ sale, paymentMethods = [], onClose, onPaymentRecorded, onOfflineCapture, tenantId, branchId, initialRows = null, onRowsChange = null, shift = null, isAdmin = false, offlineCaptureMode = false }) {
     const hasPaymentMethods = paymentMethods.length > 0;
     const hasNoActiveShift = !isAdmin && !shift;
     const [rows, setRows] = useState(() => initialRows && initialRows.length > 0
@@ -74,10 +75,16 @@ export default function SplitPayWizard({ sale, paymentMethods = [], onClose, onP
         };
     }, [rows, paymentMethods, sale.total]);
 
-    const totals = useMemo(() => calculatePaymentTotals(rows, sale.total), [rows, sale.total]);
+    const payableRows = useMemo(() => rows.filter(row => row.payment_method_id), [rows]);
+    const validationRows = remainingBalance <= 0.001 && payableRows.length > 0 ? payableRows : rows;
+    const totals = useMemo(() => calculatePaymentTotals(validationRows, sale.total), [validationRows, sale.total]);
     
     // Validate rows in compliance with backend expectations
-    const validation = useMemo(() => validatePaymentRows(rows, paymentMethods, sale.total), [rows, paymentMethods, sale.total]);
+    const validation = useMemo(() => validatePaymentRows(validationRows, paymentMethods, sale.total), [validationRows, paymentMethods, sale.total]);
+    const rowsUseCashOnly = useMemo(() => validationRows.every((row) => {
+        const method = paymentMethods.find(m => m.id === row.payment_method_id);
+        return isCashPayment(method);
+    }), [validationRows, paymentMethods]);
 
     useEffect(() => {
         if (initialRows && initialRows.length > 0) {
@@ -88,6 +95,17 @@ export default function SplitPayWizard({ sale, paymentMethods = [], onClose, onP
     useEffect(() => {
         onRowsChange?.(rows);
     }, [rows, onRowsChange]);
+
+    useEffect(() => {
+        if (remainingBalance > 0.001 || rows.length <= 1 || payableRows.length === rows.length || payableRows.length === 0) {
+            return;
+        }
+
+        setRows(payableRows);
+        if (activeField.rowId && !payableRows.some(row => row.id === activeField.rowId)) {
+            setActiveField({ rowId: null, fieldName: null });
+        }
+    }, [activeField.rowId, payableRows, remainingBalance, rows]);
 
     const addRow = () => {
         const remaining = remainingBalance;
@@ -126,8 +144,61 @@ export default function SplitPayWizard({ sale, paymentMethods = [], onClose, onP
     const handleSubmit = async () => {
         if (!validation.isValid || isSubmitting) return;
 
+        if (offlineCaptureMode) {
+            if (!rowsUseCashOnly) {
+                setError('Offline capture only supports cash payments. Reconnect for card, e-wallet, bank, or other payment methods.');
+                return;
+            }
+
+            if (!onOfflineCapture) {
+                setError('Offline capture handler is unavailable. Reconnect and try again.');
+                return;
+            }
+
+            setIsSubmitting(true);
+            setError(null);
+
+            try {
+                await onOfflineCapture(validationRows);
+            } catch (err) {
+                setError(err?.message || 'Offline capture failed. Please try again.');
+            } finally {
+                setIsSubmitting(false);
+            }
+            return;
+        }
+
         if (isOffline()) {
-            setError('Payment cannot be recorded while offline. Reconnect to finalize official sale.');
+            if (!rowsUseCashOnly) {
+                setError('Offline completion for an existing sale only supports cash payments. Reconnect for card, e-wallet, bank, or other payment methods.');
+                return;
+            }
+
+            setIsSubmitting(true);
+            setError(null);
+
+            try {
+                const payload = buildSplitPaymentPayload(validationRows);
+                offlinePaymentQueue.queuePayment({
+                    sale_id: sale.id,
+                    payload,
+                    rows: validationRows,
+                    context: {
+                        tenant_id: tenantId,
+                        branch_id: branchId,
+                    },
+                });
+                onPaymentRecorded({
+                    status: 'queued_offline_payment',
+                    sale_id: sale.id,
+                    sale_status: 'payment_queued',
+                    rows: validationRows,
+                });
+            } catch (err) {
+                setError(err?.message || 'Offline payment could not be queued. Please try again.');
+            } finally {
+                setIsSubmitting(false);
+            }
             return;
         }
 
@@ -135,7 +206,7 @@ export default function SplitPayWizard({ sale, paymentMethods = [], onClose, onP
         setError(null);
 
         try {
-            const payload = buildSplitPaymentPayload(rows);
+            const payload = buildSplitPaymentPayload(validationRows);
             const response = await fetch(`/pos/sales/${sale.id}/payments/split`, {
                 method: 'POST',
                 headers: {
@@ -155,7 +226,7 @@ export default function SplitPayWizard({ sale, paymentMethods = [], onClose, onP
                 return;
             }
 
-            onPaymentRecorded({ ...data, rows });
+            onPaymentRecorded({ ...data, rows: validationRows });
         } catch (err) {
             setError('A network error occurred. Please try again.');
         } finally {
@@ -394,7 +465,9 @@ export default function SplitPayWizard({ sale, paymentMethods = [], onClose, onP
 
                                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                                         {BUTTONS.map(btn => {
-                                                            const isAvailable = paymentMethods.some(m => getMappedMethod(m.code || m.name) === btn.key);
+                                                            const terminalOffline = isOffline();
+                                                            const isAvailable = paymentMethods.some(m => getMappedMethod(m.code || m.name) === btn.key)
+                                                                && (!terminalOffline || (offlineCaptureMode && btn.key === 'cash'));
                                                             const Icon = btn.icon;
 
                                                             return (
@@ -423,6 +496,13 @@ export default function SplitPayWizard({ sale, paymentMethods = [], onClose, onP
                                                             );
                                                         })}
                                                     </div>
+                                                    {isOffline() && (
+                                                        <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[10px] text-amber-100 font-bold tracking-wider uppercase text-center mt-2.5">
+                                                            {offlineCaptureMode
+                                                                ? 'Offline capture is available for cash only. Reconnect for card, e-wallet, bank, or other payment methods.'
+                                                                : 'Offline payment recording is paused for this server-created sale. Reconnect to finalize payment.'}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             ) : (
                                                 /* State B: Active Payment Card (Requirement 5) */
@@ -734,11 +814,24 @@ export default function SplitPayWizard({ sale, paymentMethods = [], onClose, onP
 
                 {/* Sticky Complete Button Footer (Requirement 8, 9, 10) */}
                 <div className="p-4 border-t border-slate-800/80 bg-slate-900/95 backdrop-blur-md sticky bottom-0 z-30 shrink-0">
+                    {(() => {
+                        const terminalOffline = isOffline();
+                        const canSubmitOfflineCapture = offlineCaptureMode && rowsUseCashOnly;
+                        const canSubmitOfflineServerPayment = !offlineCaptureMode && terminalOffline && rowsUseCashOnly;
+                        const canSubmitOnlinePayment = !offlineCaptureMode && !terminalOffline;
+                        const canSubmit = hasPaymentMethods
+                            && validation.isValid
+                            && !isSubmitting
+                            && remainingBalance <= 0.001
+                            && !hasNoActiveShift
+                            && (canSubmitOfflineCapture || canSubmitOfflineServerPayment || canSubmitOnlinePayment);
+
+                        return (
                     <button 
                         onClick={handleSubmit}
-                        disabled={!hasPaymentMethods || !validation.isValid || isSubmitting || remainingBalance > 0.001 || hasNoActiveShift || isOffline()}
+                        disabled={!canSubmit}
                         className={`w-full py-3.5 rounded-xl font-black flex items-center justify-center gap-2.5 text-xs tracking-wider transition-all uppercase ${
-                            hasPaymentMethods && validation.isValid && !isSubmitting && remainingBalance <= 0.001 && !hasNoActiveShift && !isOffline()
+                            canSubmit
                             ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/25 active:scale-[0.98]' 
                             : 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50'
                         }`}
@@ -751,20 +844,30 @@ export default function SplitPayWizard({ sale, paymentMethods = [], onClose, onP
                         ) : (
                             <>
                                 <CheckCircle2 className="w-4.5 h-4.5" />
-                                Complete Payment (₱{totalPaid.toLocaleString(undefined, {minimumFractionDigits: 2})})
+                                {offlineCaptureMode
+                                    ? `Capture Offline Sale (₱${totalPaid.toLocaleString(undefined, {minimumFractionDigits: 2})})`
+                                    : terminalOffline
+                                        ? `Queue Offline Payment (₱${totalPaid.toLocaleString(undefined, {minimumFractionDigits: 2})})`
+                                    : `Complete Payment (₱${totalPaid.toLocaleString(undefined, {minimumFractionDigits: 2})})`}
                             </>
                         )}
                     </button>
-                    {isOffline() && (
+                        );
+                    })()}
+                    {(isOffline() || offlineCaptureMode) && (
                         <p className="text-[10px] text-center text-rose-400 mt-2.5 uppercase tracking-widest font-black flex items-center justify-center gap-1.5 animate-pulse">
                             <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                            Terminal is offline. Payments cannot be finalized.
+                            {offlineCaptureMode
+                                ? 'Offline draft sale will be queued locally for later sync.'
+                                : 'Terminal is offline. Cash payment will be queued locally and synced to this sale when reconnected.'}
                         </p>
                     )}
-                    {hasNoActiveShift && !isOffline() && (
+                    {hasNoActiveShift && (
                         <p className="text-[10px] text-center text-rose-400 mt-2.5 uppercase tracking-widest font-black flex items-center justify-center gap-1.5 animate-pulse">
                             <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                            Open a cashier shift before completing payment.
+                            {offlineCaptureMode && isOffline()
+                                ? 'No cached active shift found. Reconnect and open a cashier shift before using offline capture.'
+                                : 'Open a cashier shift before completing payment.'}
                         </p>
                     )}
                     {!hasPaymentMethods && (

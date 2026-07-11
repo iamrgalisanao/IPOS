@@ -9,6 +9,7 @@ use App\Services\BranchContext;
 use App\Services\POS\OfflineSync\OfflineReconciliationService;
 use App\Services\TenantContext;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
 
 /**
  * OfflineSyncController (Story 28.7 — Validation Layer)
@@ -51,25 +52,54 @@ class OfflineSyncController extends Controller
             ], 403);
         }
 
-        // Resolve the terminal profile for this branch
-        $profile = SalesMachineProfile::where('branch_id', $branch->id)
-            ->where('status', 'active')
-            ->first();
+        $requestedTerminalId = $request->header('X-Terminal-ID')
+            ?: data_get($request->input('imports.0'), 'terminal_id')
+            ?: data_get($request->input('imports.0'), 'sales_machine_profile_id');
+
+        // Resolve the exact terminal that captured the offline sale. Branches can
+        // have multiple active profiles; using the first active profile can reject
+        // a valid queue with a wrong sequence prefix/hash chain.
+        $profileQuery = SalesMachineProfile::where('branch_id', $branch->id)
+            ->where('status', 'active');
+
+        if ($requestedTerminalId) {
+            $profileQuery->where('id', $requestedTerminalId);
+        }
+
+        $profile = $profileQuery->first();
 
         if (!$profile) {
             return response()->json([
                 'error'   => 'NO_ACTIVE_TERMINAL',
-                'message' => 'No active terminal profile found for this branch.',
+                'message' => $requestedTerminalId
+                    ? 'The requested terminal profile is not active for this branch.'
+                    : 'No active terminal profile found for this branch.',
             ], 422);
         }
 
         try {
             $batch = $this->reconciliationService->receiveImportBatch($profile, $request->validated());
         } catch (\RuntimeException $e) {
-            // Offline not enabled — return 422 with machine-readable error
+            $errCode = 'OFFLINE_NOT_ENABLED';
+            if (str_contains($e->getMessage(), 'SEQUENCE_OUT_OF_ORDER') || str_contains($e->getMessage(), 'HASH_CHAIN_BROKEN')) {
+                $errCode = 'CHAIN_VALIDATION_FAILED';
+            }
+            Log::warning('pos.offline_sync.rejected', [
+                'error' => $errCode,
+                'message' => $e->getMessage(),
+                'tenant_id' => $tenant->id,
+                'branch_id' => $branch->id,
+                'sales_machine_profile_id' => $profile->id,
+                'batch_reference' => $request->input('batch_reference'),
+                'offline_sequences' => collect($request->input('imports', []))
+                    ->pluck('offline_sequence_number')
+                    ->values()
+                    ->all(),
+            ]);
+
             return response()->json([
-                'error'   => 'OFFLINE_NOT_ENABLED',
-                'message' => 'Offline sales intake is not permitted for this terminal.',
+                'error'   => $errCode,
+                'message' => $e->getMessage(),
                 'detail'  => $e->getMessage(),
             ], 422);
         }

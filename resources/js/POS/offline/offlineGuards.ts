@@ -67,15 +67,6 @@ export async function resolveOfflineCaptureReadiness(): Promise<OfflineCaptureRe
             };
         }
 
-        if (!machine.offline_sequence_prefix) {
-            return {
-                allowed: false,
-                reason: 'missing_prefix',
-                message: 'This terminal is missing its offline sequence prefix. Reconnect before capturing offline transactions.',
-                machineProfile: machine,
-            };
-        }
-
         if ((machine.offline_sequence_status ?? 'active') !== 'active') {
             return {
                 allowed: false,

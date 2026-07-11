@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Product;
 use App\Models\BranchInventory;
+use App\Models\ExpiryLot;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Validator;
@@ -122,6 +123,11 @@ class CatalogService
             $query->with(['branchInventories' => function ($q) use ($branchId) {
                 $q->where('branch_id', $branchId);
             }]);
+            $query->with(['expiryLots' => function ($q) use ($branchId) {
+                $q->where('branch_id', $branchId)
+                    ->where('status', 'active')
+                    ->where('quantity_remaining', '>', 0);
+            }]);
             $query->with(['branchProductPricings' => function ($q) use ($branchId) {
                 $q->where('branch_id', $branchId)->where('status', 'active');
             }]);
@@ -151,6 +157,11 @@ class CatalogService
             $query->with(['branchInventories' => function ($q) use ($branchId) {
                 $q->where('branch_id', $branchId);
             }]);
+            $query->with(['expiryLots' => function ($q) use ($branchId) {
+                $q->where('branch_id', $branchId)
+                    ->where('status', 'active')
+                    ->where('quantity_remaining', '>', 0);
+            }]);
             $query->with(['branchProductPricings' => function ($q) use ($branchId) {
                 $q->where('branch_id', $branchId)->where('status', 'active');
             }]);
@@ -171,6 +182,7 @@ class CatalogService
 
         $payload = [
             'product_id' => $product->id,
+            'product_category_id' => $product->product_category_id,
             'display_name' => $product->name,
             'sku' => $product->sku,
             'barcode' => $product->barcode,
@@ -181,20 +193,112 @@ class CatalogService
             'tax_type' => $tax ? $tax->tax_type : null,
             'tax_rate' => $tax ? (float) $tax->rate : 0.0,
             'is_inventory_tracked' => (bool) $product->is_inventory_tracked,
+            'expiry_tracking_enabled' => (bool) $product->expiry_tracking_enabled,
             'is_discountable' => (bool) $product->is_discountable,
             'status' => $product->status,
         ];
 
         // Inventory Stock Data
         if ($product->is_inventory_tracked) {
-            $payload['current_stock'] = $branchInventory ? (float) $branchInventory->current_stock : null;
-            $payload['stock_available'] = $branchInventory ? ($branchInventory->current_stock > 0) : false;
+            $currentStock = $branchInventory ? (float) $branchInventory->current_stock : 0.0;
+            $reorderLevel = $branchInventory ? (float) $branchInventory->reorder_level : null;
+            $expirySummary = $this->summarizeExpiryLots($product);
+            $availableToSell = $product->expiry_tracking_enabled
+                ? $expirySummary['unexpired_quantity']
+                : $currentStock;
+
+            $payload['current_stock'] = $branchInventory ? $currentStock : null;
+            $payload['reorder_level'] = $reorderLevel;
+            $payload['unexpired_stock'] = $product->expiry_tracking_enabled ? $expirySummary['unexpired_quantity'] : null;
+            $payload['expired_stock'] = $product->expiry_tracking_enabled ? $expirySummary['expired_quantity'] : null;
+            $payload['next_expiry_date'] = $expirySummary['next_expiry_date'];
+            $payload['available_to_sell'] = max($availableToSell, 0);
+            $payload['stock_available'] = $payload['available_to_sell'] > 0;
+            $payload['stock_state'] = $this->resolveStockState(
+                $product,
+                $branchInventory,
+                $currentStock,
+                $availableToSell,
+                $reorderLevel,
+                $expirySummary
+            );
         } else {
             $payload['current_stock'] = null;
+            $payload['reorder_level'] = null;
+            $payload['unexpired_stock'] = null;
+            $payload['expired_stock'] = null;
+            $payload['next_expiry_date'] = null;
+            $payload['available_to_sell'] = null;
             $payload['stock_tracking'] = 'not_tracked';
             $payload['stock_available'] = true; // Non-tracked is always "available" for sale
+            $payload['stock_state'] = 'normal';
         }
 
         return $payload;
+    }
+
+    protected function summarizeExpiryLots(Product $product): array
+    {
+        if (!$product->expiry_tracking_enabled) {
+            return [
+                'unexpired_quantity' => 0.0,
+                'expired_quantity' => 0.0,
+                'next_expiry_date' => null,
+                'near_expiry' => false,
+            ];
+        }
+
+        $today = now()->toDateString();
+        $nearExpiryCutoff = now()->addDays(7)->toDateString();
+        $lots = $product->relationLoaded('expiryLots')
+            ? $product->expiryLots
+            : ExpiryLot::where('product_id', $product->id)
+                ->when($this->branchContext->hasBranch(), fn ($query) => $query->where('branch_id', $this->branchContext->getBranchId()))
+                ->where('status', 'active')
+                ->where('quantity_remaining', '>', 0)
+                ->get();
+
+        $unexpiredLots = $lots->filter(fn (ExpiryLot $lot) => $lot->expiry_date->toDateString() > $today);
+        $nextExpiryDate = $unexpiredLots
+            ->sortBy(fn (ExpiryLot $lot) => $lot->expiry_date->toDateString())
+            ->first()
+            ?->expiry_date
+            ?->toDateString();
+
+        return [
+            'unexpired_quantity' => (float) $unexpiredLots->sum(fn (ExpiryLot $lot) => (float) $lot->quantity_remaining),
+            'expired_quantity' => (float) $lots
+                ->filter(fn (ExpiryLot $lot) => $lot->expiry_date->toDateString() <= $today)
+                ->sum(fn (ExpiryLot $lot) => (float) $lot->quantity_remaining),
+            'next_expiry_date' => $nextExpiryDate,
+            'near_expiry' => $nextExpiryDate !== null && $nextExpiryDate <= $nearExpiryCutoff,
+        ];
+    }
+
+    protected function resolveStockState(
+        Product $product,
+        ?BranchInventory $branchInventory,
+        float $currentStock,
+        float $availableToSell,
+        ?float $reorderLevel,
+        array $expirySummary
+    ): string {
+        if (!$branchInventory || $currentStock <= 0 || $availableToSell <= 0) {
+            return $product->expiry_tracking_enabled && $currentStock > 0
+                ? 'expired'
+                : 'out_of_stock';
+        }
+
+        if ($product->expiry_tracking_enabled && $expirySummary['near_expiry']) {
+            return 'near_expiry';
+        }
+
+        if ($reorderLevel !== null && $reorderLevel > 0 && $currentStock <= $reorderLevel) {
+            $criticalThreshold = max(1, $reorderLevel / 2);
+
+            return $currentStock <= $criticalThreshold ? 'critical_stock' : 'low_stock';
+        }
+
+        return 'normal';
     }
 }

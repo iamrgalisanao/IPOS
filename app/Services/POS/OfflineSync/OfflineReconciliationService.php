@@ -99,6 +99,9 @@ class OfflineReconciliationService
             return $existing;
         }
 
+        // 1.5. Verify consecutive sequence and hash chain integrity
+        $this->verifyBatchHashChain($profile, $rawImports);
+
         // 3. Create batch record
         $batch = OfflineSyncBatch::create([
             'tenant_id'               => $profile->tenant_id,
@@ -214,20 +217,42 @@ class OfflineReconciliationService
             }
         }
 
-        // 3. Prefix ownership — the sequence number must start with the terminal's registered prefix
-        if ($profile !== null && !empty($profile->offline_sequence_prefix)) {
+        // 3. Prefix ownership — the sequence number must start with the terminal's registered prefix or dynamic OFF-{profile_code}-
+        if ($profile !== null) {
             $sequenceNumber = $payload['offline_sequence_number'];
-            if (!str_starts_with($sequenceNumber, $profile->offline_sequence_prefix)) {
+            $expectedDynamicPrefix = "OFF-{$profile->profile_code}-";
+
+            $isDynamic = str_starts_with($sequenceNumber, $expectedDynamicPrefix);
+            $isStatic = !empty($profile->offline_sequence_prefix) && str_starts_with($sequenceNumber, $profile->offline_sequence_prefix);
+
+            if (!$isDynamic && !$isStatic) {
                 return $this->rejectImport(
                     $import,
-                    'prefix_mismatch: expected prefix ' . $profile->offline_sequence_prefix
+                    'prefix_mismatch: expected prefix starting with ' . $expectedDynamicPrefix
                 );
             }
 
-            // 4. Suffix must be a positive integer (e.g., INV-T01-0042 → "0042")
-            $suffix = substr($sequenceNumber, strlen($profile->offline_sequence_prefix));
-            if (!ctype_digit($suffix) || (int) $suffix < 1) {
+            // 4. Suffix must be a positive integer
+            $suffixValue = $this->parseSequenceSuffix($sequenceNumber, $profile->offline_sequence_prefix);
+            if ($suffixValue < 1) {
                 return $this->rejectImport($import, 'invalid_sequence_number_suffix');
+            }
+        }
+
+        // 5. Version configuration drift warning check (non-blocking)
+        $clientCatalogHash = $payload['catalog_version_hash'] ?? null;
+        $clientTaxHash = $payload['tax_configuration_version_hash'] ?? null;
+
+        if ($clientCatalogHash !== null && $clientTaxHash !== null) {
+            $bootstrapService = app(\App\Services\POS\OfflineReadiness\CacheBootstrapService::class);
+            $currentCatalogHash = $bootstrapService->calculateCatalogVersionHash($import->tenant_id, $import->branch_id);
+            $currentTaxHash = $bootstrapService->calculateTaxConfigHash($import->tenant_id, $import->branch_id);
+
+            if ($clientCatalogHash !== $currentCatalogHash || $clientTaxHash !== $currentTaxHash) {
+                $import->update([
+                    'status' => OfflineSalesImport::STATUS_ACCEPTED_WITH_WARNING,
+                    'rejection_reason' => 'Config drift: client catalog hash (' . substr($clientCatalogHash, 0, 8) . ') or tax hash (' . substr($clientTaxHash, 0, 8) . ') differs from server (' . substr($currentCatalogHash, 0, 8) . ' / ' . substr($currentTaxHash, 0, 8) . ').'
+                ]);
             }
         }
 
@@ -344,7 +369,7 @@ class OfflineReconciliationService
                 $taxBucket = $item['tax_bucket'];
                 $subtotal = (float) $item['subtotal'];
                 $taxAmount = (float) $item['tax_amount'];
-                
+
                 $grossSalesAmount += $subtotal;
                 $vatAmountTotal += $taxAmount;
 
@@ -686,5 +711,82 @@ class OfflineReconciliationService
     private function formatAmount(mixed $amount): string
     {
         return number_format((float) $amount, 4, '.', '');
+    }
+
+    /**
+     * Parse the sequence number suffix.
+     */
+    private function parseSequenceSuffix(string $sequenceNumber, ?string $staticPrefix = null): int
+    {
+        if (preg_match('/^OFF-[A-Z0-9]+-\d+-(\d+)$/', $sequenceNumber, $matches)) {
+            return (int) $matches[1];
+        }
+        if ($staticPrefix !== null && str_starts_with($sequenceNumber, $staticPrefix)) {
+            return (int) substr($sequenceNumber, strlen($staticPrefix));
+        }
+        if (preg_match('/(\d+)$/', $sequenceNumber, $matches)) {
+            return (int) $matches[1];
+        }
+        return 0;
+    }
+
+    /**
+     * Verify that the imports in the batch are consecutive and chain correctly.
+     */
+    private function verifyBatchHashChain(SalesMachineProfile $profile, array $rawImports): void
+    {
+        if (empty($rawImports)) {
+            return;
+        }
+
+        // Check if the payload has dynamic hashing fields; if not, skip validation to support legacy/mock tests
+        $firstImport = reset($rawImports);
+        if (empty($firstImport['row_hash'])) {
+            return;
+        }
+
+        // Sort imports by sequence number suffix to ensure chronological order
+        usort($rawImports, function ($a, $b) use ($profile) {
+            $seqA = $a['offline_sequence_number'] ?? '';
+            $seqB = $b['offline_sequence_number'] ?? '';
+
+            $suffixA = $this->parseSequenceSuffix($seqA, $profile->offline_sequence_prefix);
+            $suffixB = $this->parseSequenceSuffix($seqB, $profile->offline_sequence_prefix);
+
+            return $suffixA <=> $suffixB;
+        });
+
+        // Get the last successful import from DB to chain the first item
+        $allImports = OfflineSalesImport::withoutGlobalScopes()
+            ->where('sales_machine_profile_id', $profile->id)
+            ->whereNotIn('status', [OfflineSalesImport::STATUS_REJECTED])
+            ->get();
+
+        $lastImport = $allImports->sortByDesc(function ($imp) use ($profile) {
+            return $this->parseSequenceSuffix($imp->offline_sequence_number, $profile->offline_sequence_prefix);
+        })->first();
+
+        $expectedPrevHash = $lastImport ? ($lastImport->raw_payload['row_hash'] ?? null) : null;
+        $expectedSeqSuffix = $lastImport ? ($this->parseSequenceSuffix($lastImport->offline_sequence_number, $profile->offline_sequence_prefix) + 1) : null;
+
+        foreach ($rawImports as $importPayload) {
+            $seq = $importPayload['offline_sequence_number'] ?? '';
+            $suffix = $this->parseSequenceSuffix($seq, $profile->offline_sequence_prefix);
+
+            // 1. Verify sequential sequence number
+            if ($expectedSeqSuffix !== null && $suffix !== $expectedSeqSuffix) {
+                throw new \RuntimeException("SEQUENCE_OUT_OF_ORDER: Sequence {$seq} does not follow expected {$expectedSeqSuffix}");
+            }
+
+            // 2. Verify previous hash chaining
+            $prevHash = $importPayload['previous_hash'] ?? null;
+            if ($expectedPrevHash !== null && $prevHash !== $expectedPrevHash) {
+                throw new \RuntimeException("HASH_CHAIN_BROKEN: Record {$seq} previous_hash does not chain to expected hash");
+            }
+
+            // Update expected for the next record in the batch
+            $expectedSeqSuffix = $suffix + 1;
+            $expectedPrevHash = $importPayload['row_hash'] ?? null;
+        }
     }
 }

@@ -45,12 +45,14 @@ For long-term production readiness, the POS Terminal will be hardened as a table
 | **Epic 33** | Late-Sync Auditability & Z-Report Reconciliation | **[Closed — Implemented & Locally Validated]** |
 | **Epic 34** | Enterprise Async Reporting Export | **[Closed]** |
 | **Epic 35** | Recipe Maintenance and Costing Engine | **[Closed]** |
-| **Epic 36** | Local Register Sync and Store-Level Coordination | **[Proposed]** |
+| **Epic 36** | Local Register Sync and Store-Level Coordination | **[Closed — Implemented & Locally Validated]** |
 | **Epic 37** | Advanced Promotions & Bundling Engine | **[Proposed]** |
 | **Epic 38** | F&B Table & Bill Manipulation Operations | **[Proposed]** |
 | **Epic 39** | Loyalty & Store Credit Ledger | **[Proposed]** |
 | **Epic 40** | Cash Drawer Audit & Manager Shift Reconciliation | **[Closed]** |
 | **Epic 41** | POS Terminal Production Hardening for Android Tablet | **[Implemented / Pilot Validation Required]** |
+| **Epic 42** | Windows POS Terminal Electron Wrapper | **[Closed — Implemented & Locally Validated]** |
+| **Epic 43** | POS Lock Screen & Employee Timecards | **[Closed — Implemented & Locally Validated]** |
 
 
 
@@ -144,6 +146,10 @@ Explicitly parked or excluded:
 - 7.2 Full-Sale Void Service
 - 7.3 Partial Refund Service
 - 7.4 Reversal Audit Trail
+- 7.5 Terminal-Side Void & Refund Modal Integration
+- 7.6 Supervisor Auth Override Validation
+- 7.7 Timing Controls (Same-Shift Voids Restricted, Closed Shift Electronic Refunds Queue Routing)
+- 7.8 Idempotency Protection Middleware
 
 ## Epic 8: Accounting Outbox, QuickBooks Adapter & Onboarding [Closed]
 - 8.1 Accounting Outbox Schema and Event Capture
@@ -493,10 +499,26 @@ Status: Implemented & Locally Validated — Controlled Early Partner Pilot Ready
 - **[x] 28.10: Epic 28 Phase 2 Slice F — Offline Import Official Posting & Reconciliation** [Implemented & Locally Validated]
 - **[x] 28.11: Epic 28 Phase 2 Slice G — POS Offline Transaction Queue & Sync UX** [Implemented & Locally Validated]
 
-Implementation note: Story 28.10 completes official server-side offline import posting and reconciliation. Story 28.11 adds provisional terminal-side queueing, append-only hash-chain diagnostics, guarded offline capture, sync batching, retryable failure handling, and cashier sync status UX only. Local official GCT, Z-read, and e-journal finalization remain out of scope; official finalization remains server-authoritative.
+Implementation note: Story 28.10 completes official server-side offline import posting and reconciliation. Story 28.11 adds provisional terminal-side queueing, append-only hash-chain diagnostics, guarded offline capture, sync batching, retryable failure handling, and cashier sync status UX only. The 2026-07-11 stabilization pass further hardens reconnect handling, stale service-worker shell rollover, cached catalog fallback, offline draft payment routing, and review-required queue classification. Local official GCT, Z-read, and e-journal finalization remain out of scope; official finalization remains server-authoritative.
 
 **Closure Artifact:**
 - [epic-28-phase-2-controlled-offline-sales-closure-report.md](../validation/epic-28-phase-2-controlled-offline-sales-closure-report.md)
+- [pos-terminal-offline-stabilization-2026-07-10.md](../validation/pos-terminal-offline-stabilization-2026-07-10.md)
+- [pos-terminal-offline-uat-2026-07-11.md](../validation/pos-terminal-offline-uat-2026-07-11.md)
+
+### POS Terminal Hardening Pass
+
+Status: Ready for Development Intake
+
+The July 2026 cashier-led offline testing and follow-up readiness review found
+that the controlled offline cash-sale path is implemented for pilot use, but
+requires a hardening pass before broader rollout. The pass covers terminal route
+surface completion, admin offline conflict review UX, queue diagnostics and
+retention, legacy route/session hardening, hardware readiness visibility, and
+formal UAT sign-off.
+
+Planning Artifact:
+- [pos-terminal-hardening-pass-development-ready-plan.md](../../_bmad-output/planning-artifacts/pos-terminal-hardening-pass-development-ready-plan.md)
 
 ---
 
@@ -1352,15 +1374,15 @@ Epic 35 introduces raw ingredient inventories, Bills of Materials (BOM), and rec
 
 ---
 
-## Epic 36: Local Register Sync and Store-Level Coordination [Proposed]
+## Epic 36: Local Register Sync and Store-Level Coordination [Closed — Implemented & Locally Validated]
 *Initialized: May 2026*
 
 Epic 36 enables store-level synchronization, table management, and order distribution between multiple registers on a local network during offline periods (aligning with StoreHub Multiple Register Sync / MRS capability).
 
-**Proposed Stories:**
-- 36.1 Local Subnet Sync Broker Service (Tauri Desktop wrapper broker acting as local LAN coordinator)
-- 36.2 Local Pub/Sub and Table/Order State Sharing (WebSockets / MQTT for table/cart sync)
-- 36.3 Local Print Broker for network orders and receipt routing
+**Stories:**
+- 36.1 Local Subnet Sync Broker Service [Closed]
+- 36.2 Local Pub/Sub and Table/Order State Sharing [Closed]
+- 36.3 Local Print Broker for network orders and receipt routing [Closed]
 
 **Architecture Boundary & Guidelines:**
 - Enforce strict single-owner locking per table or order to resolve split-brain conflicts.
@@ -1436,3 +1458,45 @@ Epic 39 adds loyalty point accumulation and customer store credit wallets (e.g.,
 - Do not split the POS terminal into a separate repo yet.
 - Do not rewrite the POS terminal in native Android now.
 - Do not discard the existing POS workflows.
+
+**Residual Hardening Follow-Up (2026-07-08):**
+- Terminal identity binding for `/pos/terminal/checkout` is implemented and locally validated. The `terminal` middleware now enforces a verified terminal identity at shell entry, and the unsafe first-active-profile fallback has been removed.
+- Reference planning lock: `docs/implementation-plans/epic-41-terminal-identity-binding-planning-lock.md`.
+- Closure evidence: `docs/validation/epic-41-terminal-identity-binding-closure.md`.
+
+---
+
+## Epic 42: Windows POS Terminal Electron Wrapper (Phase 1.5) [Closed — Implemented & Locally Validated]
+*Initiated: July 2026*
+
+Epic 42 introduces a secure hardware kiosk shell for Windows X Lite machines using Electron in "Hosted App" mode. This provides OS-level kiosk lockdown and security without breaking the existing server-side Inertia.js coupling.
+
+**Approved Stories:**
+- **42.1 Monorepo Workspace Initialization**: Configure NPM workspaces and create `packages/pos-terminal`. [Closed]
+- **42.2 Hosted App Main Process (`main.js`)**: Configure `BrowserWindow` with `kiosk: true`, `devTools: false`, and strict navigation guards. [Closed]
+- **42.3 Input and Popup Lockdown**: Block dangerous keyboard shortcuts (F12, F5, Ctrl+R, Alt+F4) and external window requests. [Closed]
+- **42.4 Windows Installer Compilation**: Configure `electron-builder` to output a `.exe` installer (unsigned for dev). [Closed]
+
+**Architecture Boundary & Guidelines:**
+- **Do not bundle React code:** The Electron shell must point to the live URL (`/pos/terminal/checkout`).
+- **Do not decouple Inertia:** All data fetching and routing remains server-rendered.
+- **Future Ready:** The shell should be capable of implementing the `PosHardwareAdapter` native bridge (e.g. ESC/POS) in Phase 2.
+
+---
+
+## Epic 43: POS Lock Screen & Employee Timecards [Closed — Implemented & Locally Validated]
+*Initiated: July 2026*
+
+Epic 43 delivers labor compliance enforcements and quick lock-screen access for employee clock-in/out PIN operations. It ensures cash drawer accountability by locking POS features unless an active cashier timecard exists.
+
+**Approved Stories:**
+- **43.1 Unauthenticated Lock Screen Toggle Endpoint**: Create a `/pos/timecard/toggle` route running outside the primary `auth` middleware stack but with valid branch, tenant, and terminal constraints. [Closed]
+- **43.2 Terminal Context Identification Middleware**: Implement `IdentifyTerminalContext` middleware verifying `X-Terminal-ID` headers against `SalesMachineProfile` profiles. [Closed]
+- **43.3 Enforced Clocked-In State Guards**: Implement `EnforceClockedIn` middleware protecting cashier-controlled routes (opening shifts, checkout validation/creation, payment split, cash events) unless the actor has an active timecard. [Closed]
+- **43.4 Decaying PIN Lockouts**: Track failed PIN attempts via `TimecardSecurityService` to lock registers on repeated failure thresholds. [Closed]
+- **43.5 Touch Keypad & Live Status Indicators**: Provide an interactive keypad on the lock screen and a dynamic clock indicator badge in `ShiftHUD.jsx`. [Closed]
+
+**Architecture Boundary & Guidelines:**
+- **Derive contexts securely**: Never trust tenant, branch, or user identifiers from the request payload. Resolve them from authenticated terminal metadata.
+- **Isolate labor records**: Maintain a clear separation between HR-focused timecards and cash-drawer-focused cashier shifts.
+- **Do not block shift closing**: Allow managers to override shift closures even if the cashier is not clocked in.

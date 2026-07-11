@@ -233,10 +233,10 @@ Route::middleware(['auth', 'tenant'])->group(function () {
         // Operational Actions (Require Branch Context)
         Route::middleware(['branch'])->group(function () {
             Route::get('/open', [\App\Http\Controllers\Shift\ShiftController::class, 'open'])
-                ->middleware('permission:open_shift')
+                ->middleware(['permission:open_shift', 'timecard.clocked_in'])
                 ->name('open');
             Route::post('/', [\App\Http\Controllers\Shift\ShiftController::class, 'store'])
-                ->middleware('permission:open_shift')
+                ->middleware(['permission:open_shift', 'timecard.clocked_in'])
                 ->name('store');
             Route::post('/{shift}/submit-closing', [\App\Http\Controllers\Shift\ShiftController::class, 'submitClosing'])
                 ->middleware('permission:close_shift')
@@ -254,43 +254,78 @@ Route::middleware(['auth', 'tenant'])->group(function () {
         Route::get('/{shift}', [\App\Http\Controllers\Shift\ShiftSummaryController::class, 'show'])
             ->middleware('permission:view_shift')
             ->name('show');
-            
+
         Route::get('/{shift}/z-report', [\App\Http\Controllers\Shift\ShiftSummaryController::class, 'zReport'])
             ->middleware('permission:view_shift')
             ->name('z-report');
     });
 
     // Epic 41: POS Terminal Tablet Production Routes
+    // Terminal identity binding is enforced via the `terminal` middleware, which
+    // resolves a single verified SalesMachineProfile for the active tenant and
+    // branch and fails closed when terminal context is missing or invalid.
+    // Reference: docs/implementation-plans/epic-41-terminal-identity-binding-planning-lock.md
     Route::prefix('pos/terminal')
         ->name('pos.terminal.')
         ->middleware([
             'auth',
-            'tenant.resolved',
-            'branch.resolved',
+            'tenant',
+            'branch',
+            'terminal',
             'subscription.feature:sales.pos',
         ])
         ->group(function () {
             Route::get('/checkout', [\App\Http\Controllers\CheckoutController::class, 'index'])->name('checkout');
-            // Stubbed for future story implementation
-            Route::get('/shift', [\App\Http\Controllers\CheckoutController::class, 'index'])->name('shift');
-            Route::get('/sync-status', [\App\Http\Controllers\CheckoutController::class, 'index'])->name('sync-status');
-            Route::get('/settings', [\App\Http\Controllers\CheckoutController::class, 'index'])->name('settings');
+            Route::get('/shift', [\App\Http\Controllers\CheckoutController::class, 'shift'])->name('shift');
+            Route::get('/sync-status', [\App\Http\Controllers\CheckoutController::class, 'syncStatus'])->name('sync-status');
+            Route::get('/settings', [\App\Http\Controllers\CheckoutController::class, 'settings'])->name('settings');
         });
 
-    // POS Shell Routes (Legacy transition): requires branch context + sales.pos entitlement
+    // POS Shell Routes (Legacy transition): /pos is no longer a render surface.
+    // Production tablet checkout is canonical at /pos/terminal/checkout.
     Route::middleware(['branch', 'subscription.feature:sales.pos'])->group(function () {
-        Route::get('/pos', [\App\Http\Controllers\POSController::class, 'index'])->name('pos.index');
+        Route::redirect('/pos', '/pos/terminal/checkout')->name('pos.index');
+    });
+
+    // POS operational routes require a verified terminal context. These routes
+    // are used by the tablet shell after /pos/terminal/checkout has resolved
+    // tenant, branch, and terminal identity.
+    Route::middleware(['branch', 'terminal', 'subscription.feature:sales.pos'])->group(function () {
         Route::get('/pos/search', [\App\Http\Controllers\POSController::class, 'search'])->name('pos.search');
         Route::get('/pos/active-shift', [\App\Http\Controllers\POSController::class, 'activeShift'])->name('pos.active-shift');
         Route::get('/pos/layout', [\App\Http\Controllers\POSController::class, 'layout'])
             ->middleware('subscription.feature:layout.custom')
             ->name('pos.layout');
         Route::post('/pos/unlock', [\App\Http\Controllers\POSController::class, 'unlock'])->name('pos.unlock');
-        Route::get('/api/pos/bootstrap-cache', [\App\Http\Controllers\POS\OfflineReadinessController::class, 'bootstrapCache'])->name('pos.bootstrap-cache');
+
+        Route::post('/pos/sales/{sale}/void', [\App\Http\Controllers\POS\VoidRefundController::class, 'void'])
+            ->middleware('idempotent')
+            ->name('pos.sales.void');
+        Route::post('/pos/sales/{sale}/refund', [\App\Http\Controllers\POS\VoidRefundController::class, 'refund'])
+            ->middleware('idempotent')
+            ->name('pos.sales.refund');
+
+        // Epic 36: Local Register Sync & Store-Level Coordination
+        Route::post('/pos/local-sync/broker/register', [\App\Http\Controllers\POS\LocalSyncController::class, 'registerBroker'])
+            ->name('pos.local-sync.broker.register');
+        Route::get('/pos/local-sync/broker/discover', [\App\Http\Controllers\POS\LocalSyncController::class, 'discoverBroker'])
+            ->name('pos.local-sync.broker.discover');
+        Route::post('/pos/local-sync/table/lock', [\App\Http\Controllers\POS\LocalSyncController::class, 'lockTable'])
+            ->name('pos.local-sync.table.lock');
+        Route::post('/pos/local-sync/table/unlock', [\App\Http\Controllers\POS\LocalSyncController::class, 'unlockTable'])
+            ->name('pos.local-sync.table.unlock');
+
+        // Timecard status check (within auth/tenant/branch context)
+        Route::get('/pos/timecard/status', [\App\Http\Controllers\POS\TimecardController::class, 'status'])
+            ->name('pos.timecard.status');
+
+        Route::post('/pos/offline-sync', [\App\Http\Controllers\POS\OfflineSyncController::class, 'sync'])
+            ->middleware('permission:create_sale')
+            ->name('pos.offline-sync.web');
     });
 
-    // Checkout Validation: requires branch context + create_sale permission + sales.pos entitlement
-    Route::middleware(['branch', 'permission:create_sale', 'subscription.feature:sales.pos'])->group(function () {
+    // Checkout Validation: requires branch context + create_sale permission + sales.pos entitlement + terminal + timecard.clocked_in
+    Route::middleware(['branch', 'permission:create_sale', 'subscription.feature:sales.pos', 'terminal', 'timecard.clocked_in'])->group(function () {
         Route::post('/pos/checkout/validate', [\App\Http\Controllers\CheckoutController::class, 'validateDraft'])
              ->name('pos.checkout.validate');
 
@@ -346,7 +381,7 @@ Route::middleware(['auth', 'tenant'])->group(function () {
             Route::get('/{purchaseOrder}/export', [\App\Http\Controllers\Procurement\PurchaseOrderController::class, 'exportOne'])
                 ->middleware('permission:procurement.purchase-orders.export')
                 ->name('export-one');
-                
+
             Route::get('/', [\App\Http\Controllers\Procurement\PurchaseOrderController::class, 'index'])
                 ->middleware('permission:procurement.purchase-orders.view')
                 ->name('index');
@@ -365,7 +400,7 @@ Route::middleware(['auth', 'tenant'])->group(function () {
             Route::put('/{purchaseOrder}', [\App\Http\Controllers\Procurement\PurchaseOrderController::class, 'update'])
                 ->middleware('permission:procurement.purchase-orders.create')
                 ->name('update');
-                
+
             // Lifecycle transitions
             Route::post('/{purchaseOrder}/submit', [\App\Http\Controllers\Procurement\PurchaseOrderController::class, 'submit'])
                 ->middleware('permission:procurement.purchase-orders.create')
@@ -476,15 +511,15 @@ Route::middleware(['auth', 'tenant'])->group(function () {
             Route::get('/', [\App\Http\Controllers\Inventory\StocktakeController::class, 'index'])
                  ->middleware('permission:inventory.stocktake.view')
                  ->name('index');
-                 
+
             Route::get('/create', [\App\Http\Controllers\Inventory\StocktakeController::class, 'create'])
                  ->middleware('permission:inventory.stocktake.create')
                  ->name('create');
-                 
+
             Route::post('/', [\App\Http\Controllers\Inventory\StocktakeController::class, 'store'])
                  ->middleware('permission:inventory.stocktake.create')
                  ->name('store');
-    
+
             Route::get('/catalog/search', [\App\Http\Controllers\Inventory\StocktakeController::class, 'searchCatalog'])
                  ->middleware('permission:inventory.stocktake.count')
                  ->name('catalog.search');
@@ -492,15 +527,15 @@ Route::middleware(['auth', 'tenant'])->group(function () {
             Route::get('/{stocktakeSession}', [\App\Http\Controllers\Inventory\StocktakeController::class, 'show'])
                  ->middleware('permission:inventory.stocktake.view')
                  ->name('show');
-                 
+
             Route::post('/{stocktakeSession}/start-counting', [\App\Http\Controllers\Inventory\StocktakeController::class, 'startCounting'])
                  ->middleware('permission:inventory.stocktake.count')
                  ->name('start-counting');
-                 
+
             Route::post('/{stocktakeSession}/cancel', [\App\Http\Controllers\Inventory\StocktakeController::class, 'cancel'])
                  ->middleware('permission:inventory.stocktake.cancel')
                  ->name('cancel');
-                 
+
             Route::put('/{stocktakeSession}/lines', [\App\Http\Controllers\Inventory\StocktakeController::class, 'updateLines'])
                  ->middleware('permission:inventory.stocktake.count')
                  ->name('lines.update');
@@ -570,6 +605,16 @@ Route::middleware(['auth', 'tenant'])->group(function () {
     });
 
 
+    // Tenant User Management
+    Route::prefix('admin/users')->name('admin.users.')->middleware('permission:manage_users')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Admin\UserController::class, 'index'])
+            ->name('index');
+        Route::post('/', [\App\Http\Controllers\Admin\UserController::class, 'store'])
+            ->name('store');
+        Route::put('/{user}', [\App\Http\Controllers\Admin\UserController::class, 'update'])
+            ->name('update');
+    });
+
     // Product Catalog Admin Routes
     Route::prefix('admin/product-categories')->name('admin.product-categories.')->group(function () {
         Route::get('/', [\App\Http\Controllers\Admin\ProductCategoryController::class, 'index'])
@@ -623,7 +668,7 @@ Route::middleware(['auth', 'tenant'])->group(function () {
         Route::delete('/{product}', [\App\Http\Controllers\Admin\ProductController::class, 'destroy'])
             ->middleware(['permission:manage_products', 'subscription.feature:catalog.edit'])
             ->name('destroy');
-        
+
         // Branch-specific pricing
         Route::post('/{product}/branch-pricing', [\App\Http\Controllers\Admin\ProductController::class, 'updateBranchPricing'])
             ->middleware(['permission:manage_products', 'subscription.feature:catalog.edit'])
@@ -715,6 +760,14 @@ Route::middleware(['auth', 'tenant'])->group(function () {
             ->name('inventory.reports.product-composition.export');
     });
 });
+
+Route::post('/pos/timecard/toggle', [\App\Http\Controllers\POS\TimecardController::class, 'toggle'])
+    ->middleware(['tenant', 'branch', 'terminal', 'subscription.feature:sales.pos'])
+    ->name('pos.timecard.toggle');
+
+Route::get('/api/pos/bootstrap-cache', [\App\Http\Controllers\POS\OfflineReadinessController::class, 'bootstrapCache'])
+    ->middleware(['tenant', 'branch', 'subscription.feature:sales.pos'])
+    ->name('pos.bootstrap-cache');
 
 Route::prefix('/support/assisted/{supportAccessSession}')
     ->middleware(['auth', 'support.assisted'])

@@ -4,6 +4,50 @@ All notable changes to the IPOS platform, modules, and user workflows are docume
 
 ---
 
+## [1.5.4] - 2026-07-11
+### Changed
+* **POS Terminal Offline Reconnect and Sync UX Stabilization**
+  * Hardened reconnect behavior after **Check Connection** so expected `401/419` or network reachability failures are treated as offline/session state instead of cashier-blocking hard errors.
+  * Local sync broker discovery now falls back to **Local Sync Offline** when protected broker endpoints are unavailable or unauthenticated.
+  * Product search now rejects non-JSON responses before parsing, allowing cached catalog fallback when a reconnect returns an HTML login/error page.
+  * Offline sync now distinguishes retryable failures from review-required conflicts such as sequence-order mismatches.
+  * Service-worker shell cache rolled to `ipos-terminal-shell-v31-20260711`; current POS bundle for this stabilization build is `Index-Ba8-w-pW.js`.
+
+### Documentation
+* Updated the Terminal Sync Diagnostics user guide, troubleshooting guide, offline stabilization validation note, and roadmap references.
+* Added the POS Terminal Offline Checkout and Sync UAT checklist for cashier, admin, reconnect, and queue review scenarios.
+
+### Validation Evidence
+- `node tests/Frontend/catalogCache.test.js`
+- `node tests/Frontend/offlineQueueSync.test.js`
+- `node tests/Frontend/offlinePaymentQueue.test.js`
+- `node tests/Frontend/connectivityStore.test.mjs`
+- `npm run build`
+
+---
+
+## [1.5.3] - 2026-07-10
+### Changed
+* **POS Terminal Offline Checkout Stabilization**
+  * Updated offline `Ready to Complete` behavior so the Split Payment Wizard opens in offline mode instead of bypassing payment review.
+  * Restricted offline provisional capture to cash payments only; card, e-wallet, bank, and other tender types remain disabled until server connectivity returns.
+  * Fixed split-payment validation so abandoned empty split rows do not block a fully paid cash transaction.
+  * Added cart item removal and footer visibility hardening so checkout controls remain reachable on tablet layouts.
+  * Preserved POS shell refresh protection through service-worker cache rollover (`ipos-terminal-shell-v22-20260708`).
+
+* **Terminal Identity and Timecard Binding**
+  * Hardened terminal context validation so timecard clock-in/out records remain bound to a verified terminal profile.
+  * Invalid or missing terminal context now fails closed with `TERMINAL_CONTEXT_INVALID` instead of creating terminal-less timecard records.
+
+### Validation Evidence
+- `node --test tests/Frontend/offlineQueueSync.test.js tests/Frontend/splitPaymentHelper.test.mjs tests/Frontend/splitPaymentFailureState.test.mjs tests/Frontend/checkoutUncertaintyState.test.mjs tests/Frontend/cartDraftStorage.test.js tests/Frontend/connectivityStore.test.mjs tests/Frontend/catalogCache.test.js`: 38 passed
+- `php artisan test tests/Feature/POS/TimecardControllerTest.php`: 14 passed / 53 assertions
+- `php artisan test tests/Feature/POS/TerminalIdentityBindingTest.php`: 7 passed / 8 assertions
+- `php artisan test tests/Feature/POS/OfflineSalesAuditPayloadTest.php tests/Feature/POS/OfflineSyncValidationTest.php tests/Feature/POS/OfflineSyncIdempotencyTest.php tests/Feature/POS/TimecardControllerTest.php tests/Feature/POS/PaymentRecordingTest.php tests/Feature/POS/SplitPaymentRecordingTest.php`: 70 passed / 206 assertions
+- `npm run build`
+
+---
+
 ## [1.5.2] - 2026-07-10
 ### Added
 * **Philippine Statutory Discount Engine (G-080)**
@@ -26,7 +70,7 @@ All notable changes to the IPOS platform, modules, and user workflows are docume
 ## [1.5.1] - 2026-07-08
 ### Changed
 * **POS shell cache rollover**
-  * Bumped the POS shell cache key to `ipos-terminal-shell-v22-20260708` in `public/sw.js` and `resources/views/app.blade.php` to force clients onto the latest cached shell assets.
+  * Bumped the POS shell cache key to `ipos-terminal-shell-v21-20260708` in `public/sw.js` and `resources/views/app.blade.php` to force clients onto the latest cached shell assets.
   * Revalidated the shell update with `npm run build`, `node --test tests/Frontend/offlineQueueSync.test.js`, and `node --check public/sw.js`.
 
 ---

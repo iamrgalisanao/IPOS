@@ -4,6 +4,7 @@ import {
     X, UserCheck, Users, Calculator, AlertTriangle, Loader2, Plus, Trash2,
     ShieldCheck, Percent, Receipt, ChevronDown,
 } from 'lucide-react';
+import { isOffline } from '@/POS/offline/offlineGuards';
 
 const CATEGORY_LABELS = {
     senior: 'Senior Citizen',
@@ -99,6 +100,12 @@ export default function SpecialDiscountModal({
         setErrors([]);
 
         try {
+            if (isOffline()) {
+                setErrors(['Special discount calculation requires a server connection. Reconnect before applying discounts.']);
+                setCalculationResult(null);
+                return;
+            }
+
             const response = await fetch('/api/pos/discounts/calculate', {
                 method: 'POST',
                 headers: {
@@ -155,6 +162,11 @@ export default function SpecialDiscountModal({
     };
 
     const handleApply = async () => {
+        if (isOffline()) {
+            setErrors(['Special discounts require a server connection. Reconnect before applying discounts.']);
+            return;
+        }
+
         if (!selectedType) {
             setErrors(['Please select a discount type.']);
             return;

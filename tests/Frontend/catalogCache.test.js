@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import axios from 'axios';
-import { catalogCache } from '../../resources/js/POS/offline/catalogCache.ts';
+import { catalogCache, filterCachedProducts } from '../../resources/js/POS/offline/catalogCache.ts';
 import { validateCheckoutAllowed, isOffline, resolveOfflineCaptureReadiness } from '../../resources/js/POS/offline/offlineGuards.ts';
 import { globalState } from '../../resources/js/POS/offline/connectivityStore.ts';
 
@@ -152,6 +152,50 @@ test('Frontend catalogCache functionality', async (t) => {
         assert.strictEqual(cached.categories[0].name, 'Category X');
     });
 
+    await t.test('cached POS products filter by UUID category and display name', async () => {
+        const categoryId = 'category-uuid-1';
+        const cachedProducts = [
+            {
+                product_id: 'product-1',
+                product_category_id: categoryId,
+                display_name: 'Iced Americano',
+                sku: 'COF-ICE',
+            },
+            {
+                product_id: 'product-2',
+                product_category_id: 'category-uuid-2',
+                display_name: 'Hot Tea',
+                sku: 'TEA-HOT',
+            },
+        ];
+
+        assert.deepStrictEqual(
+            filterCachedProducts(cachedProducts, '', categoryId).map((product) => product.product_id),
+            ['product-1']
+        );
+
+        assert.deepStrictEqual(
+            filterCachedProducts(cachedProducts, 'americano', null).map((product) => product.product_id),
+            ['product-1']
+        );
+
+        assert.deepStrictEqual(
+            filterCachedProducts([
+                {
+                    product_id: 'product-3',
+                    category_name: 'Beverages',
+                    display_name: 'Lemonade',
+                },
+                {
+                    product_id: 'product-4',
+                    category_name: 'Snacks',
+                    display_name: 'Chips',
+                },
+            ], '', { id: 'beverages-id', name: 'Beverages' }).map((product) => product.product_id),
+            ['product-3']
+        );
+    });
+
     await t.test('cache preserves tax hash', async () => {
         await catalogCache.writeBootstrapPayload(mockPayload);
         const taxHash = await catalogCache.getTaxHash();
@@ -211,9 +255,9 @@ test('Frontend catalogCache functionality', async (t) => {
             },
         });
 
-        await assert.rejects(async () => {
+        await assert.doesNotReject(async () => {
             await validateCheckoutAllowed();
-        }, /offline sequence prefix/i);
+        });
 
         // Restore network status
         mockNavigator.onLine = true;

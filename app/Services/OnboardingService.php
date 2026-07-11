@@ -144,7 +144,9 @@ class OnboardingService
             ]);
 
             // Assign Owner role
-            $ownerRole = Role::where('name', 'Owner')->where('tenant_id', $tenant->id)->first();
+            $ownerRole = Role::whereIn('name', ['Owner/Admin', 'Owner'])
+                ->where('tenant_id', $tenant->id)
+                ->first();
             if ($ownerRole) {
                 $user->roles()->attach($ownerRole->id);
             }
