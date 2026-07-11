@@ -237,6 +237,68 @@ class OfflineBootstrapCacheTest extends TestCase
         $this->assertNotSame($initialHash, $updatedHash);
     }
 
+    public function test_bootstrap_layout_hash_uses_terminal_override_when_available(): void
+    {
+        $service = app(CacheBootstrapService::class);
+
+        $branchLayout = PosLayout::create([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Branch Counter',
+            'version' => 1,
+            'schema' => [
+                'tiles' => [
+                    ['id' => $this->product->id, 'type' => 'product', 'label' => 'Americano'],
+                ],
+            ],
+            'status' => PosLayout::STATUS_PUBLISHED,
+            'created_by' => $this->cashier->id,
+            'updated_by' => $this->cashier->id,
+        ]);
+
+        $overrideLayout = PosLayout::create([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Terminal Express',
+            'version' => 1,
+            'schema' => [
+                'tiles' => [
+                    ['id' => $this->product->id, 'type' => 'product', 'label' => 'Express Americano'],
+                ],
+            ],
+            'status' => PosLayout::STATUS_PUBLISHED,
+            'created_by' => $this->cashier->id,
+            'updated_by' => $this->cashier->id,
+        ]);
+
+        DB::table('branch_pos_layout')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branch->id,
+            'pos_layout_id' => $branchLayout->id,
+            'active_from' => now(),
+            'is_active' => true,
+            'published_by' => $this->cashier->id,
+            'published_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->machineProfile->update(['pos_layout_id' => $overrideLayout->id]);
+
+        $payload = $service->generatePayload(
+            $this->tenant->fresh(),
+            $this->branch->fresh(),
+            $this->cashier,
+            $this->machineProfile->fresh()
+        );
+
+        $branchHash = $service->calculateLayoutVersionHash($this->tenant->id, $this->branch->id);
+        $overrideHash = $service->calculateLayoutVersionHashFromLayout($overrideLayout->fresh());
+
+        $this->assertNotSame($branchHash, $payload['layout_version_hash']);
+        $this->assertSame($overrideHash, $payload['layout_version_hash']);
+        $this->assertSame($overrideHash, $payload['config_snapshot']['layout_version_hash']);
+    }
+
     public function test_bootstrap_cache_returns_403_on_inactive_branch(): void
     {
         $this->branch->update(['status' => 'inactive']);
