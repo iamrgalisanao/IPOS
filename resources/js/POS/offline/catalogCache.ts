@@ -28,8 +28,27 @@ export interface CacheBootstrapPayload {
     permissions: string[];
     tax_configuration_version_hash: string | null;
     catalog_version_hash: string | null;
+    layout_version_hash?: string | null;
+    discount_rules_version_hash?: string | null;
+    payment_methods_version_hash?: string | null;
+    terminal_policy_version_hash?: string | null;
+    printer_profile_version_hash?: string | null;
+    config_snapshot_hash?: string | null;
+    config_snapshot?: Record<string, any> | null;
     generated_at: string;
     cache_ttl_seconds: number;
+}
+
+export interface ConfigSnapshotMetadata {
+    config_snapshot_hash: string | null;
+    layout_version_hash: string | null;
+    catalog_version_hash: string | null;
+    tax_configuration_version_hash: string | null;
+    discount_rules_version_hash: string | null;
+    payment_methods_version_hash: string | null;
+    terminal_policy_version_hash: string | null;
+    printer_profile_version_hash: string | null;
+    config_snapshot: Record<string, any> | null;
 }
 
 function matchesCachedProductCategory(product: any, category: any): boolean {
@@ -173,6 +192,13 @@ export class CatalogCacheService {
              const metadataStore = tx.objectStore('metadata');
              metadataStore.put(payload.tax_configuration_version_hash, 'tax_configuration_version_hash');
              metadataStore.put(payload.catalog_version_hash, 'catalog_version_hash');
+             metadataStore.put(payload.layout_version_hash || null, 'layout_version_hash');
+             metadataStore.put(payload.discount_rules_version_hash || null, 'discount_rules_version_hash');
+             metadataStore.put(payload.payment_methods_version_hash || null, 'payment_methods_version_hash');
+             metadataStore.put(payload.terminal_policy_version_hash || null, 'terminal_policy_version_hash');
+             metadataStore.put(payload.printer_profile_version_hash || null, 'printer_profile_version_hash');
+             metadataStore.put(payload.config_snapshot_hash || null, 'config_snapshot_hash');
+             metadataStore.put(payload.config_snapshot || null, 'config_snapshot');
              metadataStore.put(payload.tenant_context, 'tenant_context');
              metadataStore.put(payload.branch_context, 'branch_context');
              metadataStore.put(payload.machine_profile_context, 'machine_profile_context');
@@ -218,6 +244,13 @@ export class CatalogCacheService {
             const metadataStore = tx.objectStore('metadata');
             const hashReq = metadataStore.get('tax_configuration_version_hash');
             const catalogHashReq = metadataStore.get('catalog_version_hash');
+            const layoutHashReq = metadataStore.get('layout_version_hash');
+            const discountRulesHashReq = metadataStore.get('discount_rules_version_hash');
+            const paymentMethodsHashReq = metadataStore.get('payment_methods_version_hash');
+            const terminalPolicyHashReq = metadataStore.get('terminal_policy_version_hash');
+            const printerProfileHashReq = metadataStore.get('printer_profile_version_hash');
+            const configSnapshotHashReq = metadataStore.get('config_snapshot_hash');
+            const configSnapshotReq = metadataStore.get('config_snapshot');
             const tenantReq = metadataStore.get('tenant_context');
             const branchReq = metadataStore.get('branch_context');
             const machineReq = metadataStore.get('machine_profile_context');
@@ -236,6 +269,13 @@ export class CatalogCacheService {
                     permissions: permissionsReq.result || [],
                     tax_configuration_version_hash: hashReq.result || null,
                     catalog_version_hash: catalogHashReq.result || null,
+                    layout_version_hash: layoutHashReq.result || null,
+                    discount_rules_version_hash: discountRulesHashReq.result || null,
+                    payment_methods_version_hash: paymentMethodsHashReq.result || null,
+                    terminal_policy_version_hash: terminalPolicyHashReq.result || null,
+                    printer_profile_version_hash: printerProfileHashReq.result || null,
+                    config_snapshot_hash: configSnapshotHashReq.result || null,
+                    config_snapshot: configSnapshotReq.result || null,
                     generated_at: generatedAtReq.result || '',
                     cache_ttl_seconds: ttlReq.result || 0
                 });
@@ -262,6 +302,36 @@ export class CatalogCacheService {
             const request = tx.objectStore('metadata').get('catalog_version_hash');
             request.onsuccess = () => resolve(request.result || null);
             request.onerror = () => reject(request.error);
+        });
+    }
+
+    async getConfigSnapshotMetadata(): Promise<ConfigSnapshotMetadata> {
+        const db = await this.initDb();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(['metadata'], 'readonly');
+            const store = tx.objectStore('metadata');
+            const configSnapshotHashReq = store.get('config_snapshot_hash');
+            const layoutHashReq = store.get('layout_version_hash');
+            const catalogHashReq = store.get('catalog_version_hash');
+            const taxHashReq = store.get('tax_configuration_version_hash');
+            const discountRulesHashReq = store.get('discount_rules_version_hash');
+            const paymentMethodsHashReq = store.get('payment_methods_version_hash');
+            const terminalPolicyHashReq = store.get('terminal_policy_version_hash');
+            const printerProfileHashReq = store.get('printer_profile_version_hash');
+            const configSnapshotReq = store.get('config_snapshot');
+
+            tx.oncomplete = () => resolve({
+                config_snapshot_hash: configSnapshotHashReq.result || null,
+                layout_version_hash: layoutHashReq.result || null,
+                catalog_version_hash: catalogHashReq.result || null,
+                tax_configuration_version_hash: taxHashReq.result || null,
+                discount_rules_version_hash: discountRulesHashReq.result || null,
+                payment_methods_version_hash: paymentMethodsHashReq.result || null,
+                terminal_policy_version_hash: terminalPolicyHashReq.result || null,
+                printer_profile_version_hash: printerProfileHashReq.result || null,
+                config_snapshot: configSnapshotReq.result || null,
+            });
+            tx.onerror = () => reject(tx.error);
         });
     }
 

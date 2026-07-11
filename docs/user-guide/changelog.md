@@ -4,6 +4,27 @@ All notable changes to the IPOS platform, modules, and user workflows are docume
 
 ---
 
+## [1.5.7] - 2026-07-11
+### Changed
+* **Admin Config Snapshot Foundation**
+  * POS bootstrap cache now emits `config_snapshot_hash`, `config_snapshot`, and version hashes for layout, catalog, tax, statutory discount metadata, payment methods, terminal policy, and printer profile placeholder.
+  * POS IndexedDB cache preserves config snapshot metadata for offline use.
+  * Offline cash-capture payloads now include the cached snapshot metadata before queueing.
+  * Offline sync payloads forward snapshot metadata to the server for audit and stale-config classification.
+  * Server-side offline import validation now treats snapshot drift as `accepted_with_warning` instead of blocking intake.
+  * DiscountType model fillable/casts were completed to support statutory discount configuration fixtures consistently.
+
+### Boundaries
+* No terminal-side master configuration UI was added.
+* No hardware readiness claim was made for receipt printers or cash drawers.
+* No local official GCT, Z-read, e-journal, or BIR-certified offline finalization was introduced.
+
+### Validation Evidence
+- `php artisan test tests/Feature/POS/OfflineBootstrapCacheTest.php tests/Feature/POS/OfflineSalesAuditPayloadTest.php`
+- `node --test tests/Frontend/catalogCache.test.js tests/Frontend/offlineQueueSync.test.js`
+- PHP syntax checks for modified backend PHP files.
+- Validation note: `docs/validation/admin-config-snapshot-foundation-2026-07-11.md`
+
 ## [1.5.6] - 2026-07-11
 ### Documentation
 * **POS Admin Configuration & Terminal Capability Planning Reference**

@@ -3,11 +3,14 @@
 namespace App\Services\POS\OfflineReadiness;
 
 use App\Models\Branch;
+use App\Models\DiscountType;
+use App\Models\PaymentMethod;
 use App\Models\Tenant;
 use App\Models\TaxCategory;
 use App\Models\ProductCategory;
 use App\Models\BranchProductPricing;
 use App\Models\Product;
+use App\Models\PosLayout;
 use App\Models\SalesMachineProfile;
 use App\Services\CatalogService;
 use App\Services\TenantContext;
@@ -114,6 +117,28 @@ class CacheBootstrapService
             // 7. Calculate version hashes
             $taxHash = $this->calculateTaxConfigHash($tenant->id, $branch->id);
             $catalogHash = $this->calculateCatalogVersionHash($tenant->id, $branch->id);
+            $layoutHash = $this->calculateLayoutVersionHash($tenant->id, $branch->id);
+            $discountRulesHash = $this->calculateDiscountRulesVersionHash($tenant->id);
+            $paymentMethodsHash = $this->calculatePaymentMethodsVersionHash($tenant->id);
+            $terminalPolicyHash = $this->calculateTerminalPolicyVersionHash($tenant, $branch, $machineProfile);
+            $printerProfileHash = $this->calculatePrinterProfileVersionHash($tenant->id, $branch->id, $machineProfile?->id);
+
+            $snapshot = [
+                'schema_version' => 1,
+                'tenant_id' => $tenant->id,
+                'branch_id' => $branch->id,
+                'sales_machine_profile_id' => $machineProfile?->id,
+                'layout_version_hash' => $layoutHash,
+                'catalog_version_hash' => $catalogHash,
+                'tax_configuration_version_hash' => $taxHash,
+                'discount_rules_version_hash' => $discountRulesHash,
+                'payment_methods_version_hash' => $paymentMethodsHash,
+                'terminal_policy_version_hash' => $terminalPolicyHash,
+                'printer_profile_version_hash' => $printerProfileHash,
+            ];
+
+            $snapshotHash = $this->hashCanonical($snapshot);
+            $snapshot['config_snapshot_hash'] = $snapshotHash;
 
             return [
                 'products' => $products->toArray(),
@@ -125,6 +150,13 @@ class CacheBootstrapService
                 'permissions' => $permissions,
                 'tax_configuration_version_hash' => $taxHash,
                 'catalog_version_hash' => $catalogHash,
+                'layout_version_hash' => $layoutHash,
+                'discount_rules_version_hash' => $discountRulesHash,
+                'payment_methods_version_hash' => $paymentMethodsHash,
+                'terminal_policy_version_hash' => $terminalPolicyHash,
+                'printer_profile_version_hash' => $printerProfileHash,
+                'config_snapshot_hash' => $snapshotHash,
+                'config_snapshot' => $snapshot,
                 'generated_at' => now()->toIso8601String(),
                 'cache_ttl_seconds' => 3600,
             ];
@@ -171,12 +203,10 @@ class CacheBootstrapService
             'updated_at' => $tenant->updated_at?->toIso8601String(),
         ] : [];
 
-        $serialized = json_encode([
+        return $this->hashCanonical([
             'tax_categories' => $taxCategories,
             'tenant_settings' => $tenantTaxSettings,
         ]);
-
-        return hash('sha256', $serialized);
     }
 
     /**
@@ -225,12 +255,211 @@ class CacheBootstrapService
             ])
             ->toArray();
 
-        $serialized = json_encode([
+        return $this->hashCanonical([
             'categories' => $categories,
             'products' => $products,
             'branch_pricing_overrides' => $branchPricingOverrides,
         ]);
+    }
 
-        return hash('sha256', $serialized);
+    public function calculateLayoutVersionHash(string $tenantId, string $branchId): string
+    {
+        $layout = PosLayout::query()
+            ->join('branch_pos_layout', 'branch_pos_layout.pos_layout_id', '=', 'pos_layouts.id')
+            ->where('pos_layouts.tenant_id', $tenantId)
+            ->where('branch_pos_layout.tenant_id', $tenantId)
+            ->where('branch_pos_layout.branch_id', $branchId)
+            ->where('branch_pos_layout.is_active', true)
+            ->where('pos_layouts.status', PosLayout::STATUS_PUBLISHED)
+            ->orderByDesc('branch_pos_layout.published_at')
+            ->orderByDesc('branch_pos_layout.created_at')
+            ->select([
+                'pos_layouts.id',
+                'pos_layouts.name',
+                'pos_layouts.version',
+                'pos_layouts.schema',
+                'pos_layouts.status',
+                'pos_layouts.updated_at',
+                'branch_pos_layout.id as assignment_id',
+                'branch_pos_layout.published_at',
+                'branch_pos_layout.updated_at as assignment_updated_at',
+            ])
+            ->first();
+
+        return $this->hashCanonical([
+            'layout' => $layout ? [
+                'id' => $layout->id,
+                'name' => $layout->name,
+                'version' => (int) $layout->version,
+                'status' => $layout->status,
+                'schema' => $this->decodeJsonValue($layout->schema),
+                'updated_at' => $this->isoDate($layout->updated_at),
+                'assignment_id' => $layout->assignment_id,
+                'published_at' => $this->isoDate($layout->published_at),
+                'assignment_updated_at' => $this->isoDate($layout->assignment_updated_at),
+            ] : null,
+        ]);
+    }
+
+    public function calculateDiscountRulesVersionHash(string $tenantId): string
+    {
+        $discountTypes = DiscountType::query()
+            ->where('is_active', true)
+            ->orderBy('code')
+            ->orderBy('id')
+            ->get([
+                'id',
+                'code',
+                'name',
+                'statutory_category',
+                'default_rate',
+                'vat_treatment',
+                'requires_identity',
+                'requires_approval',
+                'applies_to_fnb',
+                'applies_to_retail',
+                'is_active',
+                'updated_at',
+            ])
+            ->map(fn (DiscountType $discountType) => [
+                'id' => $discountType->id,
+                'code' => $discountType->code,
+                'name' => $discountType->name,
+                'statutory_category' => $discountType->statutory_category,
+                'default_rate' => number_format((float) $discountType->default_rate, 4, '.', ''),
+                'vat_treatment' => $discountType->vat_treatment,
+                'requires_identity' => (bool) $discountType->requires_identity,
+                'requires_approval' => (bool) $discountType->requires_approval,
+                'applies_to_fnb' => (bool) $discountType->applies_to_fnb,
+                'applies_to_retail' => (bool) $discountType->applies_to_retail,
+                'is_active' => (bool) $discountType->is_active,
+                'updated_at' => $discountType->updated_at?->toIso8601String(),
+            ])
+            ->toArray();
+
+        return $this->hashCanonical([
+            'discount_types' => $discountTypes,
+        ]);
+    }
+
+    public function calculatePaymentMethodsVersionHash(string $tenantId): string
+    {
+        $paymentMethods = PaymentMethod::active()
+            ->where('tenant_id', $tenantId)
+            ->orderBy('code')
+            ->orderBy('id')
+            ->get([
+                'id',
+                'code',
+                'name',
+                'type',
+                'reference_required',
+                'strict_reference_mode',
+                'settlement_tracking_enabled',
+                'is_default',
+                'status',
+                'updated_at',
+            ])
+            ->map(fn (PaymentMethod $method) => [
+                'id' => $method->id,
+                'code' => $method->code,
+                'name' => $method->name,
+                'type' => $method->type,
+                'reference_required' => (bool) $method->reference_required,
+                'strict_reference_mode' => (bool) $method->strict_reference_mode,
+                'settlement_tracking_enabled' => (bool) $method->settlement_tracking_enabled,
+                'is_default' => (bool) $method->is_default,
+                'status' => $method->status,
+                'updated_at' => $method->updated_at?->toIso8601String(),
+            ])
+            ->toArray();
+
+        return $this->hashCanonical([
+            'payment_methods' => $paymentMethods,
+        ]);
+    }
+
+    public function calculateTerminalPolicyVersionHash(Tenant $tenant, Branch $branch, ?SalesMachineProfile $profile): string
+    {
+        return $this->hashCanonical([
+            'tenant' => [
+                'id' => $tenant->id,
+                'offline_sales_enabled' => (bool) $tenant->offline_sales_enabled,
+            ],
+            'branch' => [
+                'id' => $branch->id,
+                'offline_sales_enabled' => (bool) $branch->offline_sales_enabled,
+                'inventory_deduction_policy' => $branch->inventory_deduction_policy ?: 'strict_block',
+            ],
+            'terminal' => $profile ? [
+                'id' => $profile->id,
+                'profile_code' => $profile->profile_code,
+                'terminal_identifier' => $profile->terminal_identifier,
+                'status' => $profile->status,
+                'offline_sales_enabled' => (bool) $profile->offline_sales_enabled,
+                'offline_sequence_prefix' => $profile->offline_sequence_prefix,
+                'offline_sequence_status' => $profile->offline_sequence_status ?: 'active',
+            ] : null,
+        ]);
+    }
+
+    public function calculatePrinterProfileVersionHash(string $tenantId, string $branchId, ?string $profileId): string
+    {
+        return $this->hashCanonical([
+            'schema_version' => 1,
+            'status' => 'placeholder',
+            'tenant_id' => $tenantId,
+            'branch_id' => $branchId,
+            'sales_machine_profile_id' => $profileId,
+            'hardware_validation' => 'deferred',
+        ]);
+    }
+
+    private function hashCanonical(array $payload): string
+    {
+        return hash('sha256', json_encode($this->canonicalize($payload)));
+    }
+
+    private function canonicalize(mixed $value): mixed
+    {
+        if (is_array($value)) {
+            if (!array_is_list($value)) {
+                ksort($value);
+            }
+
+            return array_map(fn ($item) => $this->canonicalize($item), $value);
+        }
+
+        return $value;
+    }
+
+    private function decodeJsonValue(mixed $value): mixed
+    {
+        if (is_array($value)) {
+            return $value;
+        }
+
+        if (is_string($value) && $value !== '') {
+            $decoded = json_decode($value, true);
+
+            if (json_last_error() === JSON_ERROR_NONE) {
+                return $decoded;
+            }
+        }
+
+        return $value;
+    }
+
+    private function isoDate(mixed $value): ?string
+    {
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format(DATE_ATOM);
+        }
+
+        if (is_string($value) && $value !== '') {
+            return $value;
+        }
+
+        return null;
     }
 }

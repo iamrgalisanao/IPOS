@@ -127,6 +127,19 @@ const mockPayload = {
     },
     permissions: ['create_sale'],
     tax_configuration_version_hash: 'abc-hash-123',
+    catalog_version_hash: 'catalog-hash-123',
+    layout_version_hash: 'layout-hash-123',
+    discount_rules_version_hash: 'discount-hash-123',
+    payment_methods_version_hash: 'payment-hash-123',
+    terminal_policy_version_hash: 'policy-hash-123',
+    printer_profile_version_hash: 'printer-hash-123',
+    config_snapshot_hash: 'snapshot-hash-123',
+    config_snapshot: {
+        schema_version: 1,
+        config_snapshot_hash: 'snapshot-hash-123',
+        catalog_version_hash: 'catalog-hash-123',
+        tax_configuration_version_hash: 'abc-hash-123',
+    },
     generated_at: new Date().toISOString(),
     cache_ttl_seconds: 3600
 };
@@ -200,6 +213,20 @@ test('Frontend catalogCache functionality', async (t) => {
         await catalogCache.writeBootstrapPayload(mockPayload);
         const taxHash = await catalogCache.getTaxHash();
         assert.strictEqual(taxHash, 'abc-hash-123');
+    });
+
+    await t.test('cache preserves config snapshot metadata', async () => {
+        await catalogCache.writeBootstrapPayload(mockPayload);
+        const cached = await catalogCache.getCachedCatalog();
+        const snapshot = await catalogCache.getConfigSnapshotMetadata();
+
+        assert.strictEqual(cached.config_snapshot_hash, 'snapshot-hash-123');
+        assert.strictEqual(cached.payment_methods_version_hash, 'payment-hash-123');
+        assert.strictEqual(snapshot.config_snapshot_hash, 'snapshot-hash-123');
+        assert.strictEqual(snapshot.layout_version_hash, 'layout-hash-123');
+        assert.strictEqual(snapshot.catalog_version_hash, 'catalog-hash-123');
+        assert.strictEqual(snapshot.tax_configuration_version_hash, 'abc-hash-123');
+        assert.strictEqual(snapshot.config_snapshot.config_snapshot_hash, 'snapshot-hash-123');
     });
 
     await t.test('stale cache can be detected via hash mismatch', async () => {

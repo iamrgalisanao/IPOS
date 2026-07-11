@@ -13,7 +13,27 @@ class DiscountType extends Model
     protected $keyType = 'string';
     public $incrementing = false;
 
-    // ...existing code...
+    protected $fillable = [
+        'code',
+        'name',
+        'statutory_category',
+        'default_rate',
+        'vat_treatment',
+        'requires_identity',
+        'requires_approval',
+        'applies_to_fnb',
+        'applies_to_retail',
+        'is_active',
+    ];
+
+    protected $casts = [
+        'default_rate' => 'decimal:4',
+        'requires_identity' => 'boolean',
+        'requires_approval' => 'boolean',
+        'applies_to_fnb' => 'boolean',
+        'applies_to_retail' => 'boolean',
+        'is_active' => 'boolean',
+    ];
 
     public function saleDiscounts(): HasMany
     {
@@ -33,4 +53,3 @@ class DiscountType extends Model
         return $query->where('is_active', true);
     }
 }
-

@@ -1,7 +1,7 @@
 # POS Admin Configuration and Terminal Capability Backlog
 
 Date: 2026-07-11
-Status: Planning Reference / Not Yet Implementation-Locked
+Status: Planning Reference / Foundation Slice Partially Implemented
 System Area: Back Office Configuration, POS Terminal, Offline Sync, Terminal Governance
 
 ## Purpose
@@ -91,7 +91,7 @@ table movement, clock in/out, open/close shift, and cash drawer movements.
 
 ## First Implementation Candidate
 
-The first implementation-lock candidate should be:
+The first implementation-lock candidate was:
 
 **Admin Config Snapshot Foundation**
 
@@ -117,6 +117,27 @@ Acceptance direction:
 4. Offline sales include relevant snapshot hashes.
 5. Server can classify stale snapshot submissions as accepted-with-warning,
    rejected, or review-required according to policy.
+
+Implementation status as of 2026-07-11:
+
+- Foundation slice implemented in the POS bootstrap cache and offline sync path.
+- POS bootstrap now emits `config_snapshot_hash`, `config_snapshot`, and the
+  individual version hashes listed above.
+- POS IndexedDB preserves snapshot metadata and offline cash-capture payloads
+  include the snapshot metadata during `/pos/offline-sync`.
+- Server-side offline sync accepts optional snapshot fields and classifies hash
+  drift as `accepted_with_warning` without blocking intake.
+- Validation reference:
+  `docs/validation/admin-config-snapshot-foundation-2026-07-11.md`.
+
+Remaining backlog after foundation slice:
+
+- Admin-visible config snapshot/version audit view.
+- Register activation and assigned-terminal snapshot download UX.
+- Payment method offline policy editor.
+- Layout-register assignment hardening and stale-layout warning UX.
+- Printer profile admin schema, still without physical readiness claims until
+  hardware is available.
 
 ## Boundaries
 

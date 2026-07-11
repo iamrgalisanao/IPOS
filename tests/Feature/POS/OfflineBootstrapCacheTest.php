@@ -3,6 +3,9 @@
 namespace Tests\Feature\POS;
 
 use App\Models\Branch;
+use App\Models\DiscountType;
+use App\Models\PaymentMethod;
+use App\Models\PosLayout;
 use App\Models\Product;
 use App\Models\ProductCategory;
 use App\Models\Role;
@@ -15,6 +18,7 @@ use App\Services\RbacSeeder;
 use App\Services\TenantContext;
 use App\Services\POS\OfflineReadiness\CacheBootstrapService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -29,6 +33,7 @@ class OfflineBootstrapCacheTest extends TestCase
     private TaxCategory $vatableCategory;
     private Product $product;
     private SalesMachineProfile $machineProfile;
+    private PaymentMethod $cashPaymentMethod;
 
     protected function setUp(): void
     {
@@ -66,6 +71,18 @@ class OfflineBootstrapCacheTest extends TestCase
             'status' => 'active',
         ]);
 
+        $this->cashPaymentMethod = PaymentMethod::create([
+            'tenant_id' => $this->tenant->id,
+            'code' => 'CASH',
+            'name' => 'Cash',
+            'type' => 'cash',
+            'reference_required' => false,
+            'strict_reference_mode' => false,
+            'settlement_tracking_enabled' => false,
+            'is_default' => true,
+            'status' => 'active',
+        ]);
+
         // Seed Tax Category
         $this->vatableCategory = TaxCategory::create([
             'tenant_id' => $this->tenant->id,
@@ -94,6 +111,19 @@ class OfflineBootstrapCacheTest extends TestCase
             'cost_price'           => 30.00,
             'status'               => 'active',
             'is_inventory_tracked' => false,
+        ]);
+
+        DiscountType::create([
+            'code' => 'SC_STANDARD',
+            'name' => 'Senior Citizen Standard',
+            'statutory_category' => 'senior',
+            'default_rate' => 0.20,
+            'vat_treatment' => 'exempt',
+            'requires_identity' => true,
+            'requires_approval' => false,
+            'applies_to_fnb' => true,
+            'applies_to_retail' => true,
+            'is_active' => true,
         ]);
     }
 
@@ -124,6 +154,14 @@ class OfflineBootstrapCacheTest extends TestCase
         $this->assertArrayHasKey('machine_profile_context', $data);
         $this->assertArrayHasKey('permissions', $data);
         $this->assertArrayHasKey('tax_configuration_version_hash', $data);
+        $this->assertArrayHasKey('catalog_version_hash', $data);
+        $this->assertArrayHasKey('layout_version_hash', $data);
+        $this->assertArrayHasKey('discount_rules_version_hash', $data);
+        $this->assertArrayHasKey('payment_methods_version_hash', $data);
+        $this->assertArrayHasKey('terminal_policy_version_hash', $data);
+        $this->assertArrayHasKey('printer_profile_version_hash', $data);
+        $this->assertArrayHasKey('config_snapshot_hash', $data);
+        $this->assertArrayHasKey('config_snapshot', $data);
         $this->assertArrayHasKey('generated_at', $data);
         $this->assertArrayHasKey('cache_ttl_seconds', $data);
 
@@ -137,6 +175,66 @@ class OfflineBootstrapCacheTest extends TestCase
         $this->assertEquals('inclusive', $data['tenant_context']['tax_mode']);
         $this->assertEquals('MAIN-POS', $data['machine_profile_context']['profile_code']);
         $this->assertContains('create_sale', $data['permissions']);
+        $this->assertMatchesRegularExpression('/^[a-f0-9]{64}$/', $data['config_snapshot_hash']);
+        $this->assertSame($data['config_snapshot_hash'], $data['config_snapshot']['config_snapshot_hash']);
+        $this->assertSame($data['catalog_version_hash'], $data['config_snapshot']['catalog_version_hash']);
+        $this->assertSame($data['tax_configuration_version_hash'], $data['config_snapshot']['tax_configuration_version_hash']);
+        $this->assertSame($this->machineProfile->id, $data['config_snapshot']['sales_machine_profile_id']);
+    }
+
+    public function test_config_snapshot_hash_is_deterministic_and_changes_when_payment_configuration_changes(): void
+    {
+        $service = app(CacheBootstrapService::class);
+
+        $firstPayload = $service->generatePayload($this->tenant, $this->branch, $this->cashier);
+        $secondPayload = $service->generatePayload($this->tenant, $this->branch, $this->cashier);
+
+        $this->assertSame($firstPayload['config_snapshot_hash'], $secondPayload['config_snapshot_hash']);
+        $this->assertSame($firstPayload['payment_methods_version_hash'], $secondPayload['payment_methods_version_hash']);
+
+        $this->cashPaymentMethod->update(['reference_required' => true]);
+
+        $updatedPayload = $service->generatePayload($this->tenant->fresh(), $this->branch->fresh(), $this->cashier);
+
+        $this->assertNotSame($firstPayload['payment_methods_version_hash'], $updatedPayload['payment_methods_version_hash']);
+        $this->assertNotSame($firstPayload['config_snapshot_hash'], $updatedPayload['config_snapshot_hash']);
+    }
+
+    public function test_layout_version_hash_changes_when_branch_layout_assignment_changes(): void
+    {
+        $service = app(CacheBootstrapService::class);
+        $initialHash = $service->calculateLayoutVersionHash($this->tenant->id, $this->branch->id);
+
+        $layout = PosLayout::create([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Main Counter',
+            'version' => 1,
+            'schema' => [
+                'tiles' => [
+                    ['id' => $this->product->id, 'type' => 'product', 'label' => 'Americano'],
+                ],
+            ],
+            'status' => PosLayout::STATUS_PUBLISHED,
+            'created_by' => $this->cashier->id,
+            'updated_by' => $this->cashier->id,
+        ]);
+
+        DB::table('branch_pos_layout')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branch->id,
+            'pos_layout_id' => $layout->id,
+            'active_from' => now(),
+            'is_active' => true,
+            'published_by' => $this->cashier->id,
+            'published_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $updatedHash = $service->calculateLayoutVersionHash($this->tenant->id, $this->branch->id);
+
+        $this->assertNotSame($initialHash, $updatedHash);
     }
 
     public function test_bootstrap_cache_returns_403_on_inactive_branch(): void

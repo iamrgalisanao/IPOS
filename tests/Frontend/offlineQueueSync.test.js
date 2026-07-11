@@ -183,6 +183,19 @@ const bootstrapPayload = {
     },
     permissions: ['create_sale'],
     tax_configuration_version_hash: 'hash-123',
+    catalog_version_hash: 'catalog-hash-123',
+    layout_version_hash: 'layout-hash-123',
+    discount_rules_version_hash: 'discount-hash-123',
+    payment_methods_version_hash: 'payment-hash-123',
+    terminal_policy_version_hash: 'policy-hash-123',
+    printer_profile_version_hash: 'printer-hash-123',
+    config_snapshot_hash: 'snapshot-hash-123',
+    config_snapshot: {
+        schema_version: 1,
+        config_snapshot_hash: 'snapshot-hash-123',
+        catalog_version_hash: 'catalog-hash-123',
+        tax_configuration_version_hash: 'hash-123',
+    },
     generated_at: new Date().toISOString(),
     cache_ttl_seconds: 3600,
 };
@@ -274,12 +287,14 @@ test('Story 28.11 offline queue and sync hardening', async (t) => {
     });
 
     await t.test('valid config allows provisional capture and sync 202 updates local statuses correctly', async () => {
+        const snapshot = await catalogCache.getConfigSnapshotMetadata();
         const first = await offlineSalesQueue.appendTransaction({
             submitted_at: '2026-05-20T12:00:00.000Z',
             items: [{ product_id: 'product-1', quantity: 1, unit_price: '125.00' }],
             client_subtotal: '111.61',
             client_tax_total: '13.39',
             client_total: '125.00',
+            ...snapshot,
         }, { subtotal: '111.61', tax: '13.39', total: '125.00' }, { prefix: 'INV-T01-', initialNextValue: 1 });
 
         const second = await offlineSalesQueue.appendTransaction({
@@ -288,6 +303,7 @@ test('Story 28.11 offline queue and sync hardening', async (t) => {
             client_subtotal: '66.96',
             client_tax_total: '8.04',
             client_total: '75.00',
+            ...snapshot,
         }, { subtotal: '66.96', tax: '8.04', total: '75.00' }, { prefix: 'INV-T01-', initialNextValue: 2 });
 
         navigator.onLine = true;
@@ -298,6 +314,11 @@ test('Story 28.11 offline queue and sync hardening', async (t) => {
             const submittedSequence = payload.imports[0].offline_sequence_number;
             assert.ok([first.offline_sequence, second.offline_sequence].includes(submittedSequence));
             assert.ok(payload.imports[0].items.length > 0);
+            assert.strictEqual(payload.imports[0].config_snapshot_hash, 'snapshot-hash-123');
+            assert.strictEqual(payload.imports[0].layout_version_hash, 'layout-hash-123');
+            assert.strictEqual(payload.imports[0].catalog_version_hash, 'catalog-hash-123');
+            assert.strictEqual(payload.imports[0].payment_methods_version_hash, 'payment-hash-123');
+            assert.strictEqual(payload.imports[0].config_snapshot.config_snapshot_hash, 'snapshot-hash-123');
 
             return {
                 status: 202,
@@ -326,12 +347,14 @@ test('Story 28.11 offline queue and sync hardening', async (t) => {
     });
 
     await t.test('sync only runs online, 422 moves to review, and network failures stay retryable', async () => {
+        const snapshot = await catalogCache.getConfigSnapshotMetadata();
         const record = await offlineSalesQueue.appendTransaction({
             submitted_at: '2026-05-20T12:00:00.000Z',
             items: [{ product_id: 'product-1', quantity: 1, unit_price: '125.00' }],
             client_subtotal: '111.61',
             client_tax_total: '13.39',
             client_total: '125.00',
+            ...snapshot,
         }, { subtotal: '111.61', tax: '13.39', total: '125.00' }, { prefix: 'INV-T01-', initialNextValue: 1 });
 
         navigator.onLine = false;
@@ -367,6 +390,7 @@ test('Story 28.11 offline queue and sync hardening', async (t) => {
             client_subtotal: '66.96',
             client_tax_total: '8.04',
             client_total: '75.00',
+            ...snapshot,
         }, { subtotal: '66.96', tax: '8.04', total: '75.00' }, { prefix: 'INV-T01-', initialNextValue: 2 });
 
         sharedDb.stores.get('transactions').dataMap.get(networkRecord.id).last_sync_attempt_at = new Date(Date.now() - 60_000).toISOString();

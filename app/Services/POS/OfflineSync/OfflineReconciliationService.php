@@ -240,18 +240,46 @@ class OfflineReconciliationService
         }
 
         // 5. Version configuration drift warning check (non-blocking)
-        $clientCatalogHash = $payload['catalog_version_hash'] ?? null;
-        $clientTaxHash = $payload['tax_configuration_version_hash'] ?? null;
+        $clientHashes = [
+            'layout_version_hash' => $payload['layout_version_hash'] ?? null,
+            'catalog_version_hash' => $payload['catalog_version_hash'] ?? null,
+            'tax_configuration_version_hash' => $payload['tax_configuration_version_hash'] ?? null,
+            'discount_rules_version_hash' => $payload['discount_rules_version_hash'] ?? null,
+            'payment_methods_version_hash' => $payload['payment_methods_version_hash'] ?? null,
+            'terminal_policy_version_hash' => $payload['terminal_policy_version_hash'] ?? null,
+            'printer_profile_version_hash' => $payload['printer_profile_version_hash'] ?? null,
+        ];
 
-        if ($clientCatalogHash !== null && $clientTaxHash !== null) {
+        if (collect($clientHashes)->filter()->isNotEmpty()) {
             $bootstrapService = app(\App\Services\POS\OfflineReadiness\CacheBootstrapService::class);
-            $currentCatalogHash = $bootstrapService->calculateCatalogVersionHash($import->tenant_id, $import->branch_id);
-            $currentTaxHash = $bootstrapService->calculateTaxConfigHash($import->tenant_id, $import->branch_id);
+            $tenant = $profile?->tenant()->withoutGlobalScopes()->first()
+                ?: \App\Models\Tenant::withoutGlobalScopes()->find($import->tenant_id);
+            $branch = $profile?->branch()->withoutGlobalScopes()->first()
+                ?: \App\Models\Branch::withoutGlobalScopes()->find($import->branch_id);
 
-            if ($clientCatalogHash !== $currentCatalogHash || $clientTaxHash !== $currentTaxHash) {
+            $currentHashes = [
+                'layout_version_hash' => $bootstrapService->calculateLayoutVersionHash($import->tenant_id, $import->branch_id),
+                'catalog_version_hash' => $bootstrapService->calculateCatalogVersionHash($import->tenant_id, $import->branch_id),
+                'tax_configuration_version_hash' => $bootstrapService->calculateTaxConfigHash($import->tenant_id, $import->branch_id),
+                'discount_rules_version_hash' => $bootstrapService->calculateDiscountRulesVersionHash($import->tenant_id),
+                'payment_methods_version_hash' => $bootstrapService->calculatePaymentMethodsVersionHash($import->tenant_id),
+                'terminal_policy_version_hash' => ($tenant && $branch)
+                    ? $bootstrapService->calculateTerminalPolicyVersionHash($tenant, $branch, $profile)
+                    : null,
+                'printer_profile_version_hash' => $bootstrapService->calculatePrinterProfileVersionHash($import->tenant_id, $import->branch_id, $profile?->id),
+            ];
+
+            $mismatches = collect($clientHashes)
+                ->filter()
+                ->filter(fn ($clientHash, $key) => isset($currentHashes[$key]) && $clientHash !== $currentHashes[$key])
+                ->keys()
+                ->values()
+                ->all();
+
+            if (!empty($mismatches)) {
                 $import->update([
                     'status' => OfflineSalesImport::STATUS_ACCEPTED_WITH_WARNING,
-                    'rejection_reason' => 'Config drift: client catalog hash (' . substr($clientCatalogHash, 0, 8) . ') or tax hash (' . substr($clientTaxHash, 0, 8) . ') differs from server (' . substr($currentCatalogHash, 0, 8) . ' / ' . substr($currentTaxHash, 0, 8) . ').'
+                    'rejection_reason' => 'Config drift detected for: ' . implode(', ', $mismatches) . '.'
                 ]);
             }
         }

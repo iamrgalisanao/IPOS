@@ -53,7 +53,7 @@ For long-term production readiness, the POS Terminal will be hardened as a table
 | **Epic 41** | POS Terminal Production Hardening for Android Tablet | **[Implemented & Locally Validated / UAT Release Gate Pending / Hardware Validation Deferred]** |
 | **Epic 42** | Windows POS Terminal Electron Wrapper | **[Closed — Implemented & Locally Validated]** |
 | **Epic 43** | POS Lock Screen & Employee Timecards | **[Closed — Implemented & Locally Validated]** |
-| **Epic 44** | POS Admin Configuration & Terminal Capability | **[Planning Reference / Not Yet Implementation-Locked]** |
+| **Epic 44** | POS Admin Configuration & Terminal Capability | **[Planning Reference / Foundation Slice Implemented]** |
 
 
 
@@ -94,15 +94,16 @@ Planning artifact:
 
 ---
 
-## Epic 44: POS Admin Configuration & Terminal Capability [Planning Reference / Not Yet Implementation-Locked]
+## Epic 44: POS Admin Configuration & Terminal Capability [Planning Reference / Foundation Slice Implemented]
 
-**Status:** Planning Reference / Not Yet Implementation-Locked
+**Status:** Planning Reference / Admin Config Snapshot Foundation Implemented
 
 **Decision:** The attached benchmark review has been accepted as a roadmap
 reference for the admin-configuration layer that should govern POS terminal
 capabilities. IPOS should keep Back Office as the master configuration surface,
 keep the POS terminal as the execution surface, and introduce a versioned
-configuration snapshot as the bridge.
+configuration snapshot as the bridge. The first foundation slice of that bridge
+is now implemented in the POS bootstrap/offline sync path.
 
 **Reference Artifact:**
 - [pos-admin-configuration-terminal-capability-backlog.md](pos-admin-configuration-terminal-capability-backlog.md)
@@ -112,12 +113,17 @@ configuration snapshot as the bridge.
   Management, Sales Machine Profiles, POS layouts, products/categories, tax
   categories, statutory discounts, cash drawer operations, terminal sync
   monitor, and offline import review.
-- The largest architecture gap is a branch/register-scoped **Config Snapshot**
-  contract with version hashes for catalog, layout, taxes, discounts, payment
-  methods, terminal policy, and printer profile.
+- A branch/register-scoped **Config Snapshot** foundation now exists with
+  version hashes for catalog, layout, taxes, discounts, payment methods,
+  terminal policy, and printer profile placeholder.
+- Remaining gaps are the admin-facing product surfaces around snapshot audit
+  visibility, register activation/config download UX, payment method offline
+  policies, layout-register assignment hardening, and printer profile setup.
 
-**First Recommended Slice:**
+**Implemented Foundation Slice:**
 - Admin Config Snapshot Foundation.
+- Validation reference:
+  `docs/validation/admin-config-snapshot-foundation-2026-07-11.md`.
 
 **Explicit Boundaries:**
 - No local official GCT/Z-read/e-journal finalization.

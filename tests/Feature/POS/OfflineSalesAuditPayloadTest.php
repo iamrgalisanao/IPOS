@@ -97,8 +97,7 @@ class OfflineSalesAuditPayloadTest extends TestCase
     public function test_audit_payload_reconciliation_verifies_all_25_fields()
     {
         $bootstrapService = app(CacheBootstrapService::class);
-        $catalogHash = $bootstrapService->calculateCatalogVersionHash($this->tenant->id, $this->branch->id);
-        $taxHash = $bootstrapService->calculateTaxConfigHash($this->tenant->id, $this->branch->id);
+        $snapshot = $bootstrapService->generatePayload($this->tenant, $this->branch, $this->cashier);
 
         $payload = [
             'tenant_id'                       => $this->tenant->id,
@@ -113,8 +112,15 @@ class OfflineSalesAuditPayloadTest extends TestCase
             'terminal_timestamp'              => now()->toISOString(),
             'timezone'                        => 'UTC',
             'sales_machine_profile_id'        => $this->profile->id,
-            'catalog_version_hash'            => $catalogHash,
-            'tax_configuration_version_hash'  => $taxHash,
+            'config_snapshot_hash'            => $snapshot['config_snapshot_hash'],
+            'layout_version_hash'             => $snapshot['layout_version_hash'],
+            'catalog_version_hash'            => $snapshot['catalog_version_hash'],
+            'tax_configuration_version_hash'  => $snapshot['tax_configuration_version_hash'],
+            'discount_rules_version_hash'     => $snapshot['discount_rules_version_hash'],
+            'payment_methods_version_hash'    => $snapshot['payment_methods_version_hash'],
+            'terminal_policy_version_hash'    => $snapshot['terminal_policy_version_hash'],
+            'printer_profile_version_hash'    => $snapshot['printer_profile_version_hash'],
+            'config_snapshot'                 => $snapshot['config_snapshot'],
             'cart_snapshot'                   => ['items' => []],
             'payment_method'                  => 'cash',
             'gross_amount_centavos'           => 30000,
@@ -162,10 +168,13 @@ class OfflineSalesAuditPayloadTest extends TestCase
         $response->assertStatus(202);
 
         $import = OfflineSalesImport::where('offline_sequence_number', 'OFF-T03-20260705-000001')->firstOrFail();
-        
+
         $this->assertEquals(OfflineSalesImport::STATUS_SERVER_VERIFIED, $import->status);
         $this->assertEquals('DEV-MOCK-UUID', $import->raw_payload['device_id']);
-        $this->assertEquals($catalogHash, $import->raw_payload['catalog_version_hash']);
+        $this->assertEquals($snapshot['catalog_version_hash'], $import->raw_payload['catalog_version_hash']);
+        $this->assertEquals($snapshot['config_snapshot_hash'], $import->raw_payload['config_snapshot_hash']);
+        $this->assertEquals($snapshot['payment_methods_version_hash'], $import->raw_payload['payment_methods_version_hash']);
+        $this->assertEquals($snapshot['config_snapshot_hash'], $import->raw_payload['config_snapshot']['config_snapshot_hash']);
         $this->assertEquals($rowHash, $import->raw_payload['row_hash']);
     }
 

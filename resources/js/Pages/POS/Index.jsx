@@ -1283,6 +1283,8 @@ export default function Index({ categories, initial_products, payment_methods, d
 
         const taxHash = await catalogCache.getTaxHash();
         const { payload, clientTotals } = buildOfflineCapturePayload(taxHash, rows);
+        const snapshotMetadata = await catalogCache.getConfigSnapshotMetadata();
+        Object.assign(payload, snapshotMetadata);
         const businessDate = (activeShift?.business_date || new Date().toISOString().split('T')[0]).replace(/[^0-9]/g, '');
         const prefix = `OFF-${currentReadiness.machineProfile.profile_code || 'UNK'}-${businessDate}-`;
 
