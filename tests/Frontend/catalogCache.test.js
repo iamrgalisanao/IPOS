@@ -137,6 +137,7 @@ const mockPayload = {
     config_snapshot: {
         schema_version: 1,
         config_snapshot_hash: 'snapshot-hash-123',
+        layout_version_hash: 'layout-hash-123',
         catalog_version_hash: 'catalog-hash-123',
         tax_configuration_version_hash: 'abc-hash-123',
     },
@@ -227,6 +228,16 @@ test('Frontend catalogCache functionality', async (t) => {
         assert.strictEqual(snapshot.catalog_version_hash, 'catalog-hash-123');
         assert.strictEqual(snapshot.tax_configuration_version_hash, 'abc-hash-123');
         assert.strictEqual(snapshot.config_snapshot.config_snapshot_hash, 'snapshot-hash-123');
+    });
+
+    await t.test('layout hash update keeps nested config snapshot aligned', async () => {
+        await catalogCache.writeBootstrapPayload(mockPayload);
+        await catalogCache.updateLayoutVersionHash('layout-hash-456');
+
+        const snapshot = await catalogCache.getConfigSnapshotMetadata();
+
+        assert.strictEqual(snapshot.layout_version_hash, 'layout-hash-456');
+        assert.strictEqual(snapshot.config_snapshot.layout_version_hash, 'layout-hash-456');
     });
 
     await t.test('stale cache can be detected via hash mismatch', async () => {

@@ -392,6 +392,38 @@ export class CatalogCacheService {
         await this.writeBootstrapPayload(payload);
         return payload;
     }
+
+    /**
+     * Update only the layout_version_hash in the IndexedDB metadata store.
+     *
+     * Called after the cashier reloads the layout via the StaleLayoutBanner so that
+     * the next heartbeat compares against the refreshed hash and no longer reports drift.
+     *
+     * This is a targeted single-key write — it does not clear or invalidate the rest of
+     * the bootstrap cache (catalog, tax, payment methods etc. are unaffected).
+     */
+    async updateLayoutVersionHash(hash: string | null): Promise<void> {
+        const db = await this.initDb();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(['metadata'], 'readwrite');
+            const store = tx.objectStore('metadata');
+            const snapshotRequest = store.get('config_snapshot');
+
+            snapshotRequest.onsuccess = () => {
+                const snapshot = snapshotRequest.result && typeof snapshotRequest.result === 'object'
+                    ? { ...snapshotRequest.result, layout_version_hash: hash ?? null }
+                    : null;
+
+                if (snapshot) {
+                    store.put(snapshot, 'config_snapshot');
+                }
+            };
+
+            store.put(hash ?? null, 'layout_version_hash');
+            tx.oncomplete = () => resolve();
+            tx.onerror = (e) => reject((e.target as IDBRequest).error);
+        });
+    }
 }
 
 export const catalogCache = new CatalogCacheService();
