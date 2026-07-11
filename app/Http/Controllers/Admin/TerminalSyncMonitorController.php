@@ -13,11 +13,14 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
+use App\Services\POS\OfflineReadiness\TerminalConfigDriftService;
+
 class TerminalSyncMonitorController extends Controller
 {
     public function __construct(
         protected TenantContext $tenantContext,
-        protected BranchContext $branchContext
+        protected BranchContext $branchContext,
+        protected TerminalConfigDriftService $driftService
     ) {}
 
     /**
@@ -92,6 +95,32 @@ class TerminalSyncMonitorController extends Controller
                 $status = 'pending';
             }
 
+            // Query the latest recorded heartbeat for this terminal profile
+            $heartbeat = \App\Models\TerminalConfigHeartbeat::withoutGlobalScopes()
+                ->where('sales_machine_profile_id', $profile->id)
+                ->first();
+
+            $latestImport = null;
+            if (!$heartbeat) {
+                // Derive client reported configuration snapshot from the latest offline sales import
+                $latestImport = OfflineSalesImport::withoutGlobalScopes()
+                    ->where('tenant_id', $profile->tenant_id)
+                    ->where('sales_machine_profile_id', $profile->id)
+                    ->whereNotNull('raw_payload')
+                    ->latest('submitted_at')
+                    ->first();
+            }
+
+            $serverSnapshot = $this->driftService->buildServerSnapshot($profile);
+
+            if ($heartbeat) {
+                $clientSnapshot = $heartbeat->config_snapshot ? $this->driftService->extractClientSnapshot($heartbeat->config_snapshot) : null;
+                $configAudit = $this->driftService->compare($serverSnapshot, $clientSnapshot, $heartbeat->reported_at);
+            } else {
+                $clientSnapshot = $latestImport ? $this->driftService->extractClientSnapshot($latestImport->raw_payload) : null;
+                $configAudit = $this->driftService->compare($serverSnapshot, $clientSnapshot, $latestImport?->submitted_at);
+            }
+
             return [
                 'id' => $profile->id,
                 'profile_code' => $profile->profile_code,
@@ -116,6 +145,16 @@ class TerminalSyncMonitorController extends Controller
                     'failed_count' => $lastBatch->failed_count,
                     'sync_started_at' => $lastBatch->sync_started_at ? $lastBatch->sync_started_at->toIso8601String() : null,
                     'sync_completed_at' => $lastBatch->sync_completed_at ? $lastBatch->sync_completed_at->toIso8601String() : null,
+                ] : null,
+                'config_audit' => $configAudit,
+                'heartbeat' => $heartbeat ? [
+                    'app_version' => $heartbeat->app_version,
+                    'device_id' => $heartbeat->device_id,
+                    'last_snapshot_downloaded_at' => $heartbeat->last_snapshot_downloaded_at ? $heartbeat->last_snapshot_downloaded_at->toIso8601String() : null,
+                    'last_successful_sync_at' => $heartbeat->last_successful_sync_at ? $heartbeat->last_successful_sync_at->toIso8601String() : null,
+                    'queue_count' => $heartbeat->queue_count,
+                    'connection_state' => $heartbeat->connection_state,
+                    'reported_at' => $heartbeat->reported_at ? $heartbeat->reported_at->toIso8601String() : null,
                 ] : null,
             ];
         });

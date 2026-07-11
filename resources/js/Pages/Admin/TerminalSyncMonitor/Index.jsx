@@ -34,6 +34,7 @@ export default function Index({ auth, branches, filters }) {
     const [autoRefresh, setAutoRefresh] = useState(true);
     const [selectedTerminal, setSelectedTerminal] = useState(null);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+    const [modalTab, setModalTab] = useState('sync_metrics');
     const [imports, setImports] = useState([]);
     const [importsLoading, setImportsLoading] = useState(false);
     const [importSearch, setImportSearch] = useState('');
@@ -131,6 +132,7 @@ export default function Index({ auth, branches, filters }) {
     // Open detail inspect modal
     const openDetailModal = (terminal) => {
         setSelectedTerminal(terminal);
+        setModalTab('sync_metrics');
         setIsDetailModalOpen(true);
     };
 
@@ -245,7 +247,74 @@ export default function Index({ auth, branches, filters }) {
                 );
         }
     };
+    const getConfigStatusBadge = (status) => {
+        switch (status) {
+            case 'synced':
+                return (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-600 border border-emerald-100 shadow-sm shadow-emerald-500/5">
+                        <CheckCircle size={12} className="text-emerald-500" />
+                        Config Synced
+                    </span>
+                );
+            case 'drifted':
+                return (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-600 border border-amber-100 shadow-sm shadow-amber-500/5 animate-pulse">
+                        <AlertCircle size={12} className="text-amber-500" />
+                        Config Drift
+                    </span>
+                );
+            case 'no_sync_log':
+                return (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-500 border border-slate-200 shadow-sm">
+                        <Database size={12} className="text-slate-400" />
+                        No Sync Log
+                    </span>
+                );
+            case 'not_reported':
+                return (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-50 text-slate-500 border border-slate-200 border-dashed shadow-sm">
+                        <AlertCircle size={12} className="text-slate-400" />
+                        Not Reporting Config
+                    </span>
+                );
+            case 'stale_report':
+                return (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-600 border border-amber-200 border-dashed shadow-sm">
+                        <Clock size={12} className="text-amber-500" />
+                        Stale Report
+                    </span>
+                );
+            case 'invalid_payload':
+                return (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-600 border border-rose-100 shadow-sm shadow-rose-500/5">
+                        <AlertCircle size={12} className="text-rose-500" />
+                        Invalid Payload
+                    </span>
+                );
+            default:
+                return (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-500 border border-slate-200 shadow-sm">
+                        <Clock size={12} className="text-slate-400" />
+                        Unknown
+                    </span>
+                );
+        }
+    };
 
+    const getComponentStatusBadge = (status) => {
+        switch (status) {
+            case 'synced':
+                return <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border-emerald-100">Synced</span>;
+            case 'drifted':
+                return <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider bg-rose-50 text-rose-700 border-rose-100 animate-pulse">Drifted</span>;
+            case 'not_reported':
+                return <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-500 border-slate-200 border-dashed">Not Reported</span>;
+            case 'placeholder':
+                return <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-500 border-slate-200 italic">Placeholder</span>;
+            default:
+                return <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-500 border-slate-200">{status}</span>;
+        }
+    };
     const getImportStatusBadge = (status) => {
         const classes = {
             posted: 'bg-emerald-50 text-emerald-700 border-emerald-100',
@@ -409,6 +478,7 @@ export default function Index({ auth, branches, filters }) {
                                         <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest">Terminal</th>
                                         <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest">Branch</th>
                                         <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest">Status</th>
+                                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest">Config Status</th>
                                         <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest">Last Synced</th>
                                         <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-center">Pending Items</th>
                                         <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-center">Failed Items</th>
@@ -438,6 +508,9 @@ export default function Index({ auth, branches, filters }) {
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     {getStatusBadge(terminal.status)}
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    {getConfigStatusBadge(terminal.config_audit?.config_status)}
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-2 text-slate-600 text-xs font-bold">
@@ -876,81 +949,226 @@ export default function Index({ auth, branches, filters }) {
                             </button>
                         </div>
 
-                        <div className="space-y-6">
-                            
-                            {/* General details grid */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Branch Context</div>
-                                    <div className="font-extrabold text-slate-700 text-sm mt-1">{selectedTerminal.branch.name}</div>
-                                    <div className="text-xs text-slate-400 mt-0.5">Code: {selectedTerminal.branch.branch_code}</div>
-                                </div>
-                                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Last Sync Time</div>
-                                    <div className="font-extrabold text-slate-700 text-sm mt-1">{formatDateTime(selectedTerminal.last_sync_at)}</div>
-                                    <div className="text-xs text-slate-400 mt-0.5">Connection state: Synced</div>
-                                </div>
-                            </div>
+                        {/* Tab Selector */}
+                        <div className="flex border-b border-slate-100 mb-6">
+                            <button
+                                onClick={() => setModalTab('sync_metrics')}
+                                className={`px-4 py-2 text-xs font-black uppercase tracking-wider border-b-2 transition-all ${
+                                    modalTab === 'sync_metrics'
+                                        ? 'border-indigo-600 text-indigo-600'
+                                        : 'border-transparent text-slate-400 hover:text-slate-600'
+                                }`}
+                            >
+                                Sync Metrics
+                            </button>
+                            <button
+                                onClick={() => setModalTab('config_audit')}
+                                className={`px-4 py-2 text-xs font-black uppercase tracking-wider border-b-2 transition-all ${
+                                    modalTab === 'config_audit'
+                                        ? 'border-indigo-600 text-indigo-600'
+                                        : 'border-transparent text-slate-400 hover:text-slate-600'
+                                }`}
+                            >
+                                Configuration Audit
+                            </button>
+                        </div>
 
-                            {/* Import breakdown status */}
-                            <div>
-                                <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 mb-3">Sync imports summary</h4>
-                                <div className="grid grid-cols-4 gap-4 text-center">
-                                    <div className="p-3 bg-slate-100/50 rounded-xl">
-                                        <div className="text-xl font-black text-slate-800">{selectedTerminal.posted_count}</div>
-                                        <div className="text-[9px] font-black text-slate-400 uppercase tracking-wider mt-1">Posted</div>
+                        {modalTab === 'sync_metrics' ? (
+                            <div className="space-y-6">
+                                {/* General details grid */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                        <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Branch Context</div>
+                                        <div className="font-extrabold text-slate-700 text-sm mt-1">{selectedTerminal.branch.name}</div>
+                                        <div className="text-xs text-slate-400 mt-0.5">Code: {selectedTerminal.branch.branch_code}</div>
                                     </div>
-                                    <div className="p-3 bg-amber-50 rounded-xl border border-amber-100">
-                                        <div className="text-xl font-black text-amber-700">{selectedTerminal.pending_count}</div>
-                                        <div className="text-[9px] font-black text-amber-500 uppercase tracking-wider mt-1">Pending</div>
-                                    </div>
-                                    <div className="p-3 bg-rose-50 rounded-xl border border-rose-100">
-                                        <div className="text-xl font-black text-rose-700">{selectedTerminal.failed_count}</div>
-                                        <div className="text-[9px] font-black text-rose-500 uppercase tracking-wider mt-1">Conflicts</div>
-                                    </div>
-                                    <div className="p-3 bg-slate-100/50 rounded-xl">
-                                        <div className="text-xl font-black text-slate-500">{selectedTerminal.duplicate_count}</div>
-                                        <div className="text-[9px] font-black text-slate-400 uppercase tracking-wider mt-1">Duplicates</div>
+                                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                        <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Last Sync Time</div>
+                                        <div className="font-extrabold text-slate-700 text-sm mt-1">{formatDateTime(selectedTerminal.last_sync_at)}</div>
+                                        <div className="text-xs text-slate-400 mt-0.5">Connection state: Synced</div>
                                     </div>
                                 </div>
-                            </div>
 
-                            {/* Last batch diagnostics */}
-                            <div>
-                                <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 mb-3">Latest Batch sync metadata</h4>
-                                {selectedTerminal.last_batch ? (
-                                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-3">
-                                        <div className="flex items-center justify-between text-xs">
-                                            <span className="text-slate-400 font-extrabold">Batch ID</span>
-                                            <span className="font-mono bg-slate-200 px-2 py-0.5 rounded text-slate-800">{selectedTerminal.last_batch.batch_reference || selectedTerminal.last_batch.id}</span>
+                                {/* Import breakdown status */}
+                                <div>
+                                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 mb-3">Sync imports summary</h4>
+                                    <div className="grid grid-cols-4 gap-4 text-center">
+                                        <div className="p-3 bg-slate-100/50 rounded-xl">
+                                            <div className="text-xl font-black text-slate-800">{selectedTerminal.posted_count}</div>
+                                            <div className="text-[9px] font-black text-slate-400 uppercase tracking-wider mt-1">Posted</div>
                                         </div>
-                                        <div className="flex items-center justify-between text-xs">
-                                            <span className="text-slate-400 font-extrabold">Processing status</span>
-                                            <span className="font-black text-slate-800 uppercase">{selectedTerminal.last_batch.status}</span>
+                                        <div className="p-3 bg-amber-50 rounded-xl border border-amber-100">
+                                            <div className="text-xl font-black text-amber-700">{selectedTerminal.pending_count}</div>
+                                            <div className="text-[9px] font-black text-amber-500 uppercase tracking-wider mt-1">Pending</div>
                                         </div>
-                                        <div className="flex items-center justify-between text-xs">
-                                            <span className="text-slate-400 font-extrabold">Batch Sync Initiated</span>
-                                            <span className="text-slate-700 font-bold">{formatDateTime(selectedTerminal.last_batch.sync_started_at)}</span>
+                                        <div className="p-3 bg-rose-50 rounded-xl border border-rose-100">
+                                            <div className="text-xl font-black text-rose-700">{selectedTerminal.failed_count}</div>
+                                            <div className="text-[9px] font-black text-rose-500 uppercase tracking-wider mt-1">Conflicts</div>
                                         </div>
-                                        <div className="flex items-center justify-between text-xs">
-                                            <span className="text-slate-400 font-extrabold">Batch Sync Completed</span>
-                                            <span className="text-slate-700 font-bold">{formatDateTime(selectedTerminal.last_batch.sync_completed_at)}</span>
-                                        </div>
-                                        <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-xs font-bold">
-                                            <span className="text-slate-500">Processed stats</span>
-                                            <span className="text-slate-700">
-                                                {selectedTerminal.last_batch.processed_count} accepted / {selectedTerminal.last_batch.failed_count} failed
-                                            </span>
+                                        <div className="p-3 bg-slate-100/50 rounded-xl">
+                                            <div className="text-xl font-black text-slate-500">{selectedTerminal.duplicate_count}</div>
+                                            <div className="text-[9px] font-black text-slate-400 uppercase tracking-wider mt-1">Duplicates</div>
                                         </div>
                                     </div>
-                                ) : (
-                                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center text-xs font-bold text-slate-400">
-                                        No recent sync batches recorded for this terminal.
+                                </div>
+
+                                {/* Last batch diagnostics */}
+                                <div>
+                                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 mb-3">Latest Batch sync metadata</h4>
+                                    {selectedTerminal.last_batch ? (
+                                        <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-3">
+                                            <div className="flex items-center justify-between text-xs">
+                                                <span className="text-slate-400 font-extrabold">Batch ID</span>
+                                                <span className="font-mono bg-slate-200 px-2 py-0.5 rounded text-slate-800">{selectedTerminal.last_batch.batch_reference || selectedTerminal.last_batch.id}</span>
+                                            </div>
+                                            <div className="flex items-center justify-between text-xs">
+                                                <span className="text-slate-400 font-extrabold">Processing status</span>
+                                                <span className="font-black text-slate-800 uppercase">{selectedTerminal.last_batch.status}</span>
+                                            </div>
+                                            <div className="flex items-center justify-between text-xs">
+                                                <span className="text-slate-400 font-extrabold">Batch Sync Initiated</span>
+                                                <span className="text-slate-700 font-bold">{formatDateTime(selectedTerminal.last_batch.sync_started_at)}</span>
+                                            </div>
+                                            <div className="flex items-center justify-between text-xs">
+                                                <span className="text-slate-400 font-extrabold">Batch Sync Completed</span>
+                                                <span className="text-slate-700 font-bold">{formatDateTime(selectedTerminal.last_batch.sync_completed_at)}</span>
+                                            </div>
+                                            <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-xs font-bold">
+                                                <span className="text-slate-500">Processed stats</span>
+                                                <span className="text-slate-700">
+                                                    {selectedTerminal.last_batch.processed_count} accepted / {selectedTerminal.last_batch.failed_count} failed
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center text-xs font-bold text-slate-400">
+                                            No recent sync batches recorded for this terminal.
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Active Heartbeat Diagnostics */}
+                                {selectedTerminal.heartbeat && (
+                                    <div className="p-5 bg-indigo-50/30 rounded-2xl border border-indigo-100/50 space-y-3">
+                                        <h4 className="text-xs font-black uppercase tracking-wider text-indigo-700 flex items-center gap-1.5">
+                                            <Activity size={14} />
+                                            Active Heartbeat Diagnostics
+                                        </h4>
+                                        <div className="grid grid-cols-2 gap-4 text-xs mt-2">
+                                            <div>
+                                                <div className="text-slate-400 font-extrabold">App Version</div>
+                                                <div className="font-extrabold text-slate-800 mt-0.5">{selectedTerminal.heartbeat.app_version || 'N/A'}</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-slate-400 font-extrabold">Device ID</div>
+                                                <div className="font-mono text-slate-800 mt-0.5" title={selectedTerminal.heartbeat.device_id}>
+                                                    {selectedTerminal.heartbeat.device_id ? `${selectedTerminal.heartbeat.device_id.slice(0, 16)}...` : 'N/A'}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <div className="text-slate-400 font-extrabold">Terminal Local Queue Count</div>
+                                                <div className="font-extrabold text-slate-800 mt-0.5">{selectedTerminal.heartbeat.queue_count} pending locally</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-slate-400 font-extrabold">Connection State</div>
+                                                <div className="font-extrabold uppercase text-slate-800 mt-0.5">{selectedTerminal.heartbeat.connection_state || 'N/A'}</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-slate-400 font-extrabold">Last Config Downloaded</div>
+                                                <div className="font-bold text-slate-700 mt-0.5">{formatDateTime(selectedTerminal.heartbeat.last_snapshot_downloaded_at)}</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-slate-400 font-extrabold">Last Successful Sync</div>
+                                                <div className="font-bold text-slate-700 mt-0.5">{formatDateTime(selectedTerminal.heartbeat.last_successful_sync_at)}</div>
+                                            </div>
+                                        </div>
+                                        <div className="pt-2 border-t border-slate-200/40 text-[10px] font-bold text-slate-400 text-right">
+                                            Last heartbeat received: {formatDateTime(selectedTerminal.heartbeat.reported_at)}
+                                        </div>
                                     </div>
                                 )}
                             </div>
+                        ) : (
+                            <div className="space-y-6">
+                                {/* Config Status Warning/Success Banner */}
+                                {(() => {
+                                    const audit = selectedTerminal.config_audit;
+                                    if (!audit) return null;
 
-                        </div>
+                                    let bannerClass = "";
+                                    let bannerText = "";
+
+                                    switch (audit.config_status) {
+                                        case 'drifted':
+                                            bannerClass = "bg-amber-50 text-amber-800 border-amber-200";
+                                            bannerText = `Warning: Configuration drift detected! Terminal is running an outdated configuration snapshot. Drifted components: ${audit.drifted_components.join(', ')}.`;
+                                            break;
+                                        case 'no_sync_log':
+                                            bannerClass = "bg-slate-100 text-slate-700 border-slate-200";
+                                            bannerText = "No offline sync logs found for this terminal. Configuration state has not been reported yet.";
+                                            break;
+                                        case 'not_reported':
+                                            bannerClass = "bg-slate-50 text-slate-700 border-slate-200 border-dashed";
+                                            bannerText = "Not Reporting Configuration: The terminal synced successfully but did not report any configuration version hashes.";
+                                            break;
+                                        case 'stale_report':
+                                            bannerClass = "bg-amber-50 text-amber-800 border-amber-200 border-dashed";
+                                            bannerText = `Config matching but stale: Last reported configuration matches the server, but it was reported on ${formatDateTime(audit.last_config_reported_at)} (older than 24 hours).`;
+                                            break;
+                                        case 'invalid_payload':
+                                            bannerClass = "bg-rose-50 text-rose-800 border-rose-200";
+                                            bannerText = "Critical Error: Malformed configuration metadata was received from this terminal. Sync data integrity may be compromised.";
+                                            break;
+                                        case 'synced':
+                                            bannerClass = "bg-emerald-50 text-emerald-800 border-emerald-200";
+                                            bannerText = `Healthy: Terminal configuration matches the expected Back Office configuration snapshot. Last reported: ${formatDateTime(audit.last_config_reported_at)}.`;
+                                            break;
+                                        default:
+                                            bannerClass = "bg-slate-100 text-slate-700 border-slate-200";
+                                            bannerText = "Unknown configuration status.";
+                                    }
+
+                                    return (
+                                        <div className={`p-4 rounded-xl border text-xs font-semibold ${bannerClass}`}>
+                                            {bannerText}
+                                        </div>
+                                    );
+                                })()}
+
+                                {/* Components Comparison Table */}
+                                <div>
+                                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 mb-3">Configuration components comparison</h4>
+                                    <div className="overflow-hidden border border-slate-100 rounded-2xl">
+                                        <table className="w-full text-left border-collapse text-xs">
+                                            <thead>
+                                                <tr className="bg-slate-50/50 text-slate-400 border-b border-slate-100">
+                                                    <th className="px-4 py-3 font-black uppercase tracking-widest text-[9px]">Component</th>
+                                                    <th className="px-4 py-3 font-black uppercase tracking-widest text-[9px]">Server Expected</th>
+                                                    <th className="px-4 py-3 font-black uppercase tracking-widest text-[9px]">Terminal Reported</th>
+                                                    <th className="px-4 py-3 font-black uppercase tracking-widest text-[9px] text-right">Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-50">
+                                                {selectedTerminal.config_audit?.components?.map((c) => (
+                                                    <tr key={c.key} className="hover:bg-slate-50/20">
+                                                        <td className="px-4 py-3 font-extrabold text-slate-800">{c.label}</td>
+                                                        <td className="px-4 py-3 font-mono text-[10px] text-slate-500" title={c.server_hash}>
+                                                            {c.server_hash ? `${c.server_hash.slice(0, 8)}..${c.server_hash.slice(-8)}` : 'N/A'}
+                                                        </td>
+                                                        <td className="px-4 py-3 font-mono text-[10px] text-slate-500" title={c.client_hash || ''}>
+                                                            {c.client_hash ? `${c.client_hash.slice(0, 8)}..${c.client_hash.slice(-8)}` : (c.key === 'printer_profile' ? 'N/A (Deferred)' : 'Not Reported')}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right">
+                                                            {getComponentStatusBadge(c.status)}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         <div className="mt-8 flex justify-end">
                             <SecondaryButton onClick={closeDetailModal} className="px-6 py-2.5 rounded-2xl font-black uppercase tracking-widest text-xs border-none bg-slate-100 hover:bg-slate-200">

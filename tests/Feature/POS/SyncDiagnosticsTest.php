@@ -413,4 +413,473 @@ class SyncDiagnosticsTest extends TestCase
 
         $responseData->assertStatus(403);
     }
+
+    // =========================================================================
+    // Config Snapshot & Drift Auditing Tests
+    // =========================================================================
+
+    /** @test */
+    public function test_monitor_data_no_offline_import_exists(): void
+    {
+        // Delete all imports to be sure
+        OfflineSalesImport::query()->delete();
+
+        $response = $this->actingAs($this->owner)
+            ->withHeader('X-Tenant-ID', $this->tenant->id)
+            ->withHeader('X-Branch-ID', $this->branch->id)
+            ->getJson('/api/admin/terminal-sync-monitor/data');
+
+        $response->assertStatus(200);
+        $terminal = collect($response->json('terminals'))->firstWhere('id', $this->profile->id);
+
+        $this->assertNotNull($terminal);
+        $this->assertSame('no_sync_log', $terminal['config_audit']['config_status']);
+        $this->assertFalse($terminal['config_audit']['has_config_drift']);
+        $this->assertFalse($terminal['config_audit']['is_stale_report']);
+    }
+
+    /** @test */
+    public function test_monitor_data_latest_payload_has_no_config_hashes(): void
+    {
+        $batch = OfflineSyncBatch::create([
+            'tenant_id'                => $this->tenant->id,
+            'branch_id'                => $this->branch->id,
+            'sales_machine_profile_id' => $this->profile->id,
+            'batch_reference'          => 'REF-AUDIT-1',
+            'status'                   => OfflineSyncBatch::STATUS_COMPLETED,
+        ]);
+
+        OfflineSalesImport::create([
+            'tenant_id'                => $this->tenant->id,
+            'branch_id'                => $this->branch->id,
+            'sales_machine_profile_id' => $this->profile->id,
+            'batch_id'                 => $batch->id,
+            'offline_sequence_number'  => self::PREFIX . '9001',
+            'payload_hash'             => 'hash9001',
+            'raw_payload'              => ['some_random_field' => 'random_val'], // no config snapshot or hashes
+            'status'                   => OfflineSalesImport::STATUS_POSTED,
+            'submitted_at'             => now(),
+        ]);
+
+        $response = $this->actingAs($this->owner)
+            ->withHeader('X-Tenant-ID', $this->tenant->id)
+            ->withHeader('X-Branch-ID', $this->branch->id)
+            ->getJson('/api/admin/terminal-sync-monitor/data');
+
+        $response->assertStatus(200);
+        $terminal = collect($response->json('terminals'))->firstWhere('id', $this->profile->id);
+
+        $this->assertSame('not_reported', $terminal['config_audit']['config_status']);
+        $this->assertNull($terminal['config_audit']['has_config_drift']);
+        $this->assertContains('catalog', $terminal['config_audit']['not_reported_components']);
+        $this->assertContains('layout', $terminal['config_audit']['not_reported_components']);
+    }
+
+    /** @test */
+    public function test_monitor_data_catalog_hash_mismatch(): void
+    {
+        $driftService = app(\App\Services\POS\OfflineReadiness\TerminalConfigDriftService::class);
+        $serverSnapshot = $driftService->buildServerSnapshot($this->profile);
+
+        $clientSnapshot = $serverSnapshot;
+        $clientSnapshot['catalog'] = 'mismatched-catalog-hash'; // force drift
+
+        $batch = OfflineSyncBatch::create([
+            'tenant_id'                => $this->tenant->id,
+            'branch_id'                => $this->branch->id,
+            'sales_machine_profile_id' => $this->profile->id,
+            'batch_reference'          => 'REF-AUDIT-2',
+            'status'                   => OfflineSyncBatch::STATUS_COMPLETED,
+        ]);
+
+        OfflineSalesImport::create([
+            'tenant_id'                => $this->tenant->id,
+            'branch_id'                => $this->branch->id,
+            'sales_machine_profile_id' => $this->profile->id,
+            'batch_id'                 => $batch->id,
+            'offline_sequence_number'  => self::PREFIX . '9002',
+            'payload_hash'             => 'hash9002',
+            'raw_payload'              => [
+                'config_snapshot' => [
+                    'layout_version_hash' => $clientSnapshot['layout'],
+                    'catalog_version_hash' => $clientSnapshot['catalog'],
+                    'tax_configuration_version_hash' => $clientSnapshot['tax'],
+                    'discount_rules_version_hash' => $clientSnapshot['discounts'],
+                    'payment_methods_version_hash' => $clientSnapshot['payment_methods'],
+                    'terminal_policy_version_hash' => $clientSnapshot['terminal_policy'],
+                    'printer_profile_version_hash' => $clientSnapshot['printer_profile'],
+                ]
+            ],
+            'status'                   => OfflineSalesImport::STATUS_POSTED,
+            'submitted_at'             => now(),
+        ]);
+
+        $response = $this->actingAs($this->owner)
+            ->withHeader('X-Tenant-ID', $this->tenant->id)
+            ->withHeader('X-Branch-ID', $this->branch->id)
+            ->getJson('/api/admin/terminal-sync-monitor/data');
+
+        $response->assertStatus(200);
+        $terminal = collect($response->json('terminals'))->firstWhere('id', $this->profile->id);
+
+        $this->assertSame('drifted', $terminal['config_audit']['config_status']);
+        $this->assertTrue($terminal['config_audit']['has_config_drift']);
+        $this->assertSame(['catalog'], $terminal['config_audit']['drifted_components']);
+
+        // Check catalog component is labeled drifted
+        $catalogComp = collect($terminal['config_audit']['components'])->firstWhere('key', 'catalog');
+        $this->assertSame('drifted', $catalogComp['status']);
+    }
+
+    /** @test */
+    public function test_monitor_data_tax_hash_mismatch(): void
+    {
+        $driftService = app(\App\Services\POS\OfflineReadiness\TerminalConfigDriftService::class);
+        $serverSnapshot = $driftService->buildServerSnapshot($this->profile);
+
+        $clientSnapshot = $serverSnapshot;
+        $clientSnapshot['tax'] = 'mismatched-tax-hash';
+
+        $batch = OfflineSyncBatch::create([
+            'tenant_id'                => $this->tenant->id,
+            'branch_id'                => $this->branch->id,
+            'sales_machine_profile_id' => $this->profile->id,
+            'batch_reference'          => 'REF-AUDIT-3',
+            'status'                   => OfflineSyncBatch::STATUS_COMPLETED,
+        ]);
+
+        OfflineSalesImport::create([
+            'tenant_id'                => $this->tenant->id,
+            'branch_id'                => $this->branch->id,
+            'sales_machine_profile_id' => $this->profile->id,
+            'batch_id'                 => $batch->id,
+            'offline_sequence_number'  => self::PREFIX . '9003',
+            'payload_hash'             => 'hash9003',
+            'raw_payload'              => [
+                'config_snapshot' => [
+                    'layout_version_hash' => $clientSnapshot['layout'],
+                    'catalog_version_hash' => $clientSnapshot['catalog'],
+                    'tax_configuration_version_hash' => $clientSnapshot['tax'],
+                    'discount_rules_version_hash' => $clientSnapshot['discounts'],
+                    'payment_methods_version_hash' => $clientSnapshot['payment_methods'],
+                    'terminal_policy_version_hash' => $clientSnapshot['terminal_policy'],
+                    'printer_profile_version_hash' => $clientSnapshot['printer_profile'],
+                ]
+            ],
+            'status'                   => OfflineSalesImport::STATUS_POSTED,
+            'submitted_at'             => now(),
+        ]);
+
+        $response = $this->actingAs($this->owner)
+            ->withHeader('X-Tenant-ID', $this->tenant->id)
+            ->withHeader('X-Branch-ID', $this->branch->id)
+            ->getJson('/api/admin/terminal-sync-monitor/data');
+
+        $response->assertStatus(200);
+        $terminal = collect($response->json('terminals'))->firstWhere('id', $this->profile->id);
+
+        $this->assertSame('drifted', $terminal['config_audit']['config_status']);
+        $this->assertSame(['tax'], $terminal['config_audit']['drifted_components']);
+    }
+
+    /** @test */
+    public function test_monitor_data_multiple_component_mismatch(): void
+    {
+        $driftService = app(\App\Services\POS\OfflineReadiness\TerminalConfigDriftService::class);
+        $serverSnapshot = $driftService->buildServerSnapshot($this->profile);
+
+        $clientSnapshot = $serverSnapshot;
+        $clientSnapshot['layout'] = 'mismatched-layout-hash';
+        $clientSnapshot['catalog'] = 'mismatched-catalog-hash';
+
+        $batch = OfflineSyncBatch::create([
+            'tenant_id'                => $this->tenant->id,
+            'branch_id'                => $this->branch->id,
+            'sales_machine_profile_id' => $this->profile->id,
+            'batch_reference'          => 'REF-AUDIT-4',
+            'status'                   => OfflineSyncBatch::STATUS_COMPLETED,
+        ]);
+
+        OfflineSalesImport::create([
+            'tenant_id'                => $this->tenant->id,
+            'branch_id'                => $this->branch->id,
+            'sales_machine_profile_id' => $this->profile->id,
+            'batch_id'                 => $batch->id,
+            'offline_sequence_number'  => self::PREFIX . '9004',
+            'payload_hash'             => 'hash9004',
+            'raw_payload'              => [
+                'config_snapshot' => [
+                    'layout_version_hash' => $clientSnapshot['layout'],
+                    'catalog_version_hash' => $clientSnapshot['catalog'],
+                    'tax_configuration_version_hash' => $clientSnapshot['tax'],
+                    'discount_rules_version_hash' => $clientSnapshot['discounts'],
+                    'payment_methods_version_hash' => $clientSnapshot['payment_methods'],
+                    'terminal_policy_version_hash' => $clientSnapshot['terminal_policy'],
+                    'printer_profile_version_hash' => $clientSnapshot['printer_profile'],
+                ]
+            ],
+            'status'                   => OfflineSalesImport::STATUS_POSTED,
+            'submitted_at'             => now(),
+        ]);
+
+        $response = $this->actingAs($this->owner)
+            ->withHeader('X-Tenant-ID', $this->tenant->id)
+            ->withHeader('X-Branch-ID', $this->branch->id)
+            ->getJson('/api/admin/terminal-sync-monitor/data');
+
+        $response->assertStatus(200);
+        $terminal = collect($response->json('terminals'))->firstWhere('id', $this->profile->id);
+
+        $this->assertSame('drifted', $terminal['config_audit']['config_status']);
+        $this->assertEqualsCanonicalizing(['layout', 'catalog'], $terminal['config_audit']['drifted_components']);
+    }
+
+    /** @test */
+    public function test_monitor_data_missing_discount_hash_reported_as_not_reported(): void
+    {
+        $driftService = app(\App\Services\POS\OfflineReadiness\TerminalConfigDriftService::class);
+        $serverSnapshot = $driftService->buildServerSnapshot($this->profile);
+
+        $batch = OfflineSyncBatch::create([
+            'tenant_id'                => $this->tenant->id,
+            'branch_id'                => $this->branch->id,
+            'sales_machine_profile_id' => $this->profile->id,
+            'batch_reference'          => 'REF-AUDIT-5',
+            'status'                   => OfflineSyncBatch::STATUS_COMPLETED,
+        ]);
+
+        OfflineSalesImport::create([
+            'tenant_id'                => $this->tenant->id,
+            'branch_id'                => $this->branch->id,
+            'sales_machine_profile_id' => $this->profile->id,
+            'batch_id'                 => $batch->id,
+            'offline_sequence_number'  => self::PREFIX . '9005',
+            'payload_hash'             => 'hash9005',
+            'raw_payload'              => [
+                'config_snapshot' => [
+                    'layout_version_hash' => $serverSnapshot['layout'],
+                    'catalog_version_hash' => $serverSnapshot['catalog'],
+                    'tax_configuration_version_hash' => $serverSnapshot['tax'],
+                    'discount_rules_version_hash' => null, // missing discount hash
+                    'payment_methods_version_hash' => $serverSnapshot['payment_methods'],
+                    'terminal_policy_version_hash' => $serverSnapshot['terminal_policy'],
+                    'printer_profile_version_hash' => $serverSnapshot['printer_profile'],
+                ]
+            ],
+            'status'                   => OfflineSalesImport::STATUS_POSTED,
+            'submitted_at'             => now(),
+        ]);
+
+        $response = $this->actingAs($this->owner)
+            ->withHeader('X-Tenant-ID', $this->tenant->id)
+            ->withHeader('X-Branch-ID', $this->branch->id)
+            ->getJson('/api/admin/terminal-sync-monitor/data');
+
+        $response->assertStatus(200);
+        $terminal = collect($response->json('terminals'))->firstWhere('id', $this->profile->id);
+
+        // Should NOT be drifted, because discount was simply missing/not reported, and others match
+        $this->assertSame('synced', $terminal['config_audit']['config_status']);
+        $this->assertFalse($terminal['config_audit']['has_config_drift']);
+        $this->assertSame(['discounts'], $terminal['config_audit']['not_reported_components']);
+        $this->assertEmpty($terminal['config_audit']['drifted_components']);
+    }
+
+    /** @test */
+    public function test_monitor_data_malformed_raw_payload(): void
+    {
+        $batch = OfflineSyncBatch::create([
+            'tenant_id'                => $this->tenant->id,
+            'branch_id'                => $this->branch->id,
+            'sales_machine_profile_id' => $this->profile->id,
+            'batch_reference'          => 'REF-AUDIT-6',
+            'status'                   => OfflineSyncBatch::STATUS_COMPLETED,
+        ]);
+
+        OfflineSalesImport::create([
+            'tenant_id'                => $this->tenant->id,
+            'branch_id'                => $this->branch->id,
+            'sales_machine_profile_id' => $this->profile->id,
+            'batch_id'                 => $batch->id,
+            'offline_sequence_number'  => self::PREFIX . '9006',
+            'payload_hash'             => 'hash9006',
+            'raw_payload'              => [], // empty array / malformed
+            'status'                   => OfflineSalesImport::STATUS_POSTED,
+            'submitted_at'             => now(),
+        ]);
+
+        $response = $this->actingAs($this->owner)
+            ->withHeader('X-Tenant-ID', $this->tenant->id)
+            ->withHeader('X-Branch-ID', $this->branch->id)
+            ->getJson('/api/admin/terminal-sync-monitor/data');
+
+        $response->assertStatus(200);
+        $terminal = collect($response->json('terminals'))->firstWhere('id', $this->profile->id);
+
+        $this->assertSame('invalid_payload', $terminal['config_audit']['config_status']);
+        $this->assertNull($terminal['config_audit']['has_config_drift']);
+    }
+
+    /** @test */
+    public function test_monitor_data_printer_placeholder(): void
+    {
+        $driftService = app(\App\Services\POS\OfflineReadiness\TerminalConfigDriftService::class);
+        $serverSnapshot = $driftService->buildServerSnapshot($this->profile);
+
+        $batch = OfflineSyncBatch::create([
+            'tenant_id'                => $this->tenant->id,
+            'branch_id'                => $this->branch->id,
+            'sales_machine_profile_id' => $this->profile->id,
+            'batch_reference'          => 'REF-AUDIT-7',
+            'status'                   => OfflineSyncBatch::STATUS_COMPLETED,
+        ]);
+
+        OfflineSalesImport::create([
+            'tenant_id'                => $this->tenant->id,
+            'branch_id'                => $this->branch->id,
+            'sales_machine_profile_id' => $this->profile->id,
+            'batch_id'                 => $batch->id,
+            'offline_sequence_number'  => self::PREFIX . '9007',
+            'payload_hash'             => 'hash9007',
+            'raw_payload'              => [
+                'config_snapshot' => [
+                    'layout_version_hash' => $serverSnapshot['layout'],
+                    'catalog_version_hash' => $serverSnapshot['catalog'],
+                    'tax_configuration_version_hash' => $serverSnapshot['tax'],
+                    'discount_rules_version_hash' => $serverSnapshot['discounts'],
+                    'payment_methods_version_hash' => $serverSnapshot['payment_methods'],
+                    'terminal_policy_version_hash' => $serverSnapshot['terminal_policy'],
+                    'printer_profile_version_hash' => $serverSnapshot['printer_profile'],
+                ]
+            ],
+            'status'                   => OfflineSalesImport::STATUS_POSTED,
+            'submitted_at'             => now(),
+        ]);
+
+        $response = $this->actingAs($this->owner)
+            ->withHeader('X-Tenant-ID', $this->tenant->id)
+            ->withHeader('X-Branch-ID', $this->branch->id)
+            ->getJson('/api/admin/terminal-sync-monitor/data');
+
+        $response->assertStatus(200);
+        $terminal = collect($response->json('terminals'))->firstWhere('id', $this->profile->id);
+
+        $components = $terminal['config_audit']['components'];
+        $printerComp = collect($components)->firstWhere('key', 'printer_profile');
+
+        $this->assertNotNull($printerComp);
+        $this->assertSame('placeholder', $printerComp['status']);
+    }
+
+    /** @test */
+    public function test_monitor_data_old_but_matching_report(): void
+    {
+        $driftService = app(\App\Services\POS\OfflineReadiness\TerminalConfigDriftService::class);
+        $serverSnapshot = $driftService->buildServerSnapshot($this->profile);
+
+        $batch = OfflineSyncBatch::create([
+            'tenant_id'                => $this->tenant->id,
+            'branch_id'                => $this->branch->id,
+            'sales_machine_profile_id' => $this->profile->id,
+            'batch_reference'          => 'REF-AUDIT-8',
+            'status'                   => OfflineSyncBatch::STATUS_COMPLETED,
+        ]);
+
+        OfflineSalesImport::create([
+            'tenant_id'                => $this->tenant->id,
+            'branch_id'                => $this->branch->id,
+            'sales_machine_profile_id' => $this->profile->id,
+            'batch_id'                 => $batch->id,
+            'offline_sequence_number'  => self::PREFIX . '9008',
+            'payload_hash'             => 'hash9008',
+            'raw_payload'              => [
+                'config_snapshot' => [
+                    'layout_version_hash' => $serverSnapshot['layout'],
+                    'catalog_version_hash' => $serverSnapshot['catalog'],
+                    'tax_configuration_version_hash' => $serverSnapshot['tax'],
+                    'discount_rules_version_hash' => $serverSnapshot['discounts'],
+                    'payment_methods_version_hash' => $serverSnapshot['payment_methods'],
+                    'terminal_policy_version_hash' => $serverSnapshot['terminal_policy'],
+                    'printer_profile_version_hash' => $serverSnapshot['printer_profile'],
+                ]
+            ],
+            'status'                   => OfflineSalesImport::STATUS_POSTED,
+            'submitted_at'             => now()->subHours(25), // older than 24h
+        ]);
+
+        $response = $this->actingAs($this->owner)
+            ->withHeader('X-Tenant-ID', $this->tenant->id)
+            ->withHeader('X-Branch-ID', $this->branch->id)
+            ->getJson('/api/admin/terminal-sync-monitor/data');
+
+        $response->assertStatus(200);
+        $terminal = collect($response->json('terminals'))->firstWhere('id', $this->profile->id);
+
+        $this->assertSame('stale_report', $terminal['config_audit']['config_status']);
+        $this->assertTrue($terminal['config_audit']['is_stale_report']);
+    }
+
+    /** @test */
+    public function test_monitor_data_fallback_payload_format_works(): void
+    {
+        $batch = OfflineSyncBatch::create([
+            'tenant_id'                => $this->tenant->id,
+            'branch_id'                => $this->branch->id,
+            'sales_machine_profile_id' => $this->profile->id,
+            'batch_reference'          => 'REF-AUDIT-9',
+            'status'                   => OfflineSyncBatch::STATUS_COMPLETED,
+        ]);
+
+        // Fallback format 1: top level catalog and tax configuration version hashes
+        OfflineSalesImport::create([
+            'tenant_id'                => $this->tenant->id,
+            'branch_id'                => $this->branch->id,
+            'sales_machine_profile_id' => $this->profile->id,
+            'batch_id'                 => $batch->id,
+            'offline_sequence_number'  => self::PREFIX . '9009',
+            'payload_hash'             => 'hash9009',
+            'raw_payload'              => [
+                'catalog_version_hash' => 'top-level-catalog',
+                'tax_configuration_version_hash' => 'top-level-tax',
+            ],
+            'status'                   => OfflineSalesImport::STATUS_POSTED,
+            'submitted_at'             => now(),
+        ]);
+
+        $response1 = $this->actingAs($this->owner)
+            ->withHeader('X-Tenant-ID', $this->tenant->id)
+            ->withHeader('X-Branch-ID', $this->branch->id)
+            ->getJson('/api/admin/terminal-sync-monitor/data');
+
+        $terminal1 = collect($response1->json('terminals'))->firstWhere('id', $this->profile->id);
+        $this->assertSame('top-level-catalog', $terminal1['config_audit']['client_snapshot']['catalog']);
+        $this->assertSame('top-level-tax', $terminal1['config_audit']['client_snapshot']['tax']);
+
+        // Fallback format 2: under 'offline' key
+        OfflineSalesImport::create([
+            'tenant_id'                => $this->tenant->id,
+            'branch_id'                => $this->branch->id,
+            'sales_machine_profile_id' => $this->profile->id,
+            'batch_id'                 => $batch->id,
+            'offline_sequence_number'  => self::PREFIX . '9010',
+            'payload_hash'             => 'hash9010',
+            'raw_payload'              => [
+                'offline' => [
+                    'catalog_version_hash' => 'offline-catalog',
+                    'tax_configuration_version_hash' => 'offline-tax',
+                ]
+            ],
+            'status'                   => OfflineSalesImport::STATUS_POSTED,
+            'submitted_at'             => now()->addSecond(),
+        ]);
+
+        $response2 = $this->actingAs($this->owner)
+            ->withHeader('X-Tenant-ID', $this->tenant->id)
+            ->withHeader('X-Branch-ID', $this->branch->id)
+            ->getJson('/api/admin/terminal-sync-monitor/data');
+
+        $terminal2 = collect($response2->json('terminals'))->firstWhere('id', $this->profile->id);
+        $this->assertSame('offline-catalog', $terminal2['config_audit']['client_snapshot']['catalog']);
+        $this->assertSame('offline-tax', $terminal2['config_audit']['client_snapshot']['tax']);
+    }
 }
