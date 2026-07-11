@@ -48,8 +48,28 @@ Changes confirmed:
    failures.
 6. POS shell service-worker cache was rolled forward to
    `ipos-terminal-shell-v31-20260711`.
-7. Current production build asset for the POS terminal page is
-   `Index-Ba8-w-pW.js`.
+7. POS page bundle filenames are build-hashed; support should verify the
+   current manifest/build asset rather than relying on a stale hard-coded
+   bundle name.
+
+## 2026-07-11 Clean Baseline and Reference Alignment Addendum
+
+The POS terminal hardening work was checkpointed in commit `6c2b5d0`
+(`chore: checkpoint POS terminal hardening`) after cleaning generated Electron
+artifacts, local auth environment files, and `.DS_Store` noise from the working
+tree.
+
+Reference updates confirmed:
+
+1. Roadmap, task ledger, user guide, troubleshooting guide, UAT checklist, and
+   hardening plan now point to the POS terminal offline UAT/release gate as the
+   next active step.
+2. Hardware printer and cash drawer validation is explicitly deferred because
+   physical devices are not available.
+3. No hardware readiness, drawer-open, or printer validation claim is made by
+   the current checkpoint.
+4. Offline sales remain provisional cash-only captures until server
+   reconciliation accepts and posts them.
 
 ## Validation Evidence
 
@@ -88,9 +108,10 @@ Changes confirmed:
 1. Continue monitoring retry sync failures by terminal and branch.
 2. Confirm production tablet deployments receive the latest service-worker
    cache version.
-3. Review hardware adapter readiness before pilot claims involving receipt
-   printing or cash drawer hardware.
+3. Hardware adapter physical validation is blocked/deferred until receipt
+   printer and cash drawer devices are available.
 4. Run the 2026-07-11 UAT checklist before early partner pilot rollout:
    [pos-terminal-offline-uat-2026-07-11.md](pos-terminal-offline-uat-2026-07-11.md).
-5. Execute the POS terminal hardening pass before broader rollout:
+5. Use the POS terminal hardening pass as the development reference before
+   broader rollout:
    [_bmad-output/planning-artifacts/pos-terminal-hardening-pass-development-ready-plan.md](../../_bmad-output/planning-artifacts/pos-terminal-hardening-pass-development-ready-plan.md).

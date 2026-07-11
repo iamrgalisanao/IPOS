@@ -11,6 +11,11 @@ This UAT checklist validates the current POS terminal behavior when the server
 connection is interrupted during product selection, checkout, split payment,
 offline capture, page refresh, reconnect, and queue synchronization.
 
+Reference baseline: checkpoint commit `6c2b5d0` (`chore: checkpoint POS terminal
+hardening`). Physical receipt printer and cash drawer devices are not available
+for this UAT pass, so hardware-dependent cases are marked blocked/deferred and
+must not be used as readiness claims.
+
 ## Preconditions
 
 1. A tenant, branch, cashier, and terminal profile exist.
@@ -23,7 +28,11 @@ offline capture, page refresh, reconnect, and queue synchronization.
    requires it.
 6. Browser console is available for observing bundle/service-worker state.
 7. Current expected service-worker shell: `ipos-terminal-shell-v31-20260711`.
-8. Current expected POS page bundle: `Index-Ba8-w-pW.js`.
+8. POS JavaScript bundle names are build-hashed. Confirm the current manifest
+   and browser console are using the latest build instead of relying on a stale
+   hard-coded bundle name.
+9. Physical receipt printer and cash drawer hardware are not required for this
+   pass. Hardware validation remains deferred until devices are available.
 
 ## UAT Result Legend
 
@@ -51,7 +60,11 @@ offline capture, page refresh, reconnect, and queue synchronization.
 | UAT-POS-OFF-013 | Sequence conflict review | Attempt to sync records where an older sequence is missing or quarantined. | UI shows review/conflict state, not a generic retryable network failure. Message explains admin review is required. |  |
 | UAT-POS-OFF-014 | Offline draft payment path | Capture an offline sale after opening the offline Split Payment Wizard. | No request is sent to `/pos/sales/offline-draft-*/payments/split`; sale is queued through offline sale capture. |  |
 | UAT-POS-OFF-015 | Local sync broker unavailable | Reconnect with broker endpoint unavailable or unauthenticated. | Terminal shows **Local Sync Offline** and does not block checkout or cart actions. |  |
-| UAT-POS-OFF-016 | Stale shell rollover | Deploy latest build, reconnect server, refresh terminal. | Browser installs `ipos-terminal-shell-v31-20260711`; console shows current POS bundle `Index-Ba8-w-pW.js`, not older bundles. |  |
+| UAT-POS-OFF-016 | Stale shell rollover | Deploy latest build, reconnect server, refresh terminal. | Browser installs `ipos-terminal-shell-v31-20260711`; console shows the current manifest/build asset, not older bundles. |  |
+| UAT-POS-OFF-017 | Stale session access banner | Restore server after a stale/expired browser session and trigger checkout validation or product/status refresh. | POS shows a recoverable session/access banner instead of a generic sale failure; cashier can sign in again or refresh online. |  |
+| UAT-POS-OFF-018 | Invalid terminal context banner | Trigger a request with missing or mismatched terminal context. | POS fails closed and shows terminal-context recovery guidance; sale/cart controls are not hidden behind the message. |  |
+| UAT-POS-OFF-019 | Offline queue diagnostic visibility | Capture an offline sale, open **View Queue**, then return to checkout. | The local transaction reference and status are visible in queue diagnostics; returning to checkout does not clear unrelated queue history. |  |
+| UAT-POS-OFF-020 | Hardware unavailable boundary | Run offline cash capture with no receipt printer or cash drawer connected. | Missing physical hardware does not block eligible cash-only offline capture; test notes clearly mark printer/drawer validation as deferred. |  |
 
 ## Acceptance Criteria
 
@@ -71,6 +84,8 @@ offline capture, page refresh, reconnect, and queue synchronization.
    retried indefinitely.
 9. No official ledger posting, GCT finalization, Z-read finalization, or
    e-journal finalization happens locally in the browser.
+10. Hardware printer and cash drawer behavior is not certified by this UAT pass;
+    related checks remain blocked/deferred until physical devices are available.
 
 ## Evidence to Capture
 
@@ -82,6 +97,8 @@ offline capture, page refresh, reconnect, and queue synchronization.
 6. Browser console excerpt showing current bundle and absence of blocking
    uncaught errors.
 7. Admin/support note for any sequence conflict or review-required record.
+8. Note confirming hardware printer/drawer cases were blocked/deferred when no
+   physical devices were available.
 
 ## Sign-Off
 

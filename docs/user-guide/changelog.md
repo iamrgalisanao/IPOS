@@ -4,6 +4,23 @@ All notable changes to the IPOS platform, modules, and user workflows are docume
 
 ---
 
+## [1.5.5] - 2026-07-11
+### Documentation
+* **POS Terminal Hardening Reference Alignment**
+  * Aligned roadmap, task ledger, current-focus notes, UAT, troubleshooting, and Terminal Sync Diagnostics references to the clean checkpoint commit `6c2b5d0`.
+  * Clarified that the next active gate is POS terminal offline UAT/release review, not new feature development.
+  * Marked receipt printer and cash drawer physical validation as deferred because hardware is not yet available.
+  * Removed fixed POS bundle-name expectations from documentation; support should verify the current build manifest because bundle names are build-hashed.
+
+### Validation Evidence
+- `git diff --check`
+- `npm run build`
+- `node tests/Frontend/checkoutFailureState.test.js`
+- `node tests/Frontend/catalogCache.test.js`
+- `node tests/Frontend/offlineQueueSync.test.js`
+- `node tests/Frontend/offlinePaymentQueue.test.js`
+- `node tests/Frontend/connectivityStore.test.mjs`
+
 ## [1.5.4] - 2026-07-11
 ### Changed
 * **POS Terminal Offline Reconnect and Sync UX Stabilization**
@@ -11,7 +28,7 @@ All notable changes to the IPOS platform, modules, and user workflows are docume
   * Local sync broker discovery now falls back to **Local Sync Offline** when protected broker endpoints are unavailable or unauthenticated.
   * Product search now rejects non-JSON responses before parsing, allowing cached catalog fallback when a reconnect returns an HTML login/error page.
   * Offline sync now distinguishes retryable failures from review-required conflicts such as sequence-order mismatches.
-  * Service-worker shell cache rolled to `ipos-terminal-shell-v31-20260711`; current POS bundle for this stabilization build is `Index-Ba8-w-pW.js`.
+  * Service-worker shell cache rolled to `ipos-terminal-shell-v31-20260711`; POS bundle filenames are build-hashed and should be verified against the current manifest.
 
 ### Documentation
 * Updated the Terminal Sync Diagnostics user guide, troubleshooting guide, offline stabilization validation note, and roadmap references.

@@ -2,7 +2,7 @@
 project: IPOS
 artifact: POS Terminal Hardening Pass Development-Ready Plan
 date: 2026-07-11
-status: Ready for Development Intake
+status: Development Checkpointed; UAT Release Gate Pending
 owner: Product Management
 sourceDocuments:
   - docs/roadmap/validated-implementation-roadmap.md
@@ -219,6 +219,8 @@ Offline terminal records remain provisional claims until server-side reconciliat
 
 **Goal:** Prepare hardware and receipt readiness for pilot claims without making BIR-certified offline receipt claims.
 
+**Current Status:** Deferred/blocked for physical validation because receipt printer and cash drawer hardware are not yet available.
+
 **Problem:** Hardware adapter readiness is still listed as a follow-up, and the provider defaults to a no-op adapter unless initialized.
 
 **In Scope:**
@@ -250,7 +252,7 @@ Offline terminal records remain provisional claims until server-side reconciliat
 **Validation:**
 
 - Frontend smoke test for no-op and browser print adapter states.
-- Manual receipt/cash drawer test on pilot hardware.
+- Manual receipt/cash drawer test on pilot hardware once devices are available.
 - Compliance review of provisional wording before pilot expansion.
 
 ### Story PTH-6: Offline UAT Execution and Release Gate
@@ -312,6 +314,8 @@ Offline terminal records remain provisional claims until server-side reconciliat
 - [x] PTH-3 queue diagnostics started with support-safe export bundle and resolved-record pruning guard.
 - [x] PTH-2 admin offline sync review UX started with searchable review console and import detail/action workflow.
 - [x] PTH-4 route/session hardening continued with canonical `/pos` redirect, terminal-bound POS operational/API routes, and cashier-facing session/terminal error copy.
+- [x] POS terminal hardening checkpoint committed as `6c2b5d0` with repository clean-slate cleanup completed.
+- [ ] PTH-5 physical printer/drawer validation deferred until hardware is available.
 - [ ] Engineering estimates assigned.
 - [ ] Story owners assigned.
 - [ ] UAT execution window scheduled.
@@ -416,20 +420,39 @@ Validation:
 - `node tests/Frontend/checkoutFailureState.test.js`
 - `npm run build`
 
+### 2026-07-11 Slice 6
+
+Checkpointed the POS terminal hardening baseline for UAT reference:
+
+- Created clean repository checkpoint commit `6c2b5d0` (`chore: checkpoint POS terminal hardening`).
+- Removed generated Electron `dist`/`node_modules`, local auth env, and `.DS_Store` noise from the working tree and ignore rules.
+- Aligned roadmap, UAT, user guide, troubleshooting, current-focus, and task-ledger references around the POS terminal offline UAT/release gate.
+- Explicitly deferred physical receipt printer and cash drawer validation until hardware is available.
+
+Validation before checkpoint:
+
+- `git diff --check`
+- `npm run build`
+- `node tests/Frontend/checkoutFailureState.test.js`
+- `node tests/Frontend/catalogCache.test.js`
+- `node tests/Frontend/offlineQueueSync.test.js`
+- `node tests/Frontend/offlinePaymentQueue.test.js`
+- `node tests/Frontend/connectivityStore.test.mjs`
+
 ## Recommended Build Order
 
 1. PTH-4 Route and session hardening.
 2. PTH-1 Terminal route surface hardening.
 3. PTH-3 Queue diagnostics and retention.
 4. PTH-2 Admin offline sync review UX.
-5. PTH-5 Hardware and provisional receipt readiness.
-6. PTH-6 UAT execution and release gate.
+5. PTH-6 UAT execution and release gate without hardware-dependent pass claims.
+6. PTH-5 Hardware and provisional receipt readiness after printer/drawer devices are available.
 
 ## Release Gate
 
 This hardening pass may be marked complete only when:
 
-1. PTH-1 through PTH-5 pass targeted automated validation.
+1. PTH-1 through PTH-4 pass targeted automated validation, and PTH-5 is either hardware-validated or explicitly marked deferred for the selected pilot scope.
 2. PTH-6 UAT is executed and signed.
 3. No high-severity offline checkout, route access, sync, or conflict-review defect remains open.
 4. Product explicitly confirms whether the resulting status is:

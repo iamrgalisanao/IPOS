@@ -20,14 +20,14 @@ Welcome to the **IPOS User Guide**. This documentation provides store staff, bra
 * **[Sales History & Prior-Period Reports](file:///Users/teamsolo/Documents/Dev/IPOS/docs/user-guide/04-module-guides/sales-report.md)**: Search transactions, reprint receipts with reasons, and handle late offline sales prior-period adjustments.
 * **[Product Catalog & Unit Conversions](file:///Users/teamsolo/Documents/Dev/IPOS/docs/user-guide/04-module-guides/product-management.md)**: Dynamic pricing, product categories, and tenant unit conversion controls.
 * **[Inventory Stocktake & Adjustments](file:///Users/teamsolo/Documents/Dev/IPOS/docs/user-guide/04-module-guides/inventory.md)**: Initializing counts, recording physical stock, posting adjustments, and tracking WAC valuations.
-* **[Terminal Sync Diagnostics & Reliability](file:///Users/teamsolo/Documents/Dev/IPOS/docs/user-guide/04-module-guides/terminal-sync-monitor.md)**: Monitoring POS terminal synchronization payload diagnostics, sequence verification, and sync status checks.
+* **[Terminal Sync Diagnostics & Reliability](file:///Users/teamsolo/Documents/Dev/IPOS/docs/user-guide/04-module-guides/terminal-sync-monitor.md)**: Monitoring POS terminal synchronization payload diagnostics, sequence verification, session/terminal recovery states, and sync status checks.
 * **[Cash Drawer Audit & Shift Reconciliation](file:///Users/teamsolo/Documents/Dev/IPOS/docs/user-guide/04-module-guides/cash-drawer-audit-shift-reconciliation.md)**: Open/close cashier shifts, record surprise spot audits, monitor warning limits, verify high-value drops, and approve bank deposits.
 
 ### 4A. UAT and Validation References
-* **[POS Terminal Offline Checkout and Sync UAT](file:///Users/teamsolo/Documents/Dev/IPOS/docs/validation/pos-terminal-offline-uat-2026-07-11.md)**: Cashier and admin acceptance checklist for offline checkout, reconnect, sync queue, and service-worker shell rollover.
+* **[POS Terminal Offline Checkout and Sync UAT](file:///Users/teamsolo/Documents/Dev/IPOS/docs/validation/pos-terminal-offline-uat-2026-07-11.md)**: Cashier and admin acceptance checklist for offline checkout, reconnect, sync queue, service-worker shell rollover, and hardware-deferred validation notes.
 
 ### 5. [Common Errors and Troubleshooting](file:///Users/teamsolo/Documents/Dev/IPOS/docs/user-guide/05-common-errors-and-troubleshooting.md)
-* Explanations and actions for common error codes, QBO mapping issues, tolerance mismatches, and offline warning indicators.
+* Explanations and actions for common error codes, QBO mapping issues, tolerance mismatches, offline warning indicators, and POS terminal session/sync recovery messages.
 
 ### 6. [Frequently Asked Questions (FAQ)](file:///Users/teamsolo/Documents/Dev/IPOS/docs/user-guide/06-faq.md)
 * Quick answers about shift locks, IBT status, receipt reprinted duplicate watermarks, and VAT compliance details.

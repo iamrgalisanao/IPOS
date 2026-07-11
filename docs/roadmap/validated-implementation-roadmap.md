@@ -50,7 +50,7 @@ For long-term production readiness, the POS Terminal will be hardened as a table
 | **Epic 38** | F&B Table & Bill Manipulation Operations | **[Proposed]** |
 | **Epic 39** | Loyalty & Store Credit Ledger | **[Proposed]** |
 | **Epic 40** | Cash Drawer Audit & Manager Shift Reconciliation | **[Closed]** |
-| **Epic 41** | POS Terminal Production Hardening for Android Tablet | **[Implemented / Pilot Validation Required]** |
+| **Epic 41** | POS Terminal Production Hardening for Android Tablet | **[Implemented & Locally Validated / UAT Release Gate Pending / Hardware Validation Deferred]** |
 | **Epic 42** | Windows POS Terminal Electron Wrapper | **[Closed — Implemented & Locally Validated]** |
 | **Epic 43** | POS Lock Screen & Employee Timecards | **[Closed — Implemented & Locally Validated]** |
 
@@ -59,32 +59,30 @@ For long-term production readiness, the POS Terminal will be hardened as a table
 
 *Epic 3 is closed as a Product/Catalog Core Foundation epic. Backend product/catalog capabilities are implemented and validated via downstream dependencies (POS, Stocktake, Accounting). Advanced UX/CDN/Product CRUD management UI is deferred and should be tracked separately as a future management feature.*
 
-## Current Proposed Planning Direction
+## Current Execution Reference
 
-**Market Readiness Inventory Operations Planning** is the next proposed planning
+The current project baseline is the POS terminal hardening checkpoint commit
+`6c2b5d0` (`chore: checkpoint POS terminal hardening`). That checkpoint keeps
+the repository clean after implementing the terminal offline cash capture,
+queue diagnostics, route/session hardening, user management, statutory discount,
+timecard, and Electron wrapper source work.
+
+The next active gate is the POS terminal offline UAT and release-gate review:
+- [pos-terminal-offline-uat-2026-07-11.md](../validation/pos-terminal-offline-uat-2026-07-11.md)
+- [_bmad-output/planning-artifacts/pos-terminal-hardening-pass-development-ready-plan.md](../../_bmad-output/planning-artifacts/pos-terminal-hardening-pass-development-ready-plan.md)
+
+Hardware printer and cash drawer validation is explicitly deferred because the
+devices are not yet available. The project must not claim physical hardware
+readiness, drawer opening, or printer validation until a later hardware-backed
+UAT run captures evidence.
+
+## Parked Planning Direction
+
+**Market Readiness Inventory Operations Planning** remains a parked planning
 track after Story 31.7 and the vendor report gap analysis.
-
-This is not a broad new engine epic. It is a bounded pilot-marketability track
-focused on making existing inventory capabilities easier to find, explain, print,
-and use in branch operations.
 
 Planning artifact:
 - [market-readiness-inventory-operations-priority-plan.md](market-readiness-inventory-operations-priority-plan.md)
-
-Priority order:
-1. Unified inventory and reporting hub.
-2. Print-friendly stocktake and inventory report views.
-3. Low-stock and reorder dashboard.
-4. Branch stock movement summary.
-5. Stocktake screenshots and pilot training pack.
-
-Explicitly parked or excluded:
-1. Recursive POS recipe deduction.
-2. Auto-reorder purchasing mutation.
-3. Catalog import write path.
-4. Tax, Z-read, GCT, receipt, e-journal, accounting, or subscription engine changes.
-5. Broad offline-sales rollout.
-6. BIR certification claims.
 
 ---
 
@@ -508,7 +506,7 @@ Implementation note: Story 28.10 completes official server-side offline import p
 
 ### POS Terminal Hardening Pass
 
-Status: Ready for Development Intake
+Status: Development Checkpointed; UAT Release Gate Pending
 
 The July 2026 cashier-led offline testing and follow-up readiness review found
 that the controlled offline cash-sale path is implemented for pilot use, but
@@ -516,6 +514,11 @@ requires a hardening pass before broader rollout. The pass covers terminal route
 surface completion, admin offline conflict review UX, queue diagnostics and
 retention, legacy route/session hardening, hardware readiness visibility, and
 formal UAT sign-off.
+
+Checkpoint `6c2b5d0` completes the current development baseline for the
+implemented hardening slices. The next active step is UAT/release-gate evidence
+collection. Hardware printer and cash drawer physical validation remains
+deferred until devices are available.
 
 Planning Artifact:
 - [pos-terminal-hardening-pass-development-ready-plan.md](../../_bmad-output/planning-artifacts/pos-terminal-hardening-pass-development-ready-plan.md)
@@ -1439,10 +1442,10 @@ Epic 39 adds loyalty point accumulation and customer store credit wallets (e.g.,
 
 ---
 
-## Epic 41: POS Terminal Production Hardening for Android Tablet [Implemented / Pilot Validation Required]
+## Epic 41: POS Terminal Production Hardening for Android Tablet [Implemented & Locally Validated / UAT Release Gate Pending / Hardware Validation Deferred]
 
-**Status:** Implemented / Pilot Validation Required
-**Decision:** Ready for Android tablet physical validation. This acts as the bridge between the current working POS terminal and a future production-grade Android deployment.
+**Status:** Implemented & Locally Validated / UAT Release Gate Pending / Hardware Validation Deferred
+**Decision:** Ready for POS terminal offline UAT and release-gate review. Physical Android tablet, receipt printer, and cash drawer validation must remain deferred until hardware devices are available.
 
 **Proposed Stories:**
 - **41.1 Tablet POS Shell Hardening**: Full-screen tablet layout, touch-optimized controls, persistent cashier/session state, and prevention of accidental navigation loss.
@@ -1463,6 +1466,12 @@ Epic 39 adds loyalty point accumulation and customer store credit wallets (e.g.,
 - Terminal identity binding for `/pos/terminal/checkout` is implemented and locally validated. The `terminal` middleware now enforces a verified terminal identity at shell entry, and the unsafe first-active-profile fallback has been removed.
 - Reference planning lock: `docs/implementation-plans/epic-41-terminal-identity-binding-planning-lock.md`.
 - Closure evidence: `docs/validation/epic-41-terminal-identity-binding-closure.md`.
+
+**Pilot Hardening Checkpoint (2026-07-11):**
+- Checkpoint commit: `6c2b5d0` (`chore: checkpoint POS terminal hardening`).
+- UAT reference: `docs/validation/pos-terminal-offline-uat-2026-07-11.md`.
+- Development reference: `_bmad-output/planning-artifacts/pos-terminal-hardening-pass-development-ready-plan.md`.
+- Hardware boundary: no physical receipt printer or cash drawer validation is included in the current checkpoint.
 
 ---
 

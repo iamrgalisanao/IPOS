@@ -62,9 +62,20 @@ If **Review / Conflict** remains after reconnecting, do not re-enter the same sa
 ### D. Browser Shell and Service Worker Refresh
 The POS terminal uses a service-worker cached shell so a refresh can still load the terminal while the server is unavailable. After a deployment, the terminal must reconnect once while the server is available so the new shell version can install.
 
-If support asks for the active bundle, open the browser console and confirm the POS bundle name. For the 2026-07-11 stabilization build, the expected POS bundle is `Index-Ba8-w-pW.js` and the shell cache is `ipos-terminal-shell-v31-20260711`.
+If support asks for the active bundle, open the browser console and confirm the POS bundle name against the current build manifest. Bundle filenames are build-hashed and should not be treated as fixed reference values. For the 2026-07-11 stabilization baseline, the expected shell cache is `ipos-terminal-shell-v31-20260711`.
 
-### E. Monitoring Terminal Sync Statuses in Admin
+### E. Session and Terminal Access Messages
+If the POS terminal shows a session or access banner:
+1. **POS Session Needs Attention** means the server is reachable but the browser session is stale or expired. Sign in again while online.
+2. **Terminal Context Not Verified** means the registered terminal identity is missing or mismatched. Retry context checks or ask support to verify the Sales Machine Profile.
+3. **Clock-In Required** means the cashier must use the shift/timecard flow before performing the protected action.
+
+These messages should not hide the cart, queue drawer, or checkout controls. If controls overlap or disappear, capture a screenshot and treat it as a UI defect.
+
+### F. Hardware Availability Boundary
+Printer and cash drawer devices are not available in the current reference UAT environment. Offline cash capture should not be blocked only because these devices are absent, but the project must not claim receipt printer or drawer readiness until physical hardware validation is completed.
+
+### G. Monitoring Terminal Sync Statuses in Admin
 1. Navigate to **Administration → Sync Diagnostics**.
 2. Review the list of active terminals. Each row displays:
    * **Terminal ID** & **Assigned Branch**
@@ -72,7 +83,7 @@ If support asks for the active bundle, open the browser console and confirm the 
    * **Sync Latency** (Time elapsed since the last transaction was pushed)
    * **Connection Status** (Green = Online/Sync Current, Amber = Sync Lagging, Red = Offline)
 
-### F. Validating Terminal Sequence Registry
+### H. Validating Terminal Sequence Registry
 Terminal-bound sequence numbering prevents offline sales from overwriting invoice sequences:
 1. Open the details page for a target POS terminal.
 2. Review the **Sequence Registry Ledger**.
@@ -80,7 +91,7 @@ Terminal-bound sequence numbering prevents offline sales from overwriting invoic
 4. If the POS banner reports `SEQUENCE_OUT_OF_ORDER`, compare the expected terminal sequence with the queued local reference.
 5. *Action*: Check the terminal's local queue buffer. If the missing sequence exists locally, trigger sync for that sequence first; otherwise classify the record for admin review before accepting later sequences.
 
-### G. Utilizing the Sandbox Payload Validator
+### I. Utilizing the Sandbox Payload Validator
 Before registering a new terminal build or troubleshooting a payload structure error:
 1. Navigate to **Sandbox → Payload Validation**.
 2. Paste the raw terminal JSON payload.

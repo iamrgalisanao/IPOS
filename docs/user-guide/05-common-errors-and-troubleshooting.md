@@ -83,7 +83,7 @@ User Roles: All Roles
 
 ### Old POS bundle still appears in console
 * **Cause**: The terminal is still running a stale service-worker cached shell. This is common if the server was offline when the browser attempted to update `/sw.js`.
-* **Action**: Bring the server online and refresh the terminal once. For the 2026-07-11 stabilization build, support should expect `ipos-terminal-shell-v31-20260711` and POS bundle `Index-Ba8-w-pW.js`.
+* **Action**: Bring the server online and refresh the terminal once. For the 2026-07-11 stabilization baseline, support should expect shell cache `ipos-terminal-shell-v31-20260711`; POS bundle filenames are build-hashed, so verify the active bundle against the current manifest instead of a fixed filename.
 
 ---
 
@@ -105,6 +105,10 @@ User Roles: All Roles
 * **Cause**: The POS terminal request is missing a valid registered terminal identity, or the `X-Terminal-ID` does not belong to the active tenant and branch.
 * **Action**: Reopen the registered POS terminal URL/session for the correct branch. If this happens on a configured tablet, ask an admin to verify the Sales Machine Profile registration and terminal identifier.
 
+### "POS Session Needs Attention"
+* **Cause**: The server is reachable, but the browser session is stale or expired. This often appears after reconnecting a terminal that was offline for a while.
+* **Action**: Sign in again while the server is online, then return to the POS terminal. The cart and queue should remain visible where cached state exists.
+
 ---
 
 ## 7. Offline Checkout and Split Payments
@@ -120,3 +124,7 @@ User Roles: All Roles
 ### Offline sale is captured but not visible in Pending count
 * **Cause**: The queue panel may be showing a stale summary, an older failed/review record, or a synced history list instead of the current pending queue.
 * **Action**: Click **View Queue** and verify the latest local transaction reference and timestamp. If the top banner count and right-side status disagree, refresh the POS shell while online and check IndexedDB/local queue diagnostics before entering another sale.
+
+### Printer or cash drawer is unavailable
+* **Cause**: Physical receipt printer and cash drawer hardware are not attached or not yet validated for the current terminal environment.
+* **Action**: Continue eligible cash-only offline capture if the terminal allows it and the sale does not require hardware output. Do not mark printer/drawer behavior as validated until physical hardware UAT is completed.
