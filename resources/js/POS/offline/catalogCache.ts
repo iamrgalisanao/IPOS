@@ -22,6 +22,7 @@ export interface CacheBootstrapPayload {
     products: any[];
     categories: any[];
     tax_categories: any[];
+    payment_methods?: any[];
     tenant_context: TenantContext | null;
     branch_context: BranchContext | null;
     machine_profile_context: MachineProfileContext | null;
@@ -120,7 +121,7 @@ export function filterCachedProducts(products: any[] = [], searchQuery = '', cat
 }
 
 const DB_NAME = 'ipos_pos_cache';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export class CatalogCacheService {
     private db: IDBDatabase | null = null;
@@ -150,6 +151,9 @@ export class CatalogCacheService {
                 if (!db.objectStoreNames.contains('tax_categories')) {
                     db.createObjectStore('tax_categories', { keyPath: 'id' });
                 }
+                if (!db.objectStoreNames.contains('payment_methods')) {
+                    db.createObjectStore('payment_methods', { keyPath: 'id' });
+                }
             };
 
             request.onsuccess = () => {
@@ -166,11 +170,12 @@ export class CatalogCacheService {
     async clearCache(): Promise<void> {
         const db = await this.initDb();
         return new Promise((resolve, reject) => {
-            const tx = db.transaction(['metadata', 'products', 'categories', 'tax_categories'], 'readwrite');
+            const tx = db.transaction(['metadata', 'products', 'categories', 'tax_categories', 'payment_methods'], 'readwrite');
             tx.objectStore('metadata').clear();
             tx.objectStore('products').clear();
             tx.objectStore('categories').clear();
             tx.objectStore('tax_categories').clear();
+            tx.objectStore('payment_methods').clear();
 
             tx.oncomplete = () => resolve();
             tx.onerror = () => reject(tx.error);
@@ -180,13 +185,14 @@ export class CatalogCacheService {
     async writeBootstrapPayload(payload: CacheBootstrapPayload): Promise<void> {
         const db = await this.initDb();
         return new Promise((resolve, reject) => {
-            const tx = db.transaction(['metadata', 'products', 'categories', 'tax_categories'], 'readwrite');
+            const tx = db.transaction(['metadata', 'products', 'categories', 'tax_categories', 'payment_methods'], 'readwrite');
 
             // Clear previous cache
             tx.objectStore('metadata').clear();
             tx.objectStore('products').clear();
             tx.objectStore('categories').clear();
             tx.objectStore('tax_categories').clear();
+            tx.objectStore('payment_methods').clear();
 
              // Write metadata
              const metadataStore = tx.objectStore('metadata');
@@ -227,6 +233,12 @@ export class CatalogCacheService {
                 taxCategoriesStore.put(tc);
             }
 
+            // Write Payment Methods
+            const paymentMethodsStore = tx.objectStore('payment_methods');
+            for (const pm of payload.payment_methods || []) {
+                paymentMethodsStore.put(pm);
+            }
+
             tx.oncomplete = () => resolve();
             tx.onerror = () => reject(tx.error);
         });
@@ -235,11 +247,12 @@ export class CatalogCacheService {
     async getCachedCatalog(): Promise<CacheBootstrapPayload> {
         const db = await this.initDb();
         return new Promise((resolve, reject) => {
-            const tx = db.transaction(['metadata', 'products', 'categories', 'tax_categories'], 'readonly');
+            const tx = db.transaction(['metadata', 'products', 'categories', 'tax_categories', 'payment_methods'], 'readonly');
 
             const productsRequest = tx.objectStore('products').getAll();
             const categoriesRequest = tx.objectStore('categories').getAll();
             const taxCategoriesRequest = tx.objectStore('tax_categories').getAll();
+            const paymentMethodsRequest = tx.objectStore('payment_methods').getAll();
             
             const metadataStore = tx.objectStore('metadata');
             const hashReq = metadataStore.get('tax_configuration_version_hash');
@@ -263,6 +276,7 @@ export class CatalogCacheService {
                     products: productsRequest.result || [],
                     categories: categoriesRequest.result || [],
                     tax_categories: taxCategoriesRequest.result || [],
+                    payment_methods: paymentMethodsRequest.result || [],
                     tenant_context: tenantReq.result || null,
                     branch_context: branchReq.result || null,
                     machine_profile_context: machineReq.result || null,

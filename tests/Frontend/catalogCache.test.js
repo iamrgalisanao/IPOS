@@ -66,7 +66,8 @@ class MockIDBDatabase {
             metadata: new MockIDBObjectStore(),
             products: new MockIDBObjectStore(),
             categories: new MockIDBObjectStore(),
-            tax_categories: new MockIDBObjectStore()
+            tax_categories: new MockIDBObjectStore(),
+            payment_methods: new MockIDBObjectStore()
         };
     }
     transaction(storeNames, mode) {

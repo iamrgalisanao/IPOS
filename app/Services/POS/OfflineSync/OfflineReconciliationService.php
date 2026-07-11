@@ -146,6 +146,27 @@ class OfflineReconciliationService
                 continue;
             }
 
+            // Run offline payment policy checks
+            $reason = null;
+            $context = null;
+            if (!$this->validatePaymentPolicy($import, $reason, $context)) {
+                if ($reason === 'PAYMENT_POLICY_HASH_STALE') {
+                    $import->update([
+                        'status' => OfflineSalesImport::STATUS_ACCEPTED_WITH_WARNING,
+                        'rejection_reason' => "PAYMENT_POLICY_HASH_STALE: client={$context['client_hash']} current={$context['current_hash']}"
+                    ]);
+                } else {
+                    $import->update([
+                        'status' => OfflineSalesImport::STATUS_CONFLICT,
+                        'conflict_notes' => json_encode([
+                            'sync_status' => 'review_required',
+                            'review_reason' => $reason,
+                            'review_context' => $context,
+                        ]),
+                    ]);
+                }
+            }
+
             // Perform server-side recalculation and total validation
             $recalcResult = $this->recalculationService->recalculate($import);
 
@@ -258,11 +279,11 @@ class OfflineReconciliationService
                 ?: \App\Models\Branch::withoutGlobalScopes()->find($import->branch_id);
 
             $currentHashes = [
-                'layout_version_hash' => $bootstrapService->calculateLayoutVersionHash($import->tenant_id, $import->branch_id),
+                'layout_version_hash' => $bootstrapService->calculateLayoutVersionHash($import->tenant_id, $import->branch_id, $profile),
                 'catalog_version_hash' => $bootstrapService->calculateCatalogVersionHash($import->tenant_id, $import->branch_id),
                 'tax_configuration_version_hash' => $bootstrapService->calculateTaxConfigHash($import->tenant_id, $import->branch_id),
                 'discount_rules_version_hash' => $bootstrapService->calculateDiscountRulesVersionHash($import->tenant_id),
-                'payment_methods_version_hash' => $bootstrapService->calculatePaymentMethodsVersionHash($import->tenant_id),
+                'payment_methods_version_hash' => $bootstrapService->calculatePaymentMethodsVersionHash($import->tenant_id, $import->branch_id),
                 'terminal_policy_version_hash' => ($tenant && $branch)
                     ? $bootstrapService->calculateTerminalPolicyVersionHash($tenant, $branch, $profile)
                     : null,
@@ -816,5 +837,128 @@ class OfflineReconciliationService
             $expectedSeqSuffix = $suffix + 1;
             $expectedPrevHash = $importPayload['row_hash'] ?? null;
         }
+    }
+
+    /**
+     * Validate the payments in the import against branch offline payment policy.
+     *
+     * Returns true if valid, false if invalid (populating reason and context).
+     */
+    public function validatePaymentPolicy(OfflineSalesImport $import, ?string &$reason = null, ?array &$context = null): bool
+    {
+        $payload = $import->raw_payload;
+        $payments = $payload['payments'] ?? [];
+        $branchId = $import->branch_id;
+        $tenantId = $import->tenant_id;
+
+        // 1. Check if payment methods version hash is reported
+        $clientHash = $payload['payment_methods_version_hash'] ?? null;
+        if (!$clientHash) {
+            // Verify if any payment is non-cash
+            $hasNonCash = false;
+            if (is_array($payments)) {
+                foreach ($payments as $paymentData) {
+                    $methodId = $paymentData['payment_method_id'] ?? null;
+                    if ($methodId) {
+                        $method = PaymentMethod::where('tenant_id', $tenantId)->find($methodId);
+                        if ($method && !$method->isCash()) {
+                            $hasNonCash = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!$hasNonCash) {
+                return true;
+            }
+
+            $reason = 'PAYMENT_POLICY_HASH_MISSING';
+            $context = [
+                'payment_methods_version_hash' => null,
+            ];
+            return false;
+        }
+
+        // 2. Check if hash is stale
+        $bootstrapService = app(\App\Services\POS\OfflineReadiness\CacheBootstrapService::class);
+        $currentHash = $bootstrapService->calculatePaymentMethodsVersionHash($tenantId, $branchId);
+        $staleHash = ($clientHash !== $currentHash);
+
+        if (is_array($payments)) {
+            foreach ($payments as $paymentData) {
+                $methodId = $paymentData['payment_method_id'] ?? null;
+                if (!$methodId) {
+                    $reason = 'PAYMENT_METHOD_NOT_IN_TERMINAL_SNAPSHOT';
+                    $context = [];
+                    return false;
+                }
+
+                $method = PaymentMethod::where('tenant_id', $tenantId)->find($methodId);
+                if (!$method) {
+                    $reason = 'PAYMENT_METHOD_NOT_IN_TERMINAL_SNAPSHOT';
+                    $context = [
+                        'payment_method_id' => $methodId,
+                    ];
+                    return false;
+                }
+
+                $settings = $method->getSettingsForBranch($branchId);
+
+                // Is allowed offline?
+                if (!$settings['allow_offline']) {
+                    $reason = 'OFFLINE_PAYMENT_METHOD_NOT_ALLOWED';
+                    $context = [
+                        'payment_method_code' => $method->code,
+                        'payment_method_id' => $method->id,
+                        'amount_centavos' => (int) round(($paymentData['amount'] ?? 0) * 100),
+                        'payment_methods_version_hash' => $clientHash,
+                    ];
+                    return false;
+                }
+
+                // Enforce offline max limit
+                if ($settings['offline_max_limit_centavos'] !== null) {
+                    $amount = (float) ($paymentData['amount'] ?? 0);
+                    $amountCentavos = (int) round($amount * 100);
+                    if ($amountCentavos > $settings['offline_max_limit_centavos']) {
+                        $reason = 'OFFLINE_PAYMENT_LIMIT_EXCEEDED';
+                        $context = [
+                            'payment_method_code' => $method->code,
+                            'payment_method_id' => $method->id,
+                            'amount_centavos' => $amountCentavos,
+                            'limit_centavos' => $settings['offline_max_limit_centavos'],
+                            'payment_methods_version_hash' => $clientHash,
+                        ];
+                        return false;
+                    }
+                }
+
+                // Enforce reference requirements
+                if ($settings['requires_reference'] || $method->reference_required) {
+                    $ref = trim($paymentData['reference_number'] ?? '');
+                    if ($ref === '') {
+                        $reason = 'OFFLINE_PAYMENT_REFERENCE_REQUIRED';
+                        $context = [
+                            'payment_method_code' => $method->code,
+                            'payment_method_id' => $method->id,
+                            'payment_methods_version_hash' => $clientHash,
+                        ];
+                        return false;
+                    }
+                }
+            }
+        }
+
+        if ($staleHash) {
+            $reason = 'PAYMENT_POLICY_HASH_STALE';
+            $context = [
+                'client_hash' => $clientHash,
+                'current_hash' => $currentHash,
+            ];
+            return false;
+        }
+
+        return true;
     }
 }

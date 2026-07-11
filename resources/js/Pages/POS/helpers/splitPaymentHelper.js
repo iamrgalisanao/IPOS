@@ -78,7 +78,7 @@ export const calculateCashChange = (row) => {
  * @param {Number} saleTotal 
  * @returns {Object} { isValid: boolean, errors: Array }
  */
-export const validatePaymentRows = (rows, paymentMethods, saleTotal) => {
+export const validatePaymentRows = (rows, paymentMethods, saleTotal, isOffline = false) => {
     const errors = [];
     const totals = calculatePaymentTotals(rows, saleTotal);
 
@@ -104,18 +104,27 @@ export const validatePaymentRows = (rows, paymentMethods, saleTotal) => {
             if (tendered < amount && tendered > 0) {
                 errors.push(`Row ${index + 1}: Cash tendered is less than the required amount.`);
             } else if (tendered < amount) {
-                // If they haven't typed anything yet or it's 0, we still want to show a hint or block
-                // but let's keep it simple: if amount is set, tendered must be >= amount if provided
                 errors.push(`Row ${index + 1}: Please enter cash tendered.`);
             }
         }
 
-        if (method && method.reference_required) {
-            const ref = (row.reference_number || '').trim();
-            if (!ref) {
-                errors.push(`Row ${index + 1}: Reference number is required for ${method.name}.`);
-            } else if (method.strict_reference_mode && !ref) {
-                errors.push(`Row ${index + 1}: Reference number cannot be blank.`);
+        if (method) {
+            // Reference Number Validation
+            const refRequired = method.requires_reference || method.reference_required;
+            if (refRequired) {
+                const ref = (row.reference_number || '').trim();
+                if (!ref) {
+                    errors.push(`Row ${index + 1}: Reference number is required for ${method.name}.`);
+                }
+            }
+
+            // Offline Limit Validation
+            if (isOffline && method.offline_max_limit_centavos !== null && method.offline_max_limit_centavos !== undefined) {
+                const amountCentavos = Math.round(amount * 100);
+                if (amountCentavos > method.offline_max_limit_centavos) {
+                    const limitFormatted = (method.offline_max_limit_centavos / 100).toFixed(2);
+                    errors.push(`Row ${index + 1}: Offline payment limit exceeded for ${method.name} (Max: ₱${limitFormatted}).`);
+                }
             }
         }
     });

@@ -80,7 +80,8 @@ export default function SplitPayWizard({ sale, paymentMethods = [], onClose, onP
     const totals = useMemo(() => calculatePaymentTotals(validationRows, sale.total), [validationRows, sale.total]);
     
     // Validate rows in compliance with backend expectations
-    const validation = useMemo(() => validatePaymentRows(validationRows, paymentMethods, sale.total), [validationRows, paymentMethods, sale.total]);
+    const currentlyOffline = isOffline() || offlineCaptureMode;
+    const validation = useMemo(() => validatePaymentRows(validationRows, paymentMethods, sale.total, currentlyOffline), [validationRows, paymentMethods, sale.total, currentlyOffline]);
     const rowsUseCashOnly = useMemo(() => validationRows.every((row) => {
         const method = paymentMethods.find(m => m.id === row.payment_method_id);
         return isCashPayment(method);
@@ -266,7 +267,10 @@ export default function SplitPayWizard({ sale, paymentMethods = [], onClose, onP
     };
 
     const getCategoryMethods = (key) => {
-        return paymentMethods.filter(m => getMappedMethod(m.code || m.name) === key);
+        const currentlyOffline = isOffline() || offlineCaptureMode;
+        return paymentMethods
+            .filter(m => getMappedMethod(m.code || m.name) === key)
+            .filter(m => !currentlyOffline || m.allow_offline);
     };
 
     // Dynamic Quick Cash Bill Denominations based on current amount (Requirement 6)
@@ -465,9 +469,8 @@ export default function SplitPayWizard({ sale, paymentMethods = [], onClose, onP
 
                                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                                         {BUTTONS.map(btn => {
-                                                            const terminalOffline = isOffline();
-                                                            const isAvailable = paymentMethods.some(m => getMappedMethod(m.code || m.name) === btn.key)
-                                                                && (!terminalOffline || (offlineCaptureMode && btn.key === 'cash'));
+                                                            const terminalOffline = isOffline() || offlineCaptureMode;
+                                                            const isAvailable = paymentMethods.some(m => getMappedMethod(m.code || m.name) === btn.key && (!terminalOffline || m.allow_offline));
                                                             const Icon = btn.icon;
 
                                                             return (

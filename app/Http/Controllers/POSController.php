@@ -75,9 +75,11 @@ class POSController extends Controller
                 ->get(),
             'initial_products' => $tenantId ? $this->catalogService->search('')->values() : [],
             'payment_methods' => PaymentMethod::active()
+                ->where('tenant_id', $tenantId)
                 ->orderByDesc('is_default')
                 ->orderBy('name')
-                ->get(),
+                ->get()
+                ->map(fn (PaymentMethod $method) => $method->getSettingsForBranch($branchId)),
         ]);
     }
 

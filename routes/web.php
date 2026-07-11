@@ -715,6 +715,14 @@ Route::middleware(['auth', 'tenant'])->group(function () {
             ->name('admin.branches.inventory-policy.update');
     });
 
+    // Branch Payment Settings overrides
+    Route::middleware(['permission:manage_payment_methods'])->group(function () {
+        Route::get('/admin/branches/{branch}/payment-settings', [\App\Http\Controllers\Admin\BranchPaymentSettingsController::class, 'edit'])
+            ->name('admin.branches.payment-settings.edit');
+        Route::post('/admin/branches/{branch}/payment-settings', [\App\Http\Controllers\Admin\BranchPaymentSettingsController::class, 'update'])
+            ->name('admin.branches.payment-settings.update');
+    });
+
     // Offline Sales Settings — Terminal Sequence Registry (Story 28.5)
     Route::middleware(['permission:manage_offline_sales_settings'])->group(function () {
         Route::get('/admin/sales-machine-profiles', [\App\Http\Controllers\Admin\SalesMachineProfileController::class, 'index'])

@@ -121,9 +121,18 @@ class CacheBootstrapService
             $catalogHash = $this->calculateCatalogVersionHash($tenant->id, $branch->id);
             $layoutHash = $this->calculateLayoutVersionHash($tenant->id, $branch->id, $machineProfile);
             $discountRulesHash = $this->calculateDiscountRulesVersionHash($tenant->id);
-            $paymentMethodsHash = $this->calculatePaymentMethodsVersionHash($tenant->id);
+            $paymentMethodsHash = $this->calculatePaymentMethodsVersionHash($tenant->id, $branch->id);
             $terminalPolicyHash = $this->calculateTerminalPolicyVersionHash($tenant, $branch, $machineProfile);
             $printerProfileHash = $this->calculatePrinterProfileVersionHash($tenant->id, $branch->id, $machineProfile?->id);
+
+            // Fetch branch-resolved payment methods list to cache in IndexedDB
+            $paymentMethods = PaymentMethod::active()
+                ->where('tenant_id', $tenant->id)
+                ->orderBy('code')
+                ->orderBy('id')
+                ->get()
+                ->map(fn (PaymentMethod $method) => $method->getSettingsForBranch($branch->id))
+                ->toArray();
 
             $snapshot = [
                 'schema_version' => 1,
@@ -146,6 +155,7 @@ class CacheBootstrapService
                 'products' => $products->toArray(),
                 'categories' => $categories,
                 'tax_categories' => $taxCategories,
+                'payment_methods' => $paymentMethods,
                 'tenant_context' => $tenantContextData,
                 'branch_context' => $branchContextData,
                 'machine_profile_context' => $machineProfileContext,
@@ -382,36 +392,14 @@ class CacheBootstrapService
         ]);
     }
 
-    public function calculatePaymentMethodsVersionHash(string $tenantId): string
+    public function calculatePaymentMethodsVersionHash(string $tenantId, string $branchId): string
     {
         $paymentMethods = PaymentMethod::active()
             ->where('tenant_id', $tenantId)
             ->orderBy('code')
             ->orderBy('id')
-            ->get([
-                'id',
-                'code',
-                'name',
-                'type',
-                'reference_required',
-                'strict_reference_mode',
-                'settlement_tracking_enabled',
-                'is_default',
-                'status',
-                'updated_at',
-            ])
-            ->map(fn (PaymentMethod $method) => [
-                'id' => $method->id,
-                'code' => $method->code,
-                'name' => $method->name,
-                'type' => $method->type,
-                'reference_required' => (bool) $method->reference_required,
-                'strict_reference_mode' => (bool) $method->strict_reference_mode,
-                'settlement_tracking_enabled' => (bool) $method->settlement_tracking_enabled,
-                'is_default' => (bool) $method->is_default,
-                'status' => $method->status,
-                'updated_at' => $method->updated_at?->toIso8601String(),
-            ])
+            ->get()
+            ->map(fn (PaymentMethod $method) => $method->getSettingsForBranch($branchId))
             ->toArray();
 
         return $this->hashCanonical([

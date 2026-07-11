@@ -156,9 +156,10 @@ class OfflineImportRecalculationService
         ];
 
         if ($isMatch) {
-            $newStatus = $import->status === OfflineSalesImport::STATUS_ACCEPTED_WITH_WARNING
-                ? OfflineSalesImport::STATUS_ACCEPTED_WITH_WARNING
-                : OfflineSalesImport::STATUS_SERVER_VERIFIED;
+            $newStatus = $import->status;
+            if (!in_array($newStatus, [OfflineSalesImport::STATUS_ACCEPTED_WITH_WARNING, OfflineSalesImport::STATUS_CONFLICT], true)) {
+                $newStatus = OfflineSalesImport::STATUS_SERVER_VERIFIED;
+            }
 
             $import->update([
                 'status'               => $newStatus,
