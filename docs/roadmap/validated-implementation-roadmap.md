@@ -53,6 +53,7 @@ For long-term production readiness, the POS Terminal will be hardened as a table
 | **Epic 41** | POS Terminal Production Hardening for Android Tablet | **[Implemented & Locally Validated / UAT Release Gate Pending / Hardware Validation Deferred]** |
 | **Epic 42** | Windows POS Terminal Electron Wrapper | **[Closed — Implemented & Locally Validated]** |
 | **Epic 43** | POS Lock Screen & Employee Timecards | **[Closed — Implemented & Locally Validated]** |
+| **Epic 44** | POS Admin Configuration & Terminal Capability | **[Planning Reference / Not Yet Implementation-Locked]** |
 
 
 
@@ -76,6 +77,13 @@ devices are not yet available. The project must not claim physical hardware
 readiness, drawer opening, or printer validation until a later hardware-backed
 UAT run captures evidence.
 
+The next architecture planning track after POS UAT is the admin-configuration
+and terminal-capability backlog. Its first recommended implementation-lock
+candidate is **Admin Config Snapshot Foundation**, because it provides the
+versioned bridge between Back Office configuration and terminal offline
+behavior:
+- [pos-admin-configuration-terminal-capability-backlog.md](pos-admin-configuration-terminal-capability-backlog.md)
+
 ## Parked Planning Direction
 
 **Market Readiness Inventory Operations Planning** remains a parked planning
@@ -83,6 +91,39 @@ track after Story 31.7 and the vendor report gap analysis.
 
 Planning artifact:
 - [market-readiness-inventory-operations-priority-plan.md](market-readiness-inventory-operations-priority-plan.md)
+
+---
+
+## Epic 44: POS Admin Configuration & Terminal Capability [Planning Reference / Not Yet Implementation-Locked]
+
+**Status:** Planning Reference / Not Yet Implementation-Locked
+
+**Decision:** The attached benchmark review has been accepted as a roadmap
+reference for the admin-configuration layer that should govern POS terminal
+capabilities. IPOS should keep Back Office as the master configuration surface,
+keep the POS terminal as the execution surface, and introduce a versioned
+configuration snapshot as the bridge.
+
+**Reference Artifact:**
+- [pos-admin-configuration-terminal-capability-backlog.md](pos-admin-configuration-terminal-capability-backlog.md)
+
+**Current Coverage Summary:**
+- Implemented or partially implemented foundations exist for RBAC/User
+  Management, Sales Machine Profiles, POS layouts, products/categories, tax
+  categories, statutory discounts, cash drawer operations, terminal sync
+  monitor, and offline import review.
+- The largest architecture gap is a branch/register-scoped **Config Snapshot**
+  contract with version hashes for catalog, layout, taxes, discounts, payment
+  methods, terminal policy, and printer profile.
+
+**First Recommended Slice:**
+- Admin Config Snapshot Foundation.
+
+**Explicit Boundaries:**
+- No local official GCT/Z-read/e-journal finalization.
+- No terminal-side master pricing, tax, discount, role, or payment method
+  configuration.
+- No physical printer/cash drawer readiness claim until hardware is available.
 
 ---
 

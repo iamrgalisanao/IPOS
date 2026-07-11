@@ -26,6 +26,9 @@ Welcome to the **IPOS User Guide**. This documentation provides store staff, bra
 ### 4A. UAT and Validation References
 * **[POS Terminal Offline Checkout and Sync UAT](file:///Users/teamsolo/Documents/Dev/IPOS/docs/validation/pos-terminal-offline-uat-2026-07-11.md)**: Cashier and admin acceptance checklist for offline checkout, reconnect, sync queue, service-worker shell rollover, and hardware-deferred validation notes.
 
+### 4B. Planning References
+* **[POS Admin Configuration and Terminal Capability Backlog](file:///Users/teamsolo/Documents/Dev/IPOS/docs/roadmap/pos-admin-configuration-terminal-capability-backlog.md)**: Planning reference for Back Office configuration, terminal capabilities, config snapshots, and future admin-controlled POS settings.
+
 ### 5. [Common Errors and Troubleshooting](file:///Users/teamsolo/Documents/Dev/IPOS/docs/user-guide/05-common-errors-and-troubleshooting.md)
 * Explanations and actions for common error codes, QBO mapping issues, tolerance mismatches, offline warning indicators, and POS terminal session/sync recovery messages.
 

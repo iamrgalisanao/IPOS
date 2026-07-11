@@ -4,6 +4,17 @@ All notable changes to the IPOS platform, modules, and user workflows are docume
 
 ---
 
+## [1.5.6] - 2026-07-11
+### Documentation
+* **POS Admin Configuration & Terminal Capability Planning Reference**
+  * Added the admin-configuration backlog as a roadmap planning artifact.
+  * Documented current IPOS coverage across RBAC, terminal profiles, layouts, catalog, payment methods, taxes, discounts, cash drawer operations, sync review, audit logging, printer routing, and config snapshots.
+  * Identified **Admin Config Snapshot Foundation** as the recommended next implementation-lock candidate after POS terminal UAT.
+  * Reconfirmed that printer/cash drawer physical validation remains deferred until hardware devices are available.
+
+### Validation Evidence
+- `git diff --check`
+
 ## [1.5.5] - 2026-07-11
 ### Documentation
 * **POS Terminal Hardening Reference Alignment**

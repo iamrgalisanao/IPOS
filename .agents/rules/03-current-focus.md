@@ -9,9 +9,11 @@
   - **Epic 29 (Platform Tenant Provisioning & Subscription Feature Gating)**: Closed, implemented and locally validated; non-blocking residual follow-ups tracked separately.
   - **Epic 41 (POS Terminal Production Hardening for Android Tablet)**: Implemented and locally validated. Terminal identity binding residual hardening is closed; pilot validation and hardware integration review remain operational follow-ups.
   - **POS Terminal Pilot Hardening Checkpoint (2026-07-11)**: Documentation, UAT, queue diagnostics, offline cash capture, route/session hardening, terminal identity recovery messaging, and clean repository baseline are aligned to checkpoint commit `6c2b5d0`.
+  - **POS Admin Configuration & Terminal Capability Backlog (2026-07-11)**: Benchmark review accepted as a planning reference. First recommended future implementation lock is Admin Config Snapshot Foundation.
   - **G-066**: Full-suite risky/incomplete residual cleanup closed.
 - **Open Non-Blocking Follow-Ups**:
   - **Feature-gate residual hardening**: optional full POS shell gating.
   - **POS terminal UAT/release gate**: execute `docs/validation/pos-terminal-offline-uat-2026-07-11.md` using the clean checkpoint as the baseline.
+  - **Admin configuration planning**: prepare an implementation lock for Config Snapshot and Versioning after POS terminal UAT is complete.
   - **Hardware validation**: receipt printer and cash drawer physical validation is deferred until devices are available; do not claim hardware readiness before that evidence exists.
-- **Immediate Task**: Execute POS terminal offline UAT and release-gate review without hardware-dependent cases. Keep hardware integration blocked/deferred until printer and drawer devices are available, and keep catalog import write-path work locked unless separately approved.
+- **Immediate Task**: Execute POS terminal offline UAT and release-gate review without hardware-dependent cases. After UAT, move to Admin Config Snapshot Foundation planning lock. Keep hardware integration blocked/deferred until printer and drawer devices are available, and keep catalog import write-path work locked unless separately approved.
