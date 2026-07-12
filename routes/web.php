@@ -739,6 +739,14 @@ Route::middleware(['auth', 'tenant'])->group(function () {
             ->name('admin.sales-machine-profiles.offline-status');
     });
 
+    // Statutory discount approval rules (Task 3)
+    Route::middleware(['permission:manage_approval_rules'])->group(function () {
+        Route::get('/admin/approval-rules', [\App\Http\Controllers\Admin\ApprovalRuleController::class, 'index'])
+            ->name('admin.approval-rules.index');
+        Route::put('/admin/approval-rules', [\App\Http\Controllers\Admin\ApprovalRuleController::class, 'update'])
+            ->name('admin.approval-rules.update');
+    });
+
     // Printer Profile Schema & Admin UI (Task 5)
     Route::middleware(['permission:manage_printer_profiles'])->group(function () {
         Route::resource('/admin/printer-profiles', \App\Http\Controllers\Admin\PrinterProfileController::class)

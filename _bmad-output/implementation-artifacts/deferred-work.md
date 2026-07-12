@@ -11,3 +11,8 @@
 - Task 3: Approval rules configuration for sensitive POS/admin actions; create a planning lock before implementation.
 - Task 4: Cash drawer reason configuration without physical drawer readiness claims.
 - Task 5: Advanced operations backlog, beginning with a separately scoped variants/modifiers decision.
+
+## 2026-07-12 — Task 3 statutory approval review
+
+- `app/Services/POS/SaleCreationService.php` — repair the pre-existing statutory per-line allocation and VAT snapshot logic so mixed eligible/ineligible carts reconcile exactly to the sale-level statutory calculation.
+- `app/Services/POS/StatutoryDiscountService.php` and the statutory beneficiary UI/persistence flow — evaluate Solo Parent child identity requirements as a separately scoped statutory-engine enhancement; Task 3 binds all currently supported beneficiary fields but does not introduce new statutory metadata.

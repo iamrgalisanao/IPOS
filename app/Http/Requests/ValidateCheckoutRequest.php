@@ -44,6 +44,15 @@ class ValidateCheckoutRequest extends FormRequest
             'estimated_totals.subtotal' => ['sometimes', 'numeric'],
             'estimated_totals.tax_total' => ['sometimes', 'numeric'],
             'estimated_totals.total'   => ['sometimes', 'numeric'],
+            'statutory_discount' => ['sometimes', 'array'],
+            'statutory_discount.discount_type_id' => ['required_with:statutory_discount', 'uuid', 'exists:discount_types,id'],
+            'statutory_discount.manager_approval_id' => ['sometimes', 'nullable', 'uuid'],
+            'statutory_discount.options' => ['sometimes', 'array'],
+            'statutory_discount.options.application_mode' => ['sometimes', 'string'],
+            'statutory_discount.options.eligible_person_count' => ['sometimes', 'integer', 'min:1'],
+            'statutory_discount.options.total_pax_count' => ['sometimes', 'nullable', 'integer', 'min:1'],
+            'statutory_discount.options.memc_base_value' => ['sometimes', 'numeric', 'min:0'],
+            'statutory_discount.options.beneficiaries' => ['sometimes', 'array'],
         ];
     }
 

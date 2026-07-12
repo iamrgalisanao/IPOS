@@ -91,6 +91,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'branch', 'terminal', 'permission:c
         Route::post('/discounts/calculate', [\App\Http\Controllers\Api\POS\StatutoryDiscountController::class, 'calculate'])
             ->name('discounts.calculate');
         Route::post('/manager/authorize', [\App\Http\Controllers\POS\ManagerApprovalController::class, 'authorize'])
+            ->middleware('throttle:5,1')
             ->name('manager.authorize');
     });
 

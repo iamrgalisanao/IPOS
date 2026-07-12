@@ -56,6 +56,8 @@ export default function SpecialDiscountModal({
     const [isAuthorizing, setIsAuthorizing] = useState(false);
     const [approvalError, setApprovalError] = useState(null);
     const [managerApprovalId, setManagerApprovalId] = useState(null);
+    const [managerEmail, setManagerEmail] = useState('');
+    const [managerPassword, setManagerPassword] = useState('');
 
     const selectedType = discountTypes.find((t) => t.id === selectedTypeId) || null;
     const statutoryCategory = selectedType?.statutory_category || null;
@@ -73,6 +75,8 @@ export default function SpecialDiscountModal({
             setErrors([]);
             setApprovalError(null);
             setManagerApprovalId(null);
+            setManagerEmail('');
+            setManagerPassword('');
         }
     }, [isOpen]);
 
@@ -108,6 +112,7 @@ export default function SpecialDiscountModal({
 
             const response = await fetch('/api/pos/discounts/calculate', {
                 method: 'POST',
+                credentials: 'same-origin',
                 headers: {
                     'Content-Type': 'application/json',
                     ...buildPosHeaders(),
@@ -177,24 +182,37 @@ export default function SpecialDiscountModal({
         }
 
         // Manager Approval Workflow
-        if (selectedType.requires_approval) {
+        let approvalId = null;
+        if (calculationResult.approval_required) {
+            if (!managerEmail || !managerPassword) {
+                setApprovalError('Manager email and password are required.');
+                return;
+            }
             setIsAuthorizing(true);
             setApprovalError(null);
             try {
                 const response = await fetch('/api/pos/manager/authorize', {
                     method: 'POST',
+                    credentials: 'same-origin',
                     headers: {
                         'Content-Type': 'application/json',
                         ...buildPosHeaders(),
                     },
                     body: JSON.stringify({
-                        approvable_type: 'SaleStatutoryDiscount',
-                        approvable_id: 'PENDING_SALE', // In a real flow, this would be the draft sale ID
-                        action: 'approve',
-                        metadata: {
-                            discount_type_id: selectedTypeId,
-                            amount: calculationResult.discount_amount,
+                        discount_type_id: selectedTypeId,
+                        cart_items: cartItems.map((item) => ({
+                            product_id: item.product_id || item.id,
+                            quantity: Number(item.quantity),
+                        })),
+                        options: {
+                            application_mode: applicationMode,
+                            eligible_person_count: eligiblePersonCount,
+                            total_pax_count: totalPaxCount,
+                            memc_base_value: memcBaseValue,
+                            beneficiaries,
                         },
+                        manager_email: managerEmail,
+                        manager_password: managerPassword,
                     }),
                 });
 
@@ -204,8 +222,8 @@ export default function SpecialDiscountModal({
                 }
 
                 const approvalData = await response.json();
-                // Store the approval ID so it can be passed into the checkout payload
-                setManagerApprovalId(approvalData.approval_id);
+                approvalId = approvalData.approval_id;
+                setManagerApprovalId(approvalId);
             } catch (err) {
                 setApprovalError(err.message);
                 setIsAuthorizing(false);
@@ -222,7 +240,7 @@ export default function SpecialDiscountModal({
                 memc_base_value: memcBaseValue,
                 beneficiaries,
             },
-            managerApprovalId: managerApprovalId,
+            managerApprovalId: approvalId,
             result: calculationResult,
         });
         onClose();
@@ -491,6 +509,27 @@ export default function SpecialDiscountModal({
                                                 <div className="border-t border-slate-700 pt-1.5 text-slate-300 font-bold">Net Payable:</div>
                                                 <div className="border-t border-slate-700 pt-1.5 text-right font-mono text-white font-bold text-base">{formatPeso(calculationResult.net_payable)}</div>
                                             </div>
+                                        </div>
+                                    )}
+                                    {calculationResult?.approval_required && !isCalculating && (
+                                        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
+                                            <div className="text-xs font-bold uppercase tracking-wider text-amber-300">Independent manager approval required</div>
+                                            <input
+                                                type="email"
+                                                value={managerEmail}
+                                                onChange={(event) => setManagerEmail(event.target.value)}
+                                                placeholder="Manager email"
+                                                autoComplete="username"
+                                                className="w-full rounded-lg border-slate-600 bg-slate-900 text-sm text-white"
+                                            />
+                                            <input
+                                                type="password"
+                                                value={managerPassword}
+                                                onChange={(event) => setManagerPassword(event.target.value)}
+                                                placeholder="Manager password"
+                                                autoComplete="current-password"
+                                                className="w-full rounded-lg border-slate-600 bg-slate-900 text-sm text-white"
+                                            />
                                         </div>
                                     )}
                                 </div>

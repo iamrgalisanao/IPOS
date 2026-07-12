@@ -3,53 +3,53 @@
 namespace App\Http\Controllers\POS;
 
 use App\Http\Controllers\Controller;
-use App\Models\ManagerApproval;
+use App\Models\DiscountType;
+use App\Models\SalesMachineProfile;
+use App\Services\BranchContext;
+use App\Services\POS\ManagerAuthorizationService;
+use App\Services\TenantContext;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Str;
 
 class ManagerApprovalController extends Controller
 {
-    /**
-     * Authorize a specific action that requires manager override.
-     */
-    public function authorize(Request $request)
+    public function __construct(
+        protected ManagerAuthorizationService $authorization,
+        protected TenantContext $tenantContext,
+        protected BranchContext $branchContext,
+    ) {}
+
+    public function authorize(Request $request): JsonResponse
     {
-        $request->validate([
-            'approvable_type' => 'required|string',
-            'approvable_id'   => 'required|uuid',
-            'action'          => 'required|in:approve,deny',
-            'reason'          => 'nullable|string|max:255',
-            'metadata'        => 'nullable|array',
+        $validated = $request->validate([
+            'discount_type_id' => ['required', 'uuid'],
+            'cart_items' => ['required', 'array', 'min:1'],
+            'cart_items.*.product_id' => ['required', 'uuid'],
+            'cart_items.*.quantity' => ['required', 'numeric', 'gt:0'],
+            'options' => ['nullable', 'array'],
+            'manager_email' => ['required', 'email'],
+            'manager_password' => ['required', 'string'],
         ]);
 
-        $manager = Auth::user();
-
-        // Permission check: Only users with manager/supervisor roles can authorize
-        if (!$manager->hasPermission('pos.manager_override')) {
-            return response()->json([
-                'status' => 'unauthorized',
-                'message' => 'You do not have the required permissions to authorize this action.'
-            ], 403);
+        $type = DiscountType::active()->findOrFail($validated['discount_type_id']);
+        $terminal = $request->attributes->get('terminal_profile');
+        if (!$terminal instanceof SalesMachineProfile) {
+            return response()->json(['message' => 'Verified terminal context is required.'], 422);
         }
 
-        $approval = ManagerApproval::create([
-            'id'                => Str::uuid()->toString(),
-            'tenant_id'         => $manager->tenant_id,
-            'branch_id'         => $manager->branch_id,
-            'user_id'           => $manager->id,
-            'requesting_user_id' => $request->user()->id,
-            'approvable_type'   => $request->approvable_type,
-            'approvable_id'     => $request->approvable_id,
-            'action'            => $request->action,
-            'reason'            => $request->reason,
-            'metadata'           => $request->metadata,
-        ]);
+        try {
+            $approval = $this->authorization->issue(
+                $request->user(), $this->tenantContext->getTenantId(), $this->branchContext->getBranchId(),
+                $terminal, $type, $validated['cart_items'], $validated['options'] ?? [],
+                $validated['manager_email'], $validated['manager_password'],
+            );
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 403);
+        }
 
         return response()->json([
-            'status' => 'authorized',
-            'approval_id' => $approval->id,
-            'message' => 'Action successfully authorized by manager.'
+            'status' => 'authorized', 'approval_id' => $approval->id,
+            'expires_at' => $approval->expires_at->toIso8601String(),
         ]);
     }
 }

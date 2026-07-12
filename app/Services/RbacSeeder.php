@@ -65,6 +65,7 @@ class RbacSeeder
             'access_pos' => 'Can access POS interface',
             'create_sale' => 'Can create sales transactions',
             'apply_discount' => 'Can apply discounts to sales',
+            'pos.approve_discount' => 'Can independently approve statutory discounts',
             'open_shift' => 'Can open a new POS shift',
             'close_shift' => 'Can close an active POS shift',
             'approve_shift' => 'Can review and approve submitted POS shifts',
@@ -164,6 +165,7 @@ class RbacSeeder
 
             // Task 5: Printer Profile Schema & Admin UI
             'manage_printer_profiles' => 'Can manage printer profiles and terminal printer assignments',
+            'manage_approval_rules' => 'Can manage statutory discount approval rules',
         ];
     }
 
@@ -188,6 +190,7 @@ class RbacSeeder
                     'open_shift', 'close_shift', 'approve_shift', 'view_shift', 'view_branch_shifts', 'view_own_shift_summary',
                     'manage_cash_drawer',
                     'view_branch_dashboard', 'manage_branch_inventory',
+                    'pos.approve_discount',
                     'approve_void', 'approve_refund', 'view_branch_reports',
                     'close_branch_day', 'view_reports',
                     'view_sales_history', 'view_sale_details',

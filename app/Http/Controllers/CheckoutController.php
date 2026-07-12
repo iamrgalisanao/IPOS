@@ -426,7 +426,8 @@ class CheckoutController extends Controller
                 clientRequestUuid: $clientUuid,
                 rawItems: $rawItems,
                 statutoryDiscount: $request->input('statutory_discount', []),
-                isTrainingMode: $isTrainingMode
+                isTrainingMode: $isTrainingMode,
+                terminalId: $request->attributes->get('terminal_profile')?->id,
             );
         } catch (InsufficientStockException $exception) {
             $productIds = collect($rawItems)->pluck('product_id')->unique()->values()->all();
@@ -447,6 +448,8 @@ class CheckoutController extends Controller
                     ];
                 })->values(),
             ], 422);
+        } catch (\RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
         }
 
         return match ($result['status']) {

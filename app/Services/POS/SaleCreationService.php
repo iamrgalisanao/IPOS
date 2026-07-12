@@ -13,7 +13,9 @@ class SaleCreationService
 {
     public function __construct(
         protected \App\Services\Inventory\FefoAllocationService $fefoAllocationService,
-        protected \App\Services\POS\StatutoryDiscountService $discountService
+        protected \App\Services\POS\StatutoryDiscountService $discountService,
+        protected \App\Services\POS\ApprovalRuleResolver $approvalRuleResolver,
+        protected \App\Services\POS\ManagerAuthorizationService $managerAuthorizationService,
     ) {}
     /**
      * Attempt to create a sale from a validated payload.
@@ -42,7 +44,8 @@ class SaleCreationService
         string $clientRequestUuid,
         array $rawItems,
         array $statutoryDiscount = [],
-        bool $isTrainingMode = false
+        bool $isTrainingMode = false,
+        ?string $terminalId = null,
     ): array {
         $hash = $this->computePayloadHash($clientRequestUuid, $rawItems, $tenantId, $branchId, $userId, $isTrainingMode, $statutoryDiscount);
 
@@ -114,17 +117,37 @@ class SaleCreationService
 
         // Handle Statutory Discount Calculation
         $statutoryResult = null;
+        $discountType = null;
+        $approvalRequired = false;
         if (!empty($statutoryDiscount)) {
-            $discountType = \App\Models\DiscountType::findOrFail($statutoryDiscount['discount_type_id']);
+            $discountType = \App\Models\DiscountType::active()->findOrFail($statutoryDiscount['discount_type_id']);
             $statutoryResult = $this->discountService->calculate(
-                collect($rawItems)->map(fn($item) => [
-                    'product_id' => $item['product_id'],
-                    'line_subtotal' => (float)($item['selling_price'] ?? $item['unit_price'] ?? 0) * (float)($item['quantity'] ?? 0),
-                    'tax_bucket' => 'vatable', // Default, will be refined per item
-                ]),
+                collect($rawItems)->map(function ($item) use ($products) {
+                    $snapshot = $products[$item['product_id']]->getSaleSnapshotBase();
+                    $taxType = strtolower((string) ($snapshot['tax_type'] ?? 'non-vat'));
+                    $taxBucket = match ($taxType) {
+                        'vat', 'vatable' => \App\Models\SaleItem::TAX_BUCKET_VATABLE,
+                        'exempt', 'exm' => \App\Models\SaleItem::TAX_BUCKET_VAT_EXEMPT,
+                        'zero-rated', 'zero_rated', 'zro' => \App\Models\SaleItem::TAX_BUCKET_ZERO_RATED,
+                        default => \App\Models\SaleItem::TAX_BUCKET_NON_VAT,
+                    };
+                    return [
+                        'product_id' => $item['product_id'],
+                        'line_subtotal' => (float) $snapshot['selling_price'] * (float) ($item['quantity'] ?? 0),
+                        'tax_bucket' => $taxBucket,
+                    ];
+                }),
                 $discountType,
                 $statutoryDiscount['options'] ?? []
             );
+            if (!$statutoryResult['is_valid']) {
+                throw new \RuntimeException(implode(' ', $statutoryResult['errors']));
+            }
+            $approvalRequired = $this->approvalRuleResolver
+                ->resolve($tenantId, $branchId, $discountType)['required'];
+            if ($approvalRequired && empty($statutoryDiscount['manager_approval_id'])) {
+                throw new \RuntimeException('Manager approval is required for this statutory discount.');
+            }
         }
 
         foreach ($rawItems as $item) {
@@ -268,6 +291,7 @@ class SaleCreationService
         $machineProfile = \App\Models\SalesMachineProfile::where('tenant_id', $tenantId)
             ->where('branch_id', $branchId)
             ->where('status', 'active')
+            ->when($terminalId, fn ($query) => $query->where('id', $terminalId))
             ->first();
 
         $profileSnapshot = app(\App\Services\Tax\TaxSourceSnapshotService::class)->prepareSaleTaxProfileSnapshot($machineProfile, [
@@ -277,14 +301,15 @@ class SaleCreationService
         ]);
 
         // ---- 4. Atomic creation of Sale + SaleItems ----
-        $sale = DB::transaction(function () use (
+        try {
+            $sale = DB::transaction(function () use (
             $tenantId, $branchId, $userId, $clientRequestUuid,
             $checkoutRequest, $subtotal, $taxTotal, $discountTotal, $total,
             $grossSalesAmount, $vatableSalesAmount, $vatExemptSalesAmount,
             $zeroRatedSalesAmount, $nonVatSalesAmount, $vatAmountTotal,
             $machineProfile, $profileSnapshot, $saleItemsData,
             $rawItems, $products, $isTrainingMode,
-            $statutoryResult, $statutoryDiscount
+            $statutoryResult, $statutoryDiscount, $discountType, $approvalRequired
         ) {
             $principalInvoiceNumber = null;
             if ($machineProfile) {
@@ -359,26 +384,11 @@ class SaleCreationService
                     ]);
                 }
 
-                // Link Manager Approval if the discount type required it
-                if (!empty($statutoryDiscount['manager_approval_id'])) {
-                    \App\Models\ManagerApproval::where('id', $statutoryDiscount['manager_approval_id'])
-                        ->update([
-                            'approvable_type' => 'SaleStatutoryDiscount',
-                            'approvable_id' => \App\Models\SaleStatutoryDiscount::where('sale_id', $sale->id)->first()->id,
-                        ]);
-
-                    app(\App\Services\AuditLogger::class)->log(
-                        'statutory_discount_manager_approved',
-                        $sale,
-                        null,
-                        null,
-                        null,
-                        null,
-                        [
-                            'discount_type_id' => $statutoryDiscount['discount_type_id'],
-                            'manager_approval_id' => $statutoryDiscount['manager_approval_id'],
-                            'discount_amount' => $statutoryResult['discount_amount'],
-                        ]
+                // Validate and consume the context-bound approval inside this sale transaction.
+                if ($approvalRequired) {
+                    $this->managerAuthorizationService->consume(
+                        $statutoryDiscount['manager_approval_id'], $tenantId, $branchId, $userId,
+                        $machineProfile, $discountType, $rawItems, $statutoryDiscount['options'] ?? [], $sale,
                     );
                 }
             }
@@ -412,7 +422,24 @@ class SaleCreationService
             $checkoutRequest->update(['sale_id' => $sale->id]);
 
             return $sale;
-        });
+            });
+        } catch (\RuntimeException $exception) {
+            if (!empty($statutoryDiscount['manager_approval_id'])) {
+                $approval = \App\Models\ManagerApproval::where('id', $statutoryDiscount['manager_approval_id'])->first();
+                $reasonCode = !$approval ? 'not_found'
+                    : ($approval->status === 'consumed' ? 'replay'
+                    : ($approval->expires_at?->isPast() ? 'expired' : 'context_mismatch'));
+                app(\App\Services\AuditLogger::class)->log(
+                    'statutory_discount_approval_consumption_rejected',
+                    $approval,
+                    metadata: [
+                        'reason_code' => $reasonCode,
+                        'discount_type_id' => $statutoryDiscount['discount_type_id'] ?? null,
+                    ],
+                );
+            }
+            throw $exception;
+        }
 
         return ['status' => 'created', 'sale' => $sale->load('items')];
     }

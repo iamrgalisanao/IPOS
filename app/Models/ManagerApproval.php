@@ -23,10 +23,21 @@ class ManagerApproval extends Model
         'action',            // 'approve', 'deny'
         'reason',
         'metadata',          // JSON snapshot of what was approved
+        'sales_machine_profile_id',
+        'discount_type_id',
+        'approval_rule_id',
+        'context_version',
+        'context_hmac',
+        'status',
+        'expires_at',
+        'consumed_at',
+        'consumed_by_sale_id',
     ];
 
     protected $casts = [
         'metadata' => 'array',
+        'expires_at' => 'datetime',
+        'consumed_at' => 'datetime',
     ];
 
     public function manager(): BelongsTo
