@@ -804,7 +804,7 @@ Route::post('/pos/timecard/toggle', [\App\Http\Controllers\POS\TimecardControlle
     ->name('pos.timecard.toggle');
 
 Route::get('/api/pos/bootstrap-cache', [\App\Http\Controllers\POS\OfflineReadinessController::class, 'bootstrapCache'])
-    ->middleware(['tenant', 'branch', 'subscription.feature:sales.pos'])
+    ->middleware(['auth', 'tenant', 'branch', 'terminal', 'subscription.feature:sales.pos'])
     ->name('pos.bootstrap-cache');
 
 Route::prefix('/support/assisted/{supportAccessSession}')

@@ -8,6 +8,7 @@ export interface ConnectivityState {
     status: ConnectivityStatus;
     isStale: boolean;
     lastSyncedAt: string | null;
+    terminalContextInvalid: boolean;
 }
 
 const getInitialConnectivityStatus = (): ConnectivityStatus => {
@@ -22,6 +23,7 @@ export const globalState: ConnectivityState = {
     status: getInitialConnectivityStatus(),
     isStale: false,
     lastSyncedAt: null,
+    terminalContextInvalid: false,
 };
 
 const listeners = new Set<(state: ConnectivityState) => void>();
@@ -77,6 +79,7 @@ export async function checkConnectivity(currentTaxHash?: string, options: { forc
                  status: 'online',
                  isStale: false,
                  lastSyncedAt: res.data?.generated_at || null,
+                 terminalContextInvalid: false,
              });
              return true;
         } else {
@@ -84,11 +87,23 @@ export async function checkConnectivity(currentTaxHash?: string, options: { forc
             return false;
         }
     } catch (err) {
+        const status = err?.response?.status;
+        const data = err?.response?.data || {};
+        if (status === 403 && data.code === 'TERMINAL_CONTEXT_INVALID') {
+            setGlobalState({
+                status: 'offline',
+                terminalContextInvalid: true
+            });
+            return false;
+        }
         if (!isExpectedReachabilityFailure(err)) {
             console.error('checkConnectivity failed:', err);
         }
         lastConnectivityFailureAt = Date.now();
-        setGlobalState({ status: 'offline' });
+        setGlobalState({
+            status: 'offline',
+            terminalContextInvalid: globalState.terminalContextInvalid,
+        });
         return false;
     } finally {
         inFlightConnectivityCheck = null;
@@ -101,15 +116,13 @@ export async function checkConnectivity(currentTaxHash?: string, options: { forc
 // Initialize listeners for browser-level events
 if (typeof window !== 'undefined') {
     window.addEventListener('online', () => {
-        checkConnectivity(undefined, { force: true });
+        void checkConnectivity(undefined, { force: true }).catch(() => undefined);
     });
 
     window.addEventListener('offline', () => {
         setGlobalState({ status: 'offline' });
     });
 
-    // Check on startup
-    checkConnectivity(undefined, { force: true });
 }
 
 export function useConnectivityStore() {
@@ -145,9 +158,19 @@ export function useConnectivityStore() {
                 status: 'online',
                 isStale: false,
                 lastSyncedAt: payload.generated_at,
+                terminalContextInvalid: false,
             });
             return true;
         } catch (err) {
+            const status = err?.response?.status;
+            const data = err?.response?.data || {};
+            if (status === 403 && data.code === 'TERMINAL_CONTEXT_INVALID') {
+                setGlobalState({
+                    status: 'offline',
+                    terminalContextInvalid: true
+                });
+                return false;
+            }
             console.error('Trigger sync failed:', err);
             // Recheck connection state on failure
             await checkConnectivity();
@@ -162,6 +185,7 @@ export function useConnectivityStore() {
         isChecking: state.status === 'checking',
         isStale: state.isStale,
         lastSyncedAt: state.lastSyncedAt,
+        terminalContextInvalid: state.terminalContextInvalid,
         checkConnectivity: () => checkConnectivity(undefined, { force: true }),
         triggerSync,
     };

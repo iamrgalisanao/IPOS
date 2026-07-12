@@ -34,7 +34,12 @@ class OfflineReadinessController extends Controller
             ], 403);
         }
 
-        $payload = $this->bootstrapService->generatePayload($tenant, $branch, $request->user());
+        $payload = $this->bootstrapService->generatePayload(
+            $tenant,
+            $branch,
+            $request->user(),
+            $request->attributes->get('terminal_profile')
+        );
 
         return response()->json($payload);
     }

@@ -27,6 +27,7 @@ import { offlinePaymentQueue } from '@/POS/offline/offlinePaymentQueue';
 import { useConnectivityStore } from '@/POS/offline/connectivityStore';
 import ConnectivityBanner from './Components/ConnectivityBanner';
 import StaleLayoutBanner from './Components/StaleLayoutBanner';
+import ActivationModal from './Components/ActivationModal';
 
 export default function Index({ categories, initial_products, payment_methods, discount_types = [], tenant_id, branch_id, terminal_id, user_id, is_admin_mode }) {
     const activeShiftCacheKey = `ipos_active_shift_${tenant_id || 'tenant'}_${branch_id || 'branch'}_${user_id || 'user'}`;
@@ -98,7 +99,10 @@ export default function Index({ categories, initial_products, payment_methods, d
         lastSyncAttemptAt: null,
         lastSuccessfulSyncAt: null,
     });
-    const terminalHeaderId = offlineCaptureReadiness?.machineProfile?.id || terminal_id || null;
+    const persistedTerminalId = typeof window !== 'undefined'
+        ? localStorage.getItem('ipos_sales_machine_profile_id')
+        : null;
+    const terminalHeaderId = offlineCaptureReadiness?.machineProfile?.id || terminal_id || persistedTerminalId || null;
     const discountTypes = Array.isArray(discount_types) ? discount_types : [];
 
     const buildPosHeaders = (taxHash = null, extra = {}) => ({
@@ -159,6 +163,7 @@ export default function Index({ categories, initial_products, payment_methods, d
         isChecking,
         isStale,
         lastSyncedAt,
+        terminalContextInvalid,
         triggerSync,
         checkConnectivity
     } = useConnectivityStore();
@@ -184,8 +189,22 @@ export default function Index({ categories, initial_products, payment_methods, d
     useEffect(() => {
         axios.defaults.headers.common['X-Tenant-ID'] = tenant_id;
         axios.defaults.headers.common['X-Branch-ID'] = branch_id;
+
+        const deviceId = localStorage.getItem('ipos_device_id');
+        if (deviceId) {
+            axios.defaults.headers.common['X-Device-ID'] = deviceId;
+        } else {
+            delete axios.defaults.headers.common['X-Device-ID'];
+        }
+
         if (terminalHeaderId) {
             axios.defaults.headers.common['X-Terminal-ID'] = terminalHeaderId;
+        } else {
+            delete axios.defaults.headers.common['X-Terminal-ID'];
+        }
+
+        if (connStatus === 'checking') {
+            void checkConnectivity().catch(() => undefined);
         }
 
         if (!isOnline) {
@@ -217,13 +236,26 @@ export default function Index({ categories, initial_products, payment_methods, d
             }
         };
         fetchTimecardStatus();
-    }, [tenant_id, branch_id, terminalHeaderId, isOnline]);
+    }, [tenant_id, branch_id, terminalHeaderId, isOnline, connStatus]);
 
     useEffect(() => {
         if (offlineCaptureReadiness?.machineProfile?.id) {
             axios.defaults.headers.common['X-Terminal-ID'] = offlineCaptureReadiness.machineProfile.id;
         }
     }, [offlineCaptureReadiness?.machineProfile]);
+
+    useEffect(() => {
+        if (terminalContextInvalid) {
+            setPosAccessIssue({
+                code: 'TERMINAL_CONTEXT_INVALID',
+                tone: 'red',
+                title: 'Terminal Context Not Verified',
+                message: 'This terminal context is invalid or revoked. Please activate the terminal to continue.',
+                actionLabel: 'Activate Terminal',
+                action: 'activate_terminal',
+            });
+        }
+    }, [terminalContextInvalid]);
 
     const getCategoryIcon = (name) => {
         const lower = name.toLowerCase();
@@ -1464,7 +1496,14 @@ export default function Index({ categories, initial_products, payment_methods, d
                 />
             )}
 
-            {posAccessIssue && (
+            {posAccessIssue?.code === 'TERMINAL_CONTEXT_INVALID' ? (
+                <ActivationModal
+                    onActivated={(data) => {
+                        clearPosAccessIssue();
+                        refreshOfflineState();
+                    }}
+                />
+            ) : posAccessIssue && (
                 <div className={`shrink-0 z-40 border-b px-4 py-3 ${
                     posAccessIssue.tone === 'amber'
                         ? 'border-amber-500/30 bg-amber-950/45 text-amber-100'

@@ -50,3 +50,21 @@ test('expected backend reachability failures do not emit console errors', async 
     assert.deepStrictEqual(messages, []);
     assert.strictEqual(globalState.status, 'offline');
 });
+
+test('protected bootstrap rejection marks terminal context invalid', async () => {
+    globalState.status = 'checking';
+    globalState.terminalContextInvalid = false;
+    axios.get = async () => {
+        const error = new Error('Forbidden');
+        error.response = {
+            status: 403,
+            data: { code: 'TERMINAL_CONTEXT_INVALID' },
+        };
+        throw error;
+    };
+
+    const reachable = await checkConnectivity();
+    assert.strictEqual(reachable, false);
+    assert.strictEqual(globalState.status, 'offline');
+    assert.strictEqual(globalState.terminalContextInvalid, true);
+});

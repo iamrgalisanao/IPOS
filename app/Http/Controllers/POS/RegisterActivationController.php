@@ -4,17 +4,16 @@ namespace App\Http\Controllers\POS;
 
 use App\Http\Controllers\Controller;
 use App\Models\SalesMachineProfile;
-use App\Services\BranchContext;
-use App\Services\TenantContext;
+use App\Models\Branch;
+use App\Models\Tenant;
 use App\Services\POS\OfflineReadiness\CacheBootstrapService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 
 class RegisterActivationController extends Controller
 {
     public function __construct(
-        protected TenantContext $tenantContext,
-        protected BranchContext $branchContext,
         protected CacheBootstrapService $bootstrapService
     ) {}
 
@@ -30,68 +29,58 @@ class RegisterActivationController extends Controller
             'device_id'       => ['required', 'string', 'max:255'],
         ]);
 
-        $tokenHash = hash('sha256', $validated['activation_code']);
+        $tokenHash = hash('sha256', strtoupper($validated['activation_code']));
 
-        $profile = SalesMachineProfile::where('activation_token_hash', $tokenHash)
-            ->where('activation_token_expires_at', '>', now())
-            ->first();
+        $activation = DB::transaction(function () use ($tokenHash, $validated, $request) {
+            $profile = SalesMachineProfile::withoutGlobalScopes()
+                ->where('activation_token_hash', $tokenHash)
+                ->lockForUpdate()
+                ->first();
 
-        if (!$profile) {
+            if (!$profile
+                || !$profile->activation_token_expires_at
+                || $profile->activation_token_expires_at->isPast()
+                || $profile->activation_status !== SalesMachineProfile::STATUS_PENDING_ACTIVATION
+                || $profile->status !== 'active'
+            ) {
+                return null;
+            }
+
+            $profile->update([
+                'activated_at'                => now(),
+                'activated_device_id'         => $validated['device_id'],
+                'activation_status'           => SalesMachineProfile::STATUS_ACTIVE,
+                'activation_token_hash'       => null,
+                'activation_token_expires_at' => null,
+                'last_activated_ip'           => $request->ip(),
+            ]);
+
+            $tenant = Tenant::withoutGlobalScopes()->findOrFail($profile->tenant_id);
+            $branch = Branch::withoutGlobalScopes()->findOrFail($profile->branch_id);
+            $bootstrapPayload = $this->bootstrapService->generatePayload($tenant, $branch, null, $profile);
+
+            return compact('profile', 'tenant', 'branch', 'bootstrapPayload');
+        });
+
+        if (!$activation) {
             return response()->json([
                 'success' => false,
-                'message' => 'Invalid or expired activation code.',
+                'message' => 'Invalid, expired, or unavailable activation code.',
             ], 422);
         }
 
-        if (in_array($profile->activation_status, [SalesMachineProfile::STATUS_SUSPENDED, SalesMachineProfile::STATUS_REVOKED])) {
-            return response()->json([
-                'success' => false,
-                'message' => "Terminal is {$profile->activation_status} and cannot be activated.",
-            ], 403);
-        }
-
-        // Complete activation
-        $profile->update([
-            'activated_at'                => now(),
-            'activated_device_id'         => $validated['device_id'],
-            'activation_status'           => SalesMachineProfile::STATUS_ACTIVE,
-            'activation_token_hash'       => null,
-            'activation_token_expires_at' => null,
-            'last_activated_ip'           => $request->ip(),
-        ]);
-
-        // Load contexts for config snapshot bootstrap
-        $tenant = $profile->tenant;
-        $branch = $profile->branch;
-
-        $bootstrapPayload = $this->bootstrapService->generatePayload($tenant, $branch, null, $profile);
-
-        // Generate a pseudo-token for terminal API calls
-        $terminalAuthToken = 'pseudo-terminal-token-' . bin2hex(random_bytes(16));
+        ['profile' => $profile, 'tenant' => $tenant, 'branch' => $branch, 'bootstrapPayload' => $bootstrapPayload] = $activation;
 
         return response()->json([
-            'success'                  => true,
-            'terminal_auth_token'      => $terminalAuthToken,
-            'sales_machine_profile_id' => $profile->id,
-            'tenant_id'                => $tenant->id,
-            'branch_id'                => $branch->id,
-            'profile_code'             => $profile->profile_code,
-            'terminal_identifier'      => $profile->terminal_identifier,
-            'config_snapshot'          => $bootstrapPayload['config_snapshot'] ?? null,
-            'config_snapshot_hashes'   => [
-                'catalog'         => $bootstrapPayload['catalog_version_hash'] ?? null,
-                'tax'             => $bootstrapPayload['tax_configuration_version_hash'] ?? null,
-                'layout'          => $bootstrapPayload['layout_version_hash'] ?? null,
-                'discount_rules'  => $bootstrapPayload['discount_rules_version_hash'] ?? null,
-                'payment_methods' => $bootstrapPayload['payment_methods_version_hash'] ?? null,
-                'terminal_policy' => $bootstrapPayload['terminal_policy_version_hash'] ?? null,
-                'printer_profile' => $bootstrapPayload['printer_profile_version_hash'] ?? null,
-                'config_snapshot' => $bootstrapPayload['config_snapshot_hash'] ?? null,
+            'success' => true,
+            'terminal' => [
+                'sales_machine_profile_id' => $profile->id,
+                'tenant_id' => $tenant->id,
+                'branch_id' => $branch->id,
+                'profile_code' => $profile->profile_code,
+                'terminal_identifier' => $profile->terminal_identifier,
             ],
-            'heartbeat_schedule'       => '*/5 * * * *',
-            'offline_policy'           => [
-                'allow_offline' => (bool) $profile->offline_sales_enabled,
-            ],
+            'bootstrap_payload' => $bootstrapPayload,
         ]);
     }
 }

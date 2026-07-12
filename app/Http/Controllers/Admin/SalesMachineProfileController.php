@@ -45,6 +45,10 @@ class SalesMachineProfileController extends Controller
             'profiles' => $profiles,
             'branches' => $branches,
             'filters'  => $request->only(['branch_id']),
+            'flash'    => [
+                'success' => $request->session()->get('success'),
+                'activation_code_raw' => $request->session()->get('activation_code_raw'),
+            ],
         ]);
     }
 
@@ -221,7 +225,7 @@ class SalesMachineProfileController extends Controller
             null,
             ['activation_status' => $salesMachineProfile->activation_status],
             null,
-            "Generated activation code: {$code} for terminal {$salesMachineProfile->profile_code}"
+            "Generated activation code for terminal {$salesMachineProfile->profile_code}"
         );
 
         return back()->with([
@@ -241,6 +245,8 @@ class SalesMachineProfileController extends Controller
             'activation_token_hash'       => null,
             'activation_token_expires_at' => null,
             'activated_device_id'         => null,
+            'activated_at'                => null,
+            'last_activated_ip'           => null,
         ]);
 
         app(\App\Services\AuditLogger::class)->log(

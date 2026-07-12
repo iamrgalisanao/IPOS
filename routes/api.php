@@ -54,6 +54,7 @@ Route::middleware(['tenant', 'branch'])->get('/branch-test', function () {
 
 // Epic 44 - POS Register Activation
 Route::post('/pos/activate', [\App\Http\Controllers\POS\RegisterActivationController::class, 'activate'])
+    ->middleware('throttle:5,1')
     ->name('pos.activate');
 
 // Epic 28 Phase 2 — Offline Sync Stub (Story 28.6)
