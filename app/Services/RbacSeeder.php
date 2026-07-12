@@ -161,6 +161,9 @@ class RbacSeeder
             // Epic 28 Phase 2: Controlled Offline Sales
             'manage_offline_sales_settings' => 'Can manage terminal offline sales settings and sequence registry',
             'review_offline_sync_conflicts' => 'Can review and manage offline sales import conflicts',
+
+            // Task 5: Printer Profile Schema & Admin UI
+            'manage_printer_profiles' => 'Can manage printer profiles and terminal printer assignments',
         ];
     }
 
@@ -199,7 +202,10 @@ class RbacSeeder
                     'procurement.returns.view', 'procurement.returns.create', 'procurement.returns.approve', 'procurement.returns.post',
                     
                     // Epic 27 Branch Manager permissions
-                    'edit_branch_policy', 'view_inventory_reports', 'audit_inventory'
+                    'edit_branch_policy', 'view_inventory_reports', 'audit_inventory',
+
+                    // Task 5: Printer Profile Management
+                    'manage_printer_profiles',
                 ],
             ],
             'Owner/Admin' => [

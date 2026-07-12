@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\SalesMachineProfile;
 use App\Models\Branch;
+use App\Models\PrinterProfile;
 use App\Services\POS\OfflineReadiness\OfflineSettingsValidator;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -21,15 +22,24 @@ class SalesMachineProfileController extends Controller
     public function index(Request $request)
     {
         $query = SalesMachineProfile::query()
-            ->with('branch');
+            ->with(['branch', 'posLayout', 'latestHeartbeat']);
+
+        $user = $request->user();
+        if ($user->actor_type !== 'system_admin' && !$user->hasRole('Owner/Admin')) {
+            $authorizedBranchIds = $user->branches()->pluck('branches.id');
+            $query->whereIn('branch_id', $authorizedBranchIds);
+            $branches = Branch::whereIn('id', $authorizedBranchIds)
+                ->orderBy('name')
+                ->get(['id', 'name', 'branch_code']);
+        } else {
+            $branches = Branch::orderBy('name')->get(['id', 'name', 'branch_code']);
+        }
 
         if ($request->filled('branch_id')) {
             $query->where('branch_id', $request->branch_id);
         }
 
         $profiles = $query->orderBy('profile_code')->paginate(20)->withQueryString();
-
-        $branches = Branch::orderBy('name')->get(['id', 'name', 'branch_code']);
 
         return Inertia::render('Admin/SalesMachineProfiles/Index', [
             'profiles' => $profiles,
@@ -43,7 +53,8 @@ class SalesMachineProfileController extends Controller
      */
     public function edit(SalesMachineProfile $salesMachineProfile)
     {
-        $salesMachineProfile->load('branch.tenant');
+        $this->authorizeTerminalBranch(request(), $salesMachineProfile);
+        $salesMachineProfile->load(['branch.tenant', 'latestHeartbeat']);
 
         $validationResult = $this->validator->validate(
             $salesMachineProfile->branch->tenant,
@@ -51,9 +62,18 @@ class SalesMachineProfileController extends Controller
             $salesMachineProfile
         );
 
+        $printerProfiles = PrinterProfile::where('tenant_id', $salesMachineProfile->tenant_id)
+            ->where('branch_id', $salesMachineProfile->branch_id)
+            ->active()
+            ->where('role', 'receipt')
+            ->orderBy('name')
+            ->orderBy('id')
+            ->get();
+
         return Inertia::render('Admin/SalesMachineProfiles/Edit', [
             'profile'          => $salesMachineProfile,
             'offlineStatus'    => $validationResult,
+            'printerProfiles'  => $printerProfiles,
         ]);
     }
 
@@ -62,6 +82,12 @@ class SalesMachineProfileController extends Controller
      */
     public function update(Request $request, SalesMachineProfile $salesMachineProfile)
     {
+        $this->authorizeTerminalBranch($request, $salesMachineProfile);
+
+        if ($request->exists('printer_profile_id')) {
+            abort_unless($request->user()->hasPermission('manage_printer_profiles'), 403);
+        }
+
         $validated = $request->validate([
             'offline_sales_enabled'      => ['nullable', 'boolean'],
             'offline_sequence_prefix'    => [
@@ -85,6 +111,32 @@ class SalesMachineProfileController extends Controller
             ],
             'offline_sequence_next_value' => ['nullable', 'integer', 'min:1'],
             'offline_sequence_status'     => ['nullable', 'string', 'in:active,suspended,depleted'],
+            'printer_profile_id' => [
+                'nullable',
+                'uuid',
+                function (string $attribute, mixed $value, \Closure $fail) use ($salesMachineProfile) {
+                    if ($value === null) {
+                        return;
+                    }
+                    $printer = PrinterProfile::where('id', $value)->first();
+                    if (!$printer) {
+                        $fail('The selected printer profile does not exist.');
+                        return;
+                    }
+                    if ($printer->tenant_id !== $salesMachineProfile->tenant_id) {
+                        $fail('The selected printer profile belongs to a different tenant.');
+                    }
+                    if ($printer->branch_id !== $salesMachineProfile->branch_id) {
+                        $fail('The selected printer profile belongs to a different branch.');
+                    }
+                    if (!$printer->is_active) {
+                        $fail('Inactive printer profile cannot be assigned to a terminal.');
+                    }
+                    if ($printer->role !== 'receipt') {
+                        $fail('Only a receipt printer profile can be assigned to a terminal.');
+                    }
+                }
+            ],
         ]);
 
         // Enforce no-decrement guard at controller level as well
@@ -95,6 +147,27 @@ class SalesMachineProfileController extends Controller
             return back()->withErrors([
                 'offline_sequence_next_value' => 'The offline sequence next value cannot be decreased.',
             ]);
+        }
+
+        // Prevent sequence edits if the terminal has unsynced offline sales and no override is passed
+        $latestHeartbeat = $salesMachineProfile->latestHeartbeat;
+        if ($latestHeartbeat && $latestHeartbeat->queue_count > 0 && !$request->boolean('admin_override')) {
+            if (
+                isset($validated['offline_sequence_prefix']) &&
+                $validated['offline_sequence_prefix'] !== $salesMachineProfile->offline_sequence_prefix
+            ) {
+                return back()->withErrors([
+                    'offline_sequence_prefix' => 'The sequence prefix cannot be changed while the terminal has unsynced offline sales.',
+                ]);
+            }
+            if (
+                isset($validated['offline_sequence_next_value']) &&
+                (int)$validated['offline_sequence_next_value'] !== (int)$salesMachineProfile->offline_sequence_next_value
+            ) {
+                return back()->withErrors([
+                    'offline_sequence_next_value' => 'The next sequence value cannot be changed while the terminal has unsynced offline sales.',
+                ]);
+            }
         }
 
         $salesMachineProfile->update($validated);
@@ -109,6 +182,7 @@ class SalesMachineProfileController extends Controller
      */
     public function offlineStatus(SalesMachineProfile $salesMachineProfile)
     {
+        $this->authorizeTerminalBranch(request(), $salesMachineProfile);
         $salesMachineProfile->load('branch.tenant');
 
         $result = $this->validator->validate(
@@ -129,6 +203,7 @@ class SalesMachineProfileController extends Controller
      */
     public function generateActivationCode(SalesMachineProfile $salesMachineProfile)
     {
+        $this->authorizeTerminalBranch(request(), $salesMachineProfile);
         $code = \Illuminate\Support\Str::upper(\Illuminate\Support\Str::random(8));
         $hash = hash('sha256', $code);
 
@@ -160,6 +235,7 @@ class SalesMachineProfileController extends Controller
      */
     public function revokeActivation(SalesMachineProfile $salesMachineProfile)
     {
+        $this->authorizeTerminalBranch(request(), $salesMachineProfile);
         $salesMachineProfile->update([
             'activation_status'           => SalesMachineProfile::STATUS_REVOKED,
             'activation_token_hash'       => null,
@@ -177,5 +253,20 @@ class SalesMachineProfileController extends Controller
         );
 
         return back()->with('success', "Activation revoked for terminal {$salesMachineProfile->profile_code}.");
+    }
+
+    private function authorizeTerminalBranch(Request $request, SalesMachineProfile $salesMachineProfile): void
+    {
+        $user = $request->user();
+
+        abort_unless($salesMachineProfile->tenant_id === $user->tenant_id, 403);
+
+        if ($user->actor_type !== 'system_admin' && !$user->hasRole('Owner/Admin')) {
+            abort_unless(
+                $user->branches()->whereKey($salesMachineProfile->branch_id)->exists(),
+                403,
+                'Unauthorized branch access.'
+            );
+        }
     }
 }

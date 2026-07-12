@@ -55,6 +55,7 @@ class SalesMachineProfile extends Model
         'last_activated_ip',
         // Optional per-terminal layout override (null → falls back to branch-active layout)
         'pos_layout_id',
+        'printer_profile_id',
     ];
 
     protected $casts = [
@@ -112,5 +113,20 @@ class SalesMachineProfile extends Model
     public function posLayout(): BelongsTo
     {
         return $this->belongsTo(PosLayout::class, 'pos_layout_id');
+    }
+
+    public function heartbeats(): HasMany
+    {
+        return $this->hasMany(TerminalConfigHeartbeat::class, 'sales_machine_profile_id');
+    }
+
+    public function latestHeartbeat()
+    {
+        return $this->hasOne(TerminalConfigHeartbeat::class, 'sales_machine_profile_id')->latestOfMany();
+    }
+
+    public function printerProfile(): BelongsTo
+    {
+        return $this->belongsTo(PrinterProfile::class, 'printer_profile_id');
     }
 }

@@ -739,6 +739,13 @@ Route::middleware(['auth', 'tenant'])->group(function () {
             ->name('admin.sales-machine-profiles.offline-status');
     });
 
+    // Printer Profile Schema & Admin UI (Task 5)
+    Route::middleware(['permission:manage_printer_profiles'])->group(function () {
+        Route::resource('/admin/printer-profiles', \App\Http\Controllers\Admin\PrinterProfileController::class)
+            ->only(['index', 'store', 'update', 'destroy'])
+            ->names('admin.printer-profiles');
+    });
+
     // Offline Import Admin Review (Story 28.9)
     Route::middleware(['permission:review_offline_sync_conflicts'])->group(function () {
         Route::get('/api/admin/offline-sync/imports', [\App\Http\Controllers\Admin\OfflineImportController::class, 'index'])

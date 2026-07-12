@@ -11,6 +11,7 @@ use App\Models\ProductCategory;
 use App\Models\BranchProductPricing;
 use App\Models\Product;
 use App\Models\PosLayout;
+use App\Models\PrinterProfile;
 use App\Models\SalesMachineProfile;
 use App\Services\CatalogService;
 use App\Services\TenantContext;
@@ -151,6 +152,19 @@ class CacheBootstrapService
             $snapshotHash = $this->hashCanonical($snapshot);
             $snapshot['config_snapshot_hash'] = $snapshotHash;
 
+            [$printer, $source] = $this->resolvePrinterProfile($tenant->id, $branch->id, $machineProfile?->id);
+            $printerPayload = $printer ? [
+                'id' => $printer->id,
+                'name' => $printer->name,
+                'connection_type' => $printer->connection_type,
+                'identifier' => $printer->identifier,
+                'paper_width' => $printer->paper_width,
+                'role' => $printer->role,
+                'template_type' => $printer->template_type,
+                'is_active' => $printer->is_active,
+                'resolution_source' => $source,
+            ] : null;
+
             return [
                 'products' => $products->toArray(),
                 'categories' => $categories,
@@ -160,6 +174,7 @@ class CacheBootstrapService
                 'branch_context' => $branchContextData,
                 'machine_profile_context' => $machineProfileContext,
                 'permissions' => $permissions,
+                'printer_profile' => $printerPayload,
                 'tax_configuration_version_hash' => $taxHash,
                 'catalog_version_hash' => $catalogHash,
                 'layout_version_hash' => $layoutHash,
@@ -431,15 +446,66 @@ class CacheBootstrapService
         ]);
     }
 
+    public function resolvePrinterProfile(string $tenantId, string $branchId, ?string $profileId): array
+    {
+        $printer = null;
+        $source = 'none';
+
+        if ($profileId) {
+            $profile = SalesMachineProfile::where('id', $profileId)
+                ->where('tenant_id', $tenantId)
+                ->where('branch_id', $branchId)
+                ->first();
+
+            if ($profile && $profile->printer_profile_id) {
+                $printer = PrinterProfile::where('id', $profile->printer_profile_id)
+                    ->where('tenant_id', $tenantId)
+                    ->where('branch_id', $branchId)
+                    ->where('role', 'receipt')
+                    ->active()
+                    ->first();
+                if ($printer) {
+                    $source = 'terminal_override';
+                }
+            }
+        }
+
+        if (!$printer) {
+            $printer = PrinterProfile::where('tenant_id', $tenantId)
+                ->where('branch_id', $branchId)
+                ->active()
+                ->default()
+                ->where('role', 'receipt')
+                ->orderBy('id')
+                ->first();
+            if ($printer) {
+                $source = 'branch_default';
+            }
+        }
+
+        return [$printer, $source];
+    }
+
     public function calculatePrinterProfileVersionHash(string $tenantId, string $branchId, ?string $profileId): string
     {
+        [$printer, $source] = $this->resolvePrinterProfile($tenantId, $branchId, $profileId);
+
+        if (!$printer) {
+            return 'no-printer-profile';
+        }
+
         return $this->hashCanonical([
             'schema_version' => 1,
-            'status' => 'placeholder',
-            'tenant_id' => $tenantId,
-            'branch_id' => $branchId,
-            'sales_machine_profile_id' => $profileId,
-            'hardware_validation' => 'deferred',
+            'resolution_source' => $source,
+            'printer_profile_id' => $printer->id,
+            'name' => $printer->name,
+            'connection_type' => $printer->connection_type,
+            'identifier' => $printer->identifier,
+            'paper_width' => $printer->paper_width,
+            'role' => $printer->role,
+            'template_type' => $printer->template_type,
+            'is_active' => $printer->is_active,
+            'updated_at' => $printer->updated_at ? $printer->updated_at->toIso8601String() : null,
         ]);
     }
 
