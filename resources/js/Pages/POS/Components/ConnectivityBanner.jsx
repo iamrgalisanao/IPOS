@@ -16,6 +16,9 @@ export default function ConnectivityBanner() {
         isStale,
         isChecking,
         triggerSync,
+        refreshConfiguration,
+        refreshResult,
+        dismissRefreshResult,
         checkConnectivity,
         lastSyncedAt
     } = useConnectivityStore();
@@ -261,9 +264,11 @@ export default function ConnectivityBanner() {
         + reviewCount;
     const historicalQueueCount = Number(queueSummary.total || 0);
     const hasUnsyncedItems = activeQueueCount > 0;
+    const hasConfigurationResult = refreshResult.status !== 'idle';
+    const isRefreshingConfiguration = refreshResult.status === 'refreshing';
 
     // Determine if we should render the banner
-    const shouldShowBanner = isOffline || isStale || isChecking || hasUnsyncedItems;
+    const shouldShowBanner = isOffline || isStale || isChecking || hasUnsyncedItems || hasConfigurationResult;
 
     if (!shouldShowBanner) {
         return null;
@@ -292,12 +297,12 @@ export default function ConnectivityBanner() {
                             </button>
                         )}
                         <button
-                            onClick={checkConnectivity}
-                            disabled={isChecking}
+                            onClick={refreshConfiguration}
+                            disabled={isChecking || isRefreshingConfiguration}
                             className={`px-3 py-1 ${offlineReadiness.allowed ? 'bg-amber-800 hover:bg-amber-700' : 'bg-rose-800 hover:bg-rose-700'} text-white rounded-lg flex items-center gap-1.5 transition-all text-[11px] font-black uppercase tracking-wider`}
                         >
-                            {isChecking ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-                            Check Connection
+                            {isRefreshingConfiguration ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                            Refresh Config
                         </button>
                     </div>
                 </div>
@@ -324,6 +329,16 @@ export default function ConnectivityBanner() {
                             {syncingQueue ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
                             Sync Queue
                         </button>
+                        {isStale && (
+                            <button
+                                onClick={refreshConfiguration}
+                                disabled={isRefreshingConfiguration}
+                                className="px-3 py-1 bg-amber-800 hover:bg-amber-700 text-white rounded-lg flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider disabled:opacity-50"
+                            >
+                                {isRefreshingConfiguration ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                                Refresh Config
+                            </button>
+                        )}
                     </div>
                 </div>
             ) : isStale ? (
@@ -336,11 +351,11 @@ export default function ConnectivityBanner() {
                     </div>
                     <button
                         onClick={triggerSync}
-                        disabled={isChecking}
+                        disabled={isChecking || isRefreshingConfiguration}
                         className="px-3 py-1 bg-amber-800 hover:bg-amber-750 text-white rounded-lg flex items-center gap-1.5 transition-all text-[11px] font-black uppercase tracking-wider shrink-0"
                     >
-                        {isChecking ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-                        Sync Now
+                        {isRefreshingConfiguration ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                        Refresh Configuration
                     </button>
                 </div>
             ) : isChecking ? (
@@ -349,6 +364,25 @@ export default function ConnectivityBanner() {
                     <span>Synchronizing local POS configurations...</span>
                 </div>
             ) : null}
+
+            {['refreshing', 'stale', 'offline', 'failure', 'invalid-terminal', 'success'].includes(refreshResult.status) && (
+                <div className={`border-b px-4 py-2 text-xs ${
+                    refreshResult.status === 'success'
+                        ? 'border-emerald-500/30 bg-emerald-950/70 text-emerald-100'
+                        : refreshResult.status === 'refreshing'
+                            ? 'border-indigo-500/30 bg-indigo-950/70 text-indigo-100'
+                        : refreshResult.status === 'failure' || refreshResult.status === 'invalid-terminal'
+                            ? 'border-rose-500/30 bg-rose-950/70 text-rose-100'
+                            : 'border-amber-500/30 bg-amber-950/70 text-amber-100'
+                }`} role="status" aria-live="polite">
+                    <div className="flex items-center justify-between gap-3">
+                        <span><strong className="mr-1 uppercase tracking-wider">Configuration:</strong>{refreshResult.message}</span>
+                        {refreshResult.status !== 'refreshing' && (
+                            <button type="button" onClick={dismissRefreshResult} className="font-black uppercase tracking-wider opacity-70 hover:opacity-100">Dismiss</button>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {syncNotice && !isOffline && (
                 <div className={`border-b px-4 py-2 text-xs ${

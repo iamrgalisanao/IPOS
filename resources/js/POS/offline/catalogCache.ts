@@ -50,6 +50,43 @@ export interface ConfigSnapshotMetadata {
     terminal_policy_version_hash: string | null;
     printer_profile_version_hash: string | null;
     config_snapshot: Record<string, any> | null;
+    generated_at: string | null;
+    cache_ttl_seconds: number;
+}
+
+export function validateBootstrapPayload(payload: any): asserts payload is CacheBootstrapPayload {
+    const generatedAt = typeof payload?.generated_at === 'string'
+        ? Date.parse(payload.generated_at)
+        : Number.NaN;
+
+    const contexts = [payload?.tenant_context, payload?.branch_context, payload?.machine_profile_context];
+    const objectArrays = [payload?.products, payload?.categories, payload?.tax_categories, payload?.payment_methods];
+
+    if (
+        !payload
+        || typeof payload !== 'object'
+        || !Array.isArray(payload.products)
+        || !Array.isArray(payload.categories)
+        || !Array.isArray(payload.tax_categories)
+        || !Array.isArray(payload.payment_methods)
+        || !Array.isArray(payload.permissions)
+        || !payload.permissions.every((permission: any) => typeof permission === 'string')
+        || !contexts.every((context) => context && typeof context === 'object' && !Array.isArray(context))
+        || !objectArrays.every((rows) => rows.every((row: any) => row && typeof row === 'object' && !Array.isArray(row)))
+        || typeof payload.config_snapshot_hash !== 'string'
+        || payload.config_snapshot_hash.trim() === ''
+        || !payload.config_snapshot
+        || typeof payload.config_snapshot !== 'object'
+        || Array.isArray(payload.config_snapshot)
+        || payload.config_snapshot.config_snapshot_hash !== payload.config_snapshot_hash
+        || !Number.isFinite(generatedAt)
+        || generatedAt > Date.now() + 5 * 60 * 1000
+        || typeof payload.cache_ttl_seconds !== 'number'
+        || !Number.isFinite(payload.cache_ttl_seconds)
+        || payload.cache_ttl_seconds <= 0
+    ) {
+        throw new Error('The server returned an invalid configuration snapshot. The previous configuration was kept.');
+    }
 }
 
 function matchesCachedProductCategory(product: any, category: any): boolean {
@@ -183,6 +220,7 @@ export class CatalogCacheService {
     }
 
     async writeBootstrapPayload(payload: CacheBootstrapPayload): Promise<void> {
+        validateBootstrapPayload(payload);
         const db = await this.initDb();
         return new Promise((resolve, reject) => {
             const tx = db.transaction(['metadata', 'products', 'categories', 'tax_categories', 'payment_methods'], 'readwrite');
@@ -333,6 +371,8 @@ export class CatalogCacheService {
             const terminalPolicyHashReq = store.get('terminal_policy_version_hash');
             const printerProfileHashReq = store.get('printer_profile_version_hash');
             const configSnapshotReq = store.get('config_snapshot');
+            const generatedAtReq = store.get('generated_at');
+            const ttlReq = store.get('cache_ttl_seconds');
 
             tx.oncomplete = () => resolve({
                 config_snapshot_hash: configSnapshotHashReq.result || null,
@@ -344,6 +384,8 @@ export class CatalogCacheService {
                 terminal_policy_version_hash: terminalPolicyHashReq.result || null,
                 printer_profile_version_hash: printerProfileHashReq.result || null,
                 config_snapshot: configSnapshotReq.result || null,
+                generated_at: generatedAtReq.result || null,
+                cache_ttl_seconds: ttlReq.result || 0,
             });
             tx.onerror = () => reject(tx.error);
         });
@@ -403,6 +445,7 @@ export class CatalogCacheService {
         const response = await axios.get<CacheBootstrapPayload>('/api/pos/bootstrap-cache');
         const payload = response.data;
 
+        validateBootstrapPayload(payload);
         await this.writeBootstrapPayload(payload);
         return payload;
     }

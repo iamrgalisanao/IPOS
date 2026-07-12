@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import axios from 'axios';
-import { catalogCache, filterCachedProducts } from '../../resources/js/POS/offline/catalogCache.ts';
+import { catalogCache, filterCachedProducts, validateBootstrapPayload } from '../../resources/js/POS/offline/catalogCache.ts';
 import { validateCheckoutAllowed, isOffline, resolveOfflineCaptureReadiness } from '../../resources/js/POS/offline/offlineGuards.ts';
 import { globalState } from '../../resources/js/POS/offline/connectivityStore.ts';
 
@@ -115,6 +115,7 @@ const mockPayload = {
     tax_categories: [
         { id: 1, name: 'VAT 12%' }
     ],
+    payment_methods: [],
     tenant_context: { id: 'tenant-1', tax_mode: 'inclusive', offline_sales_enabled: true },
     branch_context: { id: 'branch-1', status: 'active', offline_sales_enabled: true },
     machine_profile_context: {
@@ -229,6 +230,25 @@ test('Frontend catalogCache functionality', async (t) => {
         assert.strictEqual(snapshot.catalog_version_hash, 'catalog-hash-123');
         assert.strictEqual(snapshot.tax_configuration_version_hash, 'abc-hash-123');
         assert.strictEqual(snapshot.config_snapshot.config_snapshot_hash, 'snapshot-hash-123');
+        assert.strictEqual(snapshot.generated_at, mockPayload.generated_at);
+        assert.strictEqual(snapshot.cache_ttl_seconds, 3600);
+    });
+
+    await t.test('invalid bootstrap is rejected before replacing cached configuration', async () => {
+        await catalogCache.writeBootstrapPayload(mockPayload);
+
+        assert.throws(
+            () => validateBootstrapPayload({ ...mockPayload, config_snapshot_hash: null }),
+            /invalid configuration snapshot/i,
+        );
+        await assert.rejects(
+            catalogCache.writeBootstrapPayload({ ...mockPayload, generated_at: 'not-a-date' }),
+            /invalid configuration snapshot/i,
+        );
+
+        const cached = await catalogCache.getCachedCatalog();
+        assert.strictEqual(cached.config_snapshot_hash, 'snapshot-hash-123');
+        assert.strictEqual(cached.products[0].name, 'Product A');
     });
 
     await t.test('layout hash update keeps nested config snapshot aligned', async () => {
