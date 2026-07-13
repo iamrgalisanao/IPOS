@@ -166,6 +166,8 @@ class RbacSeeder
             // Task 5: Printer Profile Schema & Admin UI
             'manage_printer_profiles' => 'Can manage printer profiles and terminal printer assignments',
             'manage_approval_rules' => 'Can manage statutory discount approval rules',
+            'manage_promotions' => 'Can manage promotions and bundling configurations',
+            'manage_cash_drawer_reasons' => 'Can manage cash drawer drop and top-up reasons',
         ];
     }
 
@@ -206,9 +208,10 @@ class RbacSeeder
                     
                     // Epic 27 Branch Manager permissions
                     'edit_branch_policy', 'view_inventory_reports', 'audit_inventory',
-
+ 
                     // Task 5: Printer Profile Management
                     'manage_printer_profiles',
+                    'manage_promotions',
                 ],
             ],
             'Owner/Admin' => [

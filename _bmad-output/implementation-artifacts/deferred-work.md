@@ -1,5 +1,9 @@
 # Deferred Work
 
+## 2026-07-13 — Epic 37 promotion engine follow-up
+
+- `app/Services/POS/PromotionCalculationService.php` — add a separately scoped engine-hardening pass for BOGO reward-availability checks, `min_qty` condition execution, overlapping bundle required-item consumption, and `exclusive_group` mutual exclusion across different lines. These were surfaced during Epic 37 admin gap closure review but are broader calculation semantics beyond the admin routing/UI closure.
+
 ## 2026-07-12 — G-082 Task 5 review
 
 - `app/Http/Controllers/Admin/SalesMachineProfileController.php` — define a dedicated authorization policy for `admin_override` before changing the existing offline-sequence override behavior. The current request flag is available to every user with `manage_offline_sales_settings`; tightening it requires a product/role decision outside printer-profile scope.

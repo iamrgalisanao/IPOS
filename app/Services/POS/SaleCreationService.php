@@ -16,6 +16,7 @@ class SaleCreationService
         protected \App\Services\POS\StatutoryDiscountService $discountService,
         protected \App\Services\POS\ApprovalRuleResolver $approvalRuleResolver,
         protected \App\Services\POS\ManagerAuthorizationService $managerAuthorizationService,
+        protected \App\Services\POS\PromotionCalculationService $promotionService,
     ) {}
     /**
      * Attempt to create a sale from a validated payload.
@@ -104,6 +105,18 @@ class SaleCreationService
         }
 
         // ---- 3. Compute server-side totals from snapshots ----
+        $promoItems = collect($rawItems)->map(function ($item) use ($products) {
+            $snapshot = $products[$item['product_id']]->getSaleSnapshotBase();
+            return [
+                'product_id' => $item['product_id'],
+                'quantity' => (float) ($item['quantity'] ?? 0),
+                'unit_price_centavos' => (int) round($snapshot['selling_price'] * 100),
+                'category_id' => $products[$item['product_id']]->product_category_id,
+            ];
+        })->all();
+
+        $promoResult = $this->promotionService->calculate($tenantId, $branchId, $promoItems);
+
         $saleItemsData = [];
         $subtotal      = 0.0;
         $taxTotal      = 0.0;
@@ -122,7 +135,7 @@ class SaleCreationService
         if (!empty($statutoryDiscount)) {
             $discountType = \App\Models\DiscountType::active()->findOrFail($statutoryDiscount['discount_type_id']);
             $statutoryResult = $this->discountService->calculate(
-                collect($rawItems)->map(function ($item) use ($products) {
+                collect($rawItems)->map(function ($item, $i) use ($products, $promoResult) {
                     $snapshot = $products[$item['product_id']]->getSaleSnapshotBase();
                     $taxType = strtolower((string) ($snapshot['tax_type'] ?? 'non-vat'));
                     $taxBucket = match ($taxType) {
@@ -131,9 +144,10 @@ class SaleCreationService
                         'zero-rated', 'zero_rated', 'zro' => \App\Models\SaleItem::TAX_BUCKET_ZERO_RATED,
                         default => \App\Models\SaleItem::TAX_BUCKET_NON_VAT,
                     };
+                    $promoAdjustedAmount = (float) ($promoResult->adjustedLines[$i]['final_amount_centavos'] / 100);
                     return [
                         'product_id' => $item['product_id'],
-                        'line_subtotal' => (float) $snapshot['selling_price'] * (float) ($item['quantity'] ?? 0),
+                        'line_subtotal' => $promoAdjustedAmount,
                         'tax_bucket' => $taxBucket,
                     ];
                 }),
@@ -150,26 +164,24 @@ class SaleCreationService
             }
         }
 
-        foreach ($rawItems as $item) {
+        foreach ($rawItems as $i => $item) {
             $product  = $products[$item['product_id']];
             $snapshot = $product->getSaleSnapshotBase();
             $quantity = (float) $item['quantity'];
 
-            $lineSubtotal = $snapshot['selling_price'] * $quantity;
+            $promoAdjustedLine = $promoResult->adjustedLines[$i];
+            $originalUnitPrice = (float) ($promoAdjustedLine['original_unit_price_centavos'] / 100);
+            $promotionDiscount = (float) ($promoAdjustedLine['discount_amount_centavos'] / 100);
+            $promotionAdjustedPrice = (float) ($promoAdjustedLine['final_unit_price_centavos'] / 100);
+
+            $lineSubtotal = $promotionAdjustedPrice * $quantity;
             $discountAmt  = 0.0; 
 
-            // If statutory discount is applied, we need to handle the VAT exemption and discount
-            // Note: The StatutoryDiscountService handles the global calculation, 
-            // but we need to distribute the VAT exemption and discount across items for the ledger.
+            // If statutory discount is applied, we distribute it proportionally across eligible items
             if ($statutoryResult && $statutoryResult['is_valid']) {
-                // For simplicity in this implementation, we distribute the statutory discount 
-                // proportionally across eligible items.
                 $eligibilityRatio = $statutoryResult['gross_eligible_amount'] > 0 
                     ? ($lineSubtotal / $statutoryResult['gross_eligible_amount']) 
                     : 0;
-                
-                // Only apply if the item is actually eligible (simplified check)
-                // In a full implementation, we'd use $this->discountService->validateEligibility()
                 $discountAmt = $statutoryResult['discount_amount'] * $eligibilityRatio;
             }
 
@@ -216,10 +228,10 @@ class SaleCreationService
 
             $lineTotal = $lineSubtotal - $discountAmt; // since tax is inclusive
 
-            $subtotal += $lineSubtotal;
+            $subtotal += $snapshot['selling_price'] * $quantity;
             $taxTotal += $taxAmount;
 
-            $grossSalesAmount     += $lineSubtotal;
+            $grossSalesAmount     += $snapshot['selling_price'] * $quantity;
             $vatableSalesAmount   += $vatableAmount;
             $vatExemptSalesAmount += $vatExemptAmount;
             $zeroRatedSalesAmount += $zeroRatedAmount;
@@ -249,35 +261,44 @@ class SaleCreationService
                 'is_discountable'   => $snapshot['is_discountable'] ?? false,
             ]);
 
+            $finalAmtCentavos = ($promoAdjustedLine['final_amount_centavos']) - (int) round($discountAmt * 100);
+            $finalUnitPriceCentavos = (int) round($finalAmtCentavos / ($quantity ?: 1));
+
             $saleItemsData[] = [
-                'id'                   => Str::uuid()->toString(),
-                'tenant_id'            => $tenantId,
-                'branch_id'            => $branchId,
+                'id'                                     => Str::uuid()->toString(),
+                'tenant_id'                              => $tenantId,
+                'branch_id'                              => $branchId,
                 // sale_id filled after Sale is inserted
-                'product_id'           => $snapshot['product_id'],
-                'product_name'         => $snapshot['product_name'],
-                'sku'                  => $snapshot['sku'],
-                'barcode'              => $snapshot['barcode'],
-                'unit_of_measure'      => $snapshot['unit_of_measure'],
-                'quantity'             => number_format($quantity, 4, '.', ''),
-                'unit_price'           => number_format($snapshot['selling_price'], 4, '.', ''),
-                'subtotal'             => number_format($lineSubtotal, 4, '.', ''),
-                'discount_amount'      => number_format($discountAmt, 4, '.', ''),
-                'tax_category_id'      => $snapshot['tax_category_id'],
-                'tax_type'             => $snapshot['tax_type'],
-                'tax_bucket'           => $taxBucket,
-                'tax_rate'             => number_format($snapshot['tax_rate'], 4, '.', ''),
-                'tax_amount'           => number_format($taxAmount, 4, '.', ''),
-                'net_amount'           => number_format($netAmount, 4, '.', ''),
-                'vatable_amount'       => number_format($vatableAmount, 4, '.', ''),
-                'vat_exempt_amount'    => number_format($vatExemptAmount, 4, '.', ''),
-                'zero_rated_amount'    => number_format($zeroRatedAmount, 4, '.', ''),
-                'non_vat_amount'       => number_format($nonVatAmount, 4, '.', ''),
-                'tax_source'           => \App\Models\SaleItem::TAX_SOURCE_SYSTEM,
-                'tax_snapshot'         => json_encode($taxSnapshot),
-                'line_total'           => number_format($lineTotal, 4, '.', ''),
-                'is_inventory_tracked' => $product->is_inventory_tracked,
-                'created_at'           => now(),
+                'product_id'                             => $snapshot['product_id'],
+                'product_name'                           => $snapshot['product_name'],
+                'sku'                                    => $snapshot['sku'],
+                'barcode'                                => $snapshot['barcode'],
+                'unit_of_measure'                        => $snapshot['unit_of_measure'],
+                'quantity'                               => number_format($quantity, 4, '.', ''),
+                'unit_price'                             => number_format($snapshot['selling_price'], 4, '.', ''),
+                'subtotal'                               => number_format($snapshot['selling_price'] * $quantity, 4, '.', ''),
+                'discount_amount'                        => number_format($discountAmt, 4, '.', ''),
+                'tax_category_id'                        => $snapshot['tax_category_id'],
+                'tax_type'                               => $snapshot['tax_type'],
+                'tax_bucket'                             => $taxBucket,
+                'tax_rate'                               => number_format($snapshot['tax_rate'], 4, '.', ''),
+                'tax_amount'                             => number_format($taxAmount, 4, '.', ''),
+                'net_amount'                             => number_format($netAmount, 4, '.', ''),
+                'vatable_amount'                         => number_format($vatableAmount, 4, '.', ''),
+                'vat_exempt_amount'                      => number_format($vatExemptAmount, 4, '.', ''),
+                'zero_rated_amount'                      => number_format($zeroRatedAmount, 4, '.', ''),
+                'non_vat_amount'                         => number_format($nonVatAmount, 4, '.', ''),
+                'tax_source'                             => \App\Models\SaleItem::TAX_SOURCE_SYSTEM,
+                'tax_snapshot'                           => json_encode($taxSnapshot),
+                'line_total'                             => number_format($lineTotal, 4, '.', ''),
+                'is_inventory_tracked'                   => $product->is_inventory_tracked,
+                'original_unit_price_centavos'           => $promoAdjustedLine['original_unit_price_centavos'],
+                'modifier_adjusted_unit_price_centavos'  => $promoAdjustedLine['original_unit_price_centavos'],
+                'promotion_discount_centavos'            => $promoAdjustedLine['discount_amount_centavos'],
+                'promotion_adjusted_unit_price_centavos' => $promoAdjustedLine['final_unit_price_centavos'],
+                'statutory_discount_centavos'            => (int) round($discountAmt * 100),
+                'final_unit_price_centavos'              => $finalUnitPriceCentavos,
+                'created_at'                             => now(),
             ];
         }
 
@@ -304,12 +325,13 @@ class SaleCreationService
         try {
             $sale = DB::transaction(function () use (
             $tenantId, $branchId, $userId, $clientRequestUuid,
-            $checkoutRequest, $subtotal, $taxTotal, $discountTotal, $total,
+            $checkoutRequest, $subtotal, $taxTotal, $discountTotal,
             $grossSalesAmount, $vatableSalesAmount, $vatExemptSalesAmount,
             $zeroRatedSalesAmount, $nonVatSalesAmount, $vatAmountTotal,
             $machineProfile, $profileSnapshot, $saleItemsData,
             $rawItems, $products, $isTrainingMode,
-            $statutoryResult, $statutoryDiscount, $discountType, $approvalRequired
+            $statutoryResult, $statutoryDiscount, $discountType, $approvalRequired,
+            $promoResult, $terminalId
         ) {
             $principalInvoiceNumber = null;
             if ($machineProfile) {
@@ -319,6 +341,9 @@ class SaleCreationService
                     $principalInvoiceNumber = app(\App\Services\POS\InvoiceSequenceService::class)->generateNextInvoiceNumber($machineProfile);
                 }
             }
+
+            $commercialDiscountTotal = (float) ($promoResult->promotionDiscountCentavos / 100);
+            $total = $subtotal - $discountTotal - $commercialDiscountTotal;
 
             $sale = Sale::create([
                 'id'                           => Str::uuid()->toString(),
@@ -335,7 +360,7 @@ class SaleCreationService
                 'status'                       => 'created',
                 'subtotal'                     => number_format($subtotal, 4, '.', ''),
                 'tax_total'                    => number_format($taxTotal, 4, '.', ''),
-                'discount_total'               => number_format($discountTotal, 4, '.', ''),
+                'discount_total'               => number_format($discountTotal + $commercialDiscountTotal, 4, '.', ''),
                 'total'                        => number_format($total, 4, '.', ''),
                 'gross_sales_amount'           => number_format($grossSalesAmount, 4, '.', ''),
                 'vatable_sales_amount'         => number_format($vatableSalesAmount, 4, '.', ''),
@@ -344,7 +369,7 @@ class SaleCreationService
                 'non_vat_sales_amount'         => number_format($nonVatSalesAmount, 4, '.', ''),
                 'vat_amount'                   => number_format($vatAmountTotal, 4, '.', ''),
                 'statutory_discount_total'     => number_format($discountTotal, 4, '.', ''),
-                'commercial_discount_total'    => '0.0000',
+                'commercial_discount_total'    => number_format($commercialDiscountTotal, 4, '.', ''),
                 'other_adjustment_total'       => '0.0000',
                 'contains_statutory_discount'  => $statutoryResult && $statutoryResult['is_valid'],
                 'compliance_version'           => 'EPIC14_V1',
@@ -358,7 +383,25 @@ class SaleCreationService
             ]);
 
             if ($statutoryResult && $statutoryResult['is_valid']) {
+                $statCategory = $discountType ? $discountType->statutory_category : 'unknown';
+                if ($statCategory === 'senior') {
+                    $statCategory = 'senior_citizen';
+                }
+
                 \App\Models\SaleStatutoryDiscount::create([
+                    'id' => Str::uuid()->toString(),
+                    'sale_id' => $sale->id,
+                    'discount_type' => $statCategory,
+                    'discount_code' => $discountType ? $discountType->code : 'UNKNOWN',
+                    'discount_rate' => $discountType ? $discountType->default_rate : 0.00,
+                    'discount_basis_amount' => number_format($statutoryResult['discountable_base'], 4, '.', ''),
+                    'discount_amount' => number_format($statutoryResult['discount_amount'], 4, '.', ''),
+                    'vat_exempt_amount' => number_format($statutoryResult['vat_amount_removed'], 4, '.', ''),
+                    'snapshot' => $statutoryResult['calculation_snapshot'],
+                    'created_at' => now(),
+                ]);
+
+                $saleDiscount = \App\Models\SaleDiscount::create([
                     'id' => Str::uuid()->toString(),
                     'sale_id' => $sale->id,
                     'discount_type_id' => $statutoryDiscount['discount_type_id'],
@@ -368,14 +411,13 @@ class SaleCreationService
                     'vat_exempt_amount' => number_format($statutoryResult['vat_amount_removed'], 4, '.', ''),
                     'eligible_person_count' => $statutoryDiscount['options']['eligible_person_count'] ?? 1,
                     'total_pax_count' => $statutoryDiscount['options']['total_pax_count'] ?? 1,
-                    'calculation_snapshot' => json_encode($statutoryResult['calculation_snapshot']),
-                    'created_at' => now(),
+                    'calculation_snapshot' => $statutoryResult['calculation_snapshot'],
                 ]);
 
                 foreach ($statutoryDiscount['options']['beneficiaries'] ?? [] as $beneficiary) {
                     \App\Models\SaleDiscountBeneficiary::create([
                         'id' => Str::uuid()->toString(),
-                        'sale_discount_id' => \App\Models\SaleStatutoryDiscount::where('sale_id', $sale->id)->first()->id,
+                        'sale_discount_id' => $saleDiscount->id,
                         'beneficiary_name' => $beneficiary['beneficiary_name'] ?? '',
                         'id_number' => $beneficiary['id_number'] ?? '',
                         'tin' => $beneficiary['tin'] ?? '',
@@ -398,6 +440,49 @@ class SaleCreationService
 
             // Bulk insert for atomicity — if this fails, the outer transaction rolls back the Sale too
             SaleItem::insert($rows);
+
+            // Persist applied promotions and line allocations
+            $insertedSaleItems = SaleItem::where('sale_id', $sale->id)->get()->keyBy('product_id');
+            foreach ($promoResult->appliedPromotions as $applied) {
+                $salePromo = \App\Models\SalePromotion::create([
+                    'id' => $applied['id'],
+                    'tenant_id' => $tenantId,
+                    'branch_id' => $branchId,
+                    'terminal_id' => $terminalId,
+                    'sale_id' => $sale->id,
+                    'promotion_id' => $applied['promotion_id'],
+                    'promotion_rule_id' => $applied['promotion_rule_id'],
+                    'promotion_name' => $applied['promotion_name'],
+                    'rule_type' => $applied['rule_type'],
+                    'condition_type' => $applied['condition_type'],
+                    'reward_type' => $applied['reward_type'],
+                    'priority' => $applied['priority'],
+                    'stackable' => $applied['stackable'],
+                    'exclusive_group' => $applied['exclusive_group'],
+                    'base_amount_centavos' => $applied['base_amount_centavos'],
+                    'discount_amount_centavos' => $applied['discount_amount_centavos'],
+                    'rule_snapshot_json' => $applied['rule_snapshot_json'],
+                    'calculation_snapshot_json' => $applied['calculation_snapshot_json'],
+                    'promotion_rules_version_hash' => $promoResult->promotionRulesVersionHash,
+                ]);
+
+                foreach ($applied['applied_lines'] as $appliedLine) {
+                    $matchedSaleItem = $insertedSaleItems[$appliedLine['product_id']] ?? null;
+                    if ($matchedSaleItem) {
+                        \App\Models\SalePromotionLine::create([
+                            'id' => Str::uuid()->toString(),
+                            'sale_promotion_id' => $salePromo->id,
+                            'sale_item_id' => $matchedSaleItem->id,
+                            'product_id' => $appliedLine['product_id'],
+                            'role' => $appliedLine['role'],
+                            'quantity_applied' => $appliedLine['quantity'],
+                            'original_amount_centavos' => $appliedLine['original_unit_price_centavos'] * $appliedLine['quantity'],
+                            'discount_amount_centavos' => $appliedLine['discount_amount_centavos'],
+                            'final_amount_centavos' => ($appliedLine['original_unit_price_centavos'] * $appliedLine['quantity']) - $appliedLine['discount_amount_centavos'],
+                        ]);
+                    }
+                }
+            }
 
             if ($isTrainingMode) {
                 app(\App\Services\AuditLogger::class)->log('training_sale_created', $sale);

@@ -723,6 +723,30 @@ Route::middleware(['auth', 'tenant'])->group(function () {
             ->name('admin.branches.payment-settings.update');
     });
 
+    // Cash Drawer Reason Configuration
+    Route::middleware(['permission:manage_cash_drawer_reasons'])->group(function () {
+        Route::get('/admin/cash-drawer-reasons', [\App\Http\Controllers\Admin\CashDrawerReasonController::class, 'index'])
+            ->name('admin.cash-drawer-reasons.index');
+        Route::post('/admin/cash-drawer-reasons', [\App\Http\Controllers\Admin\CashDrawerReasonController::class, 'store'])
+            ->name('admin.cash-drawer-reasons.store');
+        Route::put('/admin/cash-drawer-reasons/{reason}', [\App\Http\Controllers\Admin\CashDrawerReasonController::class, 'update'])
+            ->name('admin.cash-drawer-reasons.update');
+        Route::delete('/admin/cash-drawer-reasons/{reason}', [\App\Http\Controllers\Admin\CashDrawerReasonController::class, 'destroy'])
+            ->name('admin.cash-drawer-reasons.destroy');
+    });
+
+    // Epic 37: Advanced Promotions & Bundling Engine
+    Route::middleware(['permission:manage_promotions'])->group(function () {
+        Route::get('/admin/promotions', [\App\Http\Controllers\Admin\PromotionController::class, 'index'])
+            ->name('admin.promotions.index');
+        Route::post('/admin/promotions', [\App\Http\Controllers\Admin\PromotionController::class, 'store'])
+            ->name('admin.promotions.store');
+        Route::put('/admin/promotions/{promotion}', [\App\Http\Controllers\Admin\PromotionController::class, 'update'])
+            ->name('admin.promotions.update');
+        Route::delete('/admin/promotions/{promotion}', [\App\Http\Controllers\Admin\PromotionController::class, 'destroy'])
+            ->name('admin.promotions.destroy');
+    });
+
     // Offline Sales Settings — Terminal Sequence Registry (Story 28.5)
     Route::middleware(['permission:manage_offline_sales_settings'])->group(function () {
         Route::get('/admin/sales-machine-profiles', [\App\Http\Controllers\Admin\SalesMachineProfileController::class, 'index'])

@@ -10,6 +10,7 @@ use App\Models\BranchInventory;
 use App\Models\ExpiryLot;
 use App\Models\TaxCategory;
 use App\Models\PaymentMethod;
+use App\Models\CashDrawerReason;
 use App\Models\User;
 use App\Models\Role;
 use App\Services\RbacSeeder;
@@ -190,6 +191,67 @@ class DatabaseSeeder extends Seeder
             'settlement_tracking_enabled' => true,
             'is_default' => false,
             'status' => 'active',
+        ]);
+
+        // 6.5. Create Default Cash Drawer Reasons
+        CashDrawerReason::create([
+            'tenant_id' => $tenant->id,
+            'event_type' => 'cash_drop',
+            'code' => 'SKIM',
+            'name' => 'Skim (Excess Cash)',
+            'requires_manager_approval' => true,
+            'is_active' => true,
+            'sort_order' => 1,
+        ]);
+
+        CashDrawerReason::create([
+            'tenant_id' => $tenant->id,
+            'event_type' => 'cash_drop',
+            'code' => 'EXPENSE',
+            'name' => 'Petty Cash Expense',
+            'requires_manager_approval' => false,
+            'is_active' => true,
+            'sort_order' => 2,
+        ]);
+
+        CashDrawerReason::create([
+            'tenant_id' => $tenant->id,
+            'event_type' => 'cash_drop',
+            'code' => 'ERROR',
+            'name' => 'Correction',
+            'requires_manager_approval' => false,
+            'is_active' => true,
+            'sort_order' => 3,
+        ]);
+
+        CashDrawerReason::create([
+            'tenant_id' => $tenant->id,
+            'event_type' => 'cash_top_up',
+            'code' => 'REPLENISH',
+            'name' => 'Replenish Change',
+            'requires_manager_approval' => false,
+            'is_active' => true,
+            'sort_order' => 1,
+        ]);
+
+        CashDrawerReason::create([
+            'tenant_id' => $tenant->id,
+            'event_type' => 'cash_top_up',
+            'code' => 'LOAN',
+            'name' => 'Initial Float Addition',
+            'requires_manager_approval' => false,
+            'is_active' => true,
+            'sort_order' => 2,
+        ]);
+
+        CashDrawerReason::create([
+            'tenant_id' => $tenant->id,
+            'event_type' => 'cash_top_up',
+            'code' => 'ERROR',
+            'name' => 'Correction',
+            'requires_manager_approval' => false,
+            'is_active' => true,
+            'sort_order' => 3,
         ]);
 
         // 7. Create Product Categories
