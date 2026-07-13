@@ -31,6 +31,7 @@ export default function Index({
     filters,
     kpis,
     payment_breakdown: paymentBreakdown = [],
+    promotion_breakdown: promotionBreakdown = [],
     status_breakdown: statusBreakdown = [],
     recent_transactions: recentTransactions = [],
     filter_options: filterOptions = {},
@@ -118,6 +119,16 @@ export default function Index({
             label: 'Discounts',
             value: money(kpis.discount_total),
             description: 'Stored discount totals only.',
+        },
+        {
+            label: 'Statutory Discounts',
+            value: money(kpis.statutory_discount_total),
+            description: 'Government-mandated discount portion.',
+        },
+        {
+            label: 'Commercial Promotions',
+            value: money(kpis.commercial_discount_total),
+            description: 'Applied promotion snapshot totals.',
         },
     ];
     const selectedBranch = (filterOptions.branches || []).find((branch) => branch.id === form.branch_id)?.name || 'All Visible';
@@ -290,7 +301,7 @@ export default function Index({
                             <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Breakdown Analysis</p>
                             <p className="mt-1 text-sm text-slate-500">Relative share of visible transaction count and amount.</p>
                         </div>
-                        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
                         <ReportTable
                             title="Payment Breakdown"
                             icon={CreditCard}
@@ -311,6 +322,17 @@ export default function Index({
                                 label: titleCase(row.status),
                                 count: Number(row.transaction_count || 0),
                                 amount: Number(row.total_amount || 0),
+                            }))}
+                        />
+                        <ReportTable
+                            title="Promotion Breakdown"
+                            icon={BarChart3}
+                            columns={['Promotion', 'Sales', 'Discount']}
+                            empty="No commercial promotions under active filters."
+                            rows={promotionBreakdown.map((row) => ({
+                                label: row.promotion_name,
+                                count: Number(row.transaction_count || 0),
+                                amount: Number(row.discount_total || 0),
                             }))}
                         />
                         </div>

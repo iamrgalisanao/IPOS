@@ -4,9 +4,12 @@ use App\Models\Branch;
 use App\Models\DiscountType;
 use App\Models\ManagerApproval;
 use App\Models\Product;
+use App\Models\Promotion;
+use App\Models\PromotionRule;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\SalePayment;
+use App\Models\SalePromotion;
 use App\Models\SaleStatutoryDiscount;
 use App\Models\Tenant;
 use App\Models\User;
@@ -291,6 +294,79 @@ it('aggregates statutory discounts separately from commercial in Z-Report', func
     expect($report['sales']['discount_breakdown']['commercial'])->toBe('100.0000');
     expect($report['sales']['discount_breakdown']['total'])->toBe('300.0000');
     expect($report['sales']['tax_breakdown']['exempt'])->toBe('120.0000');
+});
+
+it('includes commercial promotion detail in shift X/Z discount summary', function () {
+    $shift = Shift::factory()->create([
+        'tenant_id' => $this->tenant->id,
+        'branch_id' => $this->branch->id,
+        'cashier_id' => $this->user->id,
+        'status' => 'closed',
+    ]);
+
+    $sale = Sale::factory()->create([
+        'tenant_id' => $this->tenant->id,
+        'branch_id' => $this->branch->id,
+        'status' => 'paid',
+        'total' => 900.00,
+        'commercial_discount_total' => 100.00,
+        'statutory_discount_total' => 0,
+    ]);
+
+    SalePayment::factory()->create([
+        'tenant_id' => $this->tenant->id,
+        'branch_id' => $this->branch->id,
+        'sale_id' => $sale->id,
+        'shift_id' => $shift->id,
+        'amount' => 900.00,
+    ]);
+
+    $promotion = Promotion::create([
+        'name' => 'Coffee Saver',
+        'rule_type' => 'discount_tier',
+        'priority' => 5,
+        'starts_at' => now()->subDay(),
+        'ends_at' => now()->addDay(),
+        'is_active' => true,
+    ]);
+
+    $rule = PromotionRule::create([
+        'promotion_id' => $promotion->id,
+        'condition_type' => 'minimum_spend',
+        'conditions' => ['minimum_amount_centavos' => 100000],
+        'reward_type' => 'amount_off',
+        'rewards' => ['amount_centavos' => 10000],
+        'is_active' => true,
+    ]);
+
+    SalePromotion::create([
+        'tenant_id' => $this->tenant->id,
+        'branch_id' => $this->branch->id,
+        'sale_id' => $sale->id,
+        'promotion_id' => $promotion->id,
+        'promotion_rule_id' => $rule->id,
+        'promotion_name' => 'Coffee Saver',
+        'rule_type' => 'discount_tier',
+        'condition_type' => 'minimum_spend',
+        'reward_type' => 'amount_off',
+        'priority' => 5,
+        'stackable' => false,
+        'base_amount_centavos' => 100000,
+        'discount_amount_centavos' => 10000,
+        'rule_snapshot_json' => ['name' => 'Coffee Saver'],
+        'condition_snapshot_json' => ['minimum_amount_centavos' => 100000],
+        'reward_snapshot_json' => ['amount_centavos' => 10000],
+        'calculation_snapshot_json' => ['engine_version' => 'EPIC37_V1'],
+        'promotion_rules_version_hash' => str_repeat('b', 64),
+    ]);
+
+    $report = app(ShiftReportService::class)->generateSummary($shift, true);
+
+    expect($report['sales']['discount_breakdown']['commercial'])->toBe('100.0000');
+    expect($report['sales']['promotion_breakdown'])->toHaveCount(1);
+    expect($report['sales']['promotion_breakdown'][0]['promotion_name'])->toBe('Coffee Saver');
+    expect($report['sales']['promotion_breakdown'][0]['discount_total'])->toBe('100.0000');
+    expect($report['sales']['promotion_breakdown'][0]['transaction_count'])->toBe(1);
 });
 
 // ============================================================================

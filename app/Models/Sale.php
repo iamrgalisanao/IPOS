@@ -156,6 +156,11 @@ class Sale extends Model
         return $this->hasMany(SaleDiscount::class);
     }
 
+    public function salePromotions(): HasMany
+    {
+        return $this->hasMany(SalePromotion::class);
+    }
+
     public function reversalOfSale(): BelongsTo
     {
         return $this->belongsTo(self::class, 'reversal_of_sale_id');

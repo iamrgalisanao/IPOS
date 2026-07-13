@@ -4,6 +4,7 @@ namespace App\Services\Sales;
 
 use App\Models\PaymentMethod;
 use App\Models\SalePayment;
+use App\Models\SalePromotion;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -23,6 +24,7 @@ class SalesSummaryReportService
         return [
             'filters' => $this->displayFilters($filters),
             'kpis' => $this->kpis($builder),
+            'promotion_breakdown' => $this->promotionBreakdown($builder),
             'payment_breakdown' => $this->paymentBreakdown($builder),
             'status_breakdown' => $this->statusBreakdown($builder),
             'recent_transactions' => $this->recentTransactions($builder),
@@ -48,6 +50,16 @@ class SalesSummaryReportService
         fputcsv($handle, ['KPI', 'Value']);
         foreach ($report['kpis'] as $key => $value) {
             fputcsv($handle, [$this->sanitizeCsv($this->label($key)), $this->sanitizeCsv((string) $value)]);
+        }
+
+        fputcsv($handle, []);
+        fputcsv($handle, ['Promotion', 'Transaction Count', 'Discount Total']);
+        foreach ($report['promotion_breakdown'] as $row) {
+            fputcsv($handle, [
+                $this->sanitizeCsv($row['promotion_name']),
+                $row['transaction_count'],
+                $row['discount_total'],
+            ]);
         }
 
         fputcsv($handle, []);
@@ -116,6 +128,8 @@ class SalesSummaryReportService
             ->selectRaw("SUM(CASE WHEN status IN ('created', 'pending', 'draft') THEN 1 ELSE 0 END) as pending_count")
             ->selectRaw("SUM(CASE WHEN status IN ('voided', 'refunded') OR is_reversal IS TRUE THEN 1 ELSE 0 END) as void_refund_count")
             ->selectRaw('COALESCE(SUM(discount_total), 0) as discount_total')
+            ->selectRaw('COALESCE(SUM(statutory_discount_total), 0) as statutory_discount_total')
+            ->selectRaw('COALESCE(SUM(commercial_discount_total), 0) as commercial_discount_total')
             ->first();
 
         $transactionCount = (int) ($row->transaction_count ?? 0);
@@ -129,8 +143,33 @@ class SalesSummaryReportService
             'pending_count' => (int) ($row->pending_count ?? 0),
             'void_refund_count' => (int) ($row->void_refund_count ?? 0),
             'discount_total' => round((float) ($row->discount_total ?? 0), 4),
+            'statutory_discount_total' => round((float) ($row->statutory_discount_total ?? 0), 4),
+            'commercial_discount_total' => round((float) ($row->commercial_discount_total ?? 0), 4),
             'average_transaction_value' => $transactionCount > 0 ? round($netSales / $transactionCount, 4) : 0.0,
         ];
+    }
+
+    protected function promotionBreakdown(Builder $builder): array
+    {
+        $saleIds = (clone $builder)->reorder()->select('sales.id');
+
+        return SalePromotion::query()
+            ->whereIn('sale_promotions.sale_id', $saleIds)
+            ->where('sale_promotions.is_suppressed', false)
+            ->select('sale_promotions.promotion_id', 'sale_promotions.promotion_name')
+            ->selectRaw('COALESCE(SUM(sale_promotions.discount_amount_centavos), 0) as discount_total_centavos')
+            ->selectRaw('COUNT(DISTINCT sale_promotions.sale_id) as transaction_count')
+            ->groupBy('sale_promotions.promotion_id', 'sale_promotions.promotion_name')
+            ->orderByDesc('discount_total_centavos')
+            ->get()
+            ->map(fn ($row) => [
+                'promotion_id' => $row->promotion_id,
+                'promotion_name' => (string) $row->promotion_name,
+                'discount_total' => round(((int) $row->discount_total_centavos) / 100, 4),
+                'transaction_count' => (int) $row->transaction_count,
+            ])
+            ->values()
+            ->all();
     }
 
     protected function paymentBreakdown(Builder $builder): array

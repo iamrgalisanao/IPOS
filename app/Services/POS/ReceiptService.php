@@ -16,7 +16,16 @@ class ReceiptService
      */
     public function getReceiptData(Sale $sale): array
     {
-        $sale->load(['items', 'tenant', 'branch', 'user', 'payments.paymentMethod', 'saleDiscounts.discountType', 'saleDiscounts.beneficiaries']);
+        $sale->load([
+            'items',
+            'tenant',
+            'branch',
+            'user',
+            'payments.paymentMethod',
+            'saleDiscounts.discountType',
+            'saleDiscounts.beneficiaries',
+            'salePromotions.lines.saleItem',
+        ]);
 
         return [
             'sale_id'             => $sale->id,
@@ -62,12 +71,39 @@ class ReceiptService
             ])->toArray(),
 
             'totals' => [
-                'subtotal'       => (float) $sale->subtotal,
-                'discount_total' => (float) $sale->discount_total,
-                'tax_total'      => (float) $sale->tax_total,
-                'total'          => (float) $sale->total,
-                'total_paid'     => (float) $sale->payments->sum('amount'),
+                'subtotal'                  => (float) $sale->subtotal,
+                'discount_total'            => (float) $sale->discount_total,
+                'statutory_discount_total'  => (float) $sale->statutory_discount_total,
+                'commercial_discount_total' => (float) $sale->commercial_discount_total,
+                'tax_total'                 => (float) $sale->tax_total,
+                'total'                     => (float) $sale->total,
+                'total_paid'                => (float) $sale->payments->sum('amount'),
             ],
+
+            'promotions' => $sale->salePromotions
+                ->where('is_suppressed', false)
+                ->values()
+                ->map(fn ($promotion) => [
+                    'id' => $promotion->id,
+                    'promotion_id' => $promotion->promotion_id,
+                    'promotion_rule_id' => $promotion->promotion_rule_id,
+                    'name' => $promotion->promotion_name,
+                    'rule_type' => $promotion->rule_type,
+                    'condition_type' => $promotion->condition_type,
+                    'reward_type' => $promotion->reward_type,
+                    'discount_amount' => $this->centavosToDecimal($promotion->discount_amount_centavos),
+                    'base_amount' => $this->centavosToDecimal($promotion->base_amount_centavos),
+                    'lines' => $promotion->lines->map(fn ($line) => [
+                        'sale_item_id' => $line->sale_item_id,
+                        'product_name' => $line->saleItem?->product_name,
+                        'role' => $line->role,
+                        'quantity_applied' => (float) $line->quantity_applied,
+                        'discount_amount' => $this->centavosToDecimal($line->discount_amount_centavos),
+                        'original_amount' => $this->centavosToDecimal($line->original_amount_centavos),
+                        'final_amount' => $this->centavosToDecimal($line->final_amount_centavos),
+                    ])->values()->toArray(),
+                ])
+                ->toArray(),
 
             'contains_statutory_discount' => (bool) $sale->contains_statutory_discount,
             'statutory_discount' => $sale->contains_statutory_discount && $sale->saleDiscounts->isNotEmpty()
@@ -102,5 +138,10 @@ class ReceiptService
                 'paid_at'          => $payment->created_at->toDateTimeString(),
             ])->toArray(),
         ];
+    }
+
+    protected function centavosToDecimal(?int $centavos): float
+    {
+        return round(((int) $centavos) / 100, 4);
     }
 }

@@ -275,6 +275,9 @@ export default function Receipt({ data, tenantId, branchId, onClose }) {
 
 function ReceiptContent({ data, isPrint = false }) {
     const { tenant, branch, items, totals, created_at, receipt_reference, cashier_name } = data;
+    const statutoryDiscountAmount = Number(data.statutory_discount?.discount_amount || 0);
+    const promotionDiscountAmount = (data.promotions || []).reduce((sum, promotion) => sum + Number(promotion.discount_amount || 0), 0);
+    const remainingDiscountAmount = Math.max(0, Number(totals.discount_total || 0) - statutoryDiscountAmount - promotionDiscountAmount);
 
     return (
         <div className={`
@@ -392,10 +395,20 @@ function ReceiptContent({ data, isPrint = false }) {
                         )}
                     </>
                 )}
-                {totals.discount_total > 0 && (!data.contains_statutory_discount || totals.discount_total > Number(data.statutory_discount?.discount_amount || 0)) && (
+                {data.promotions && data.promotions.length > 0 && (
+                    <div className="space-y-0.5 border-y border-dotted border-slate-200 py-1">
+                        {data.promotions.map((promotion) => (
+                            <div key={promotion.id || promotion.promotion_id} className="flex justify-between text-[10px] font-bold text-slate-700">
+                                <span>{promotion.name || 'Promotion'}</span>
+                                <span>-{Number(promotion.discount_amount || 0).toFixed(2)}</span>
+                            </div>
+                        ))}
+                    </div>
+                )}
+                {remainingDiscountAmount > 0 && (
                     <div className="flex justify-between">
                         <span>Discount</span>
-                        <span>-{Number(totals.discount_total).toFixed(2)}</span>
+                        <span>-{remainingDiscountAmount.toFixed(2)}</span>
                     </div>
                 )}
                 <div className="flex justify-between">

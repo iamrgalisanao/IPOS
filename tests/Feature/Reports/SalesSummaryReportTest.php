@@ -4,9 +4,12 @@ namespace Tests\Feature\Reports;
 
 use App\Models\Branch;
 use App\Models\PaymentMethod;
+use App\Models\Promotion;
+use App\Models\PromotionRule;
 use App\Models\Role;
 use App\Models\Sale;
 use App\Models\SalePayment;
+use App\Models\SalePromotion;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\RbacSeeder;
@@ -117,6 +120,74 @@ class SalesSummaryReportTest extends TestCase
             ->where('payment_breakdown.0.total_amount', 102)
             ->has('status_breakdown', 2)
             ->where('meta.can_export', false)
+        );
+    }
+
+    public function test_sales_summary_exposes_commercial_promotion_discount_breakdown(): void
+    {
+        app(TenantContext::class)->setTenant($this->tenant);
+
+        $sale = $this->sale([
+            'sale_number' => 'PROMO-001',
+            'status' => 'paid',
+            'subtotal' => 1000,
+            'gross_sales_amount' => 1000,
+            'discount_total' => 150,
+            'statutory_discount_total' => 50,
+            'commercial_discount_total' => 100,
+            'total' => 850,
+        ]);
+
+        $promotion = Promotion::create([
+            'name' => 'Coffee Saver',
+            'rule_type' => 'discount_tier',
+            'priority' => 5,
+            'starts_at' => now()->subDay(),
+            'ends_at' => now()->addDay(),
+            'is_active' => true,
+        ]);
+
+        $rule = PromotionRule::create([
+            'promotion_id' => $promotion->id,
+            'condition_type' => 'minimum_spend',
+            'conditions' => ['minimum_amount_centavos' => 100000],
+            'reward_type' => 'amount_off',
+            'rewards' => ['amount_centavos' => 10000],
+            'is_active' => true,
+        ]);
+
+        SalePromotion::create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branch->id,
+            'sale_id' => $sale->id,
+            'promotion_id' => $promotion->id,
+            'promotion_rule_id' => $rule->id,
+            'promotion_name' => 'Coffee Saver',
+            'rule_type' => 'discount_tier',
+            'condition_type' => 'minimum_spend',
+            'reward_type' => 'amount_off',
+            'priority' => 5,
+            'stackable' => false,
+            'base_amount_centavos' => 100000,
+            'discount_amount_centavos' => 10000,
+            'rule_snapshot_json' => ['name' => 'Coffee Saver'],
+            'condition_snapshot_json' => ['minimum_amount_centavos' => 100000],
+            'reward_snapshot_json' => ['amount_centavos' => 10000],
+            'calculation_snapshot_json' => ['engine_version' => 'EPIC37_V1'],
+            'promotion_rules_version_hash' => str_repeat('c', 64),
+        ]);
+
+        $response = $this->actingAs($this->manager)
+            ->get(route('reports.sales-summary.index'));
+
+        $response->assertOk();
+        $response->assertInertia(fn (Assert $page) => $page
+            ->where('kpis.discount_total', 150)
+            ->where('kpis.statutory_discount_total', 50)
+            ->where('kpis.commercial_discount_total', 100)
+            ->where('promotion_breakdown.0.promotion_name', 'Coffee Saver')
+            ->where('promotion_breakdown.0.discount_total', 100)
+            ->where('promotion_breakdown.0.transaction_count', 1)
         );
     }
 

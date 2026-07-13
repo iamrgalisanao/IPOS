@@ -103,6 +103,22 @@ export default function ZReport({ report, can_see_sensitivity }) {
                         <span>DISCOUNTS:</span>
                         <span>({formatCurrency(report.sales.discount_breakdown.total)})</span>
                     </div>
+                    <div className="pl-2 text-[10px] text-gray-500">
+                        <div className="flex justify-between">
+                            <span>STATUTORY:</span>
+                            <span>({formatCurrency(report.sales.discount_breakdown.statutory)})</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span>COMMERCIAL PROMO:</span>
+                            <span>({formatCurrency(report.sales.discount_breakdown.commercial)})</span>
+                        </div>
+                        {(report.sales.promotion_breakdown || []).map((promotion) => (
+                            <div key={promotion.promotion_id || promotion.promotion_name} className="flex justify-between">
+                                <span>{promotion.promotion_name}:</span>
+                                <span>({formatCurrency(promotion.discount_total)}) [{promotion.transaction_count}]</span>
+                            </div>
+                        ))}
+                    </div>
                     <div className="flex justify-between border-t border-gray-100 pt-1 mt-1 font-bold">
                         <span>NET TOTAL:</span>
                         <span>{formatCurrency(report.sales.net_total)}</span>

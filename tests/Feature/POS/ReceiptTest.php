@@ -6,9 +6,13 @@ use App\Models\Branch;
 use App\Models\Permission;
 use App\Models\Product;
 use App\Models\ProductCategory;
+use App\Models\Promotion;
+use App\Models\PromotionRule;
 use App\Models\Role;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Models\SalePromotion;
+use App\Models\SalePromotionLine;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\BranchContext;
@@ -209,6 +213,100 @@ class ReceiptTest extends TestCase
                 'total'          => 1064.00,
             ]
         ]);
+    }
+
+    public function test_it_includes_applied_promotion_snapshots(): void
+    {
+        $sale = Sale::create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branch->id,
+            'user_id' => $this->user->id,
+            'client_request_uuid' => (string) Str::uuid(),
+            'subtotal' => 1000.00,
+            'discount_total' => 100.00,
+            'commercial_discount_total' => 100.00,
+            'tax_total' => 108.00,
+            'total' => 1008.00,
+            'status' => 'completed',
+        ]);
+
+        $saleItem = SaleItem::create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branch->id,
+            'sale_id' => $sale->id,
+            'product_id' => $this->dummyProduct->id,
+            'product_name' => 'Snapshot Promo Product',
+            'unit_price' => 1000.00,
+            'line_total' => 900.00,
+            'quantity' => 1,
+            'subtotal' => 1000.00,
+            'discount_amount' => 100.00,
+            'promotion_discount_centavos' => 10000,
+            'promotion_adjusted_unit_price_centavos' => 90000,
+            'tax_amount' => 108.00,
+            'tax_rate' => 12.00,
+            'tax_type' => 'exclusive',
+        ]);
+
+        $promotion = Promotion::create([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Coffee Saver',
+            'rule_type' => 'discount_tier',
+            'priority' => 10,
+            'starts_at' => now()->subDay(),
+            'ends_at' => now()->addDay(),
+            'is_active' => true,
+        ]);
+
+        $rule = PromotionRule::create([
+            'promotion_id' => $promotion->id,
+            'condition_type' => 'minimum_spend',
+            'conditions' => ['minimum_amount_centavos' => 100000],
+            'reward_type' => 'amount_off',
+            'rewards' => ['amount_centavos' => 10000],
+            'is_active' => true,
+        ]);
+
+        $salePromotion = SalePromotion::create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branch->id,
+            'sale_id' => $sale->id,
+            'promotion_id' => $promotion->id,
+            'promotion_rule_id' => $rule->id,
+            'promotion_name' => 'Coffee Saver',
+            'rule_type' => 'discount_tier',
+            'condition_type' => 'minimum_spend',
+            'reward_type' => 'amount_off',
+            'priority' => 10,
+            'stackable' => false,
+            'base_amount_centavos' => 100000,
+            'discount_amount_centavos' => 10000,
+            'rule_snapshot_json' => ['name' => 'Coffee Saver'],
+            'condition_snapshot_json' => ['minimum_amount_centavos' => 100000],
+            'reward_snapshot_json' => ['amount_centavos' => 10000],
+            'calculation_snapshot_json' => ['engine_version' => 'EPIC37_V1'],
+            'promotion_rules_version_hash' => str_repeat('a', 64),
+        ]);
+
+        SalePromotionLine::create([
+            'sale_promotion_id' => $salePromotion->id,
+            'sale_item_id' => $saleItem->id,
+            'product_id' => $this->dummyProduct->id,
+            'role' => 'discounted',
+            'quantity_applied' => 1,
+            'original_amount_centavos' => 100000,
+            'discount_amount_centavos' => 10000,
+            'final_amount_centavos' => 90000,
+        ]);
+
+        $response = $this->getWithContext('pos.sales.receipt', ['sale_id' => $sale->id]);
+
+        $response->assertStatus(200);
+        $response->assertJsonPath('promotions.0.name', 'Coffee Saver');
+        $response->assertJsonPath('promotions.0.lines.0.product_name', 'Snapshot Promo Product');
+        $this->assertSame(100.0, (float) $response->json('totals.commercial_discount_total'));
+        $this->assertSame(100.0, (float) $response->json('promotions.0.discount_amount'));
+        $this->assertSame(100.0, (float) $response->json('promotions.0.lines.0.discount_amount'));
     }
 
     /**

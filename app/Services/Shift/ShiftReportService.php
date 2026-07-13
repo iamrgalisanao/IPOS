@@ -5,6 +5,7 @@ namespace App\Services\Shift;
 use App\Models\Shift;
 use App\Models\Sale;
 use App\Models\SalePayment;
+use App\Models\SalePromotion;
 use Illuminate\Support\Facades\DB;
 
 class ShiftReportService
@@ -85,6 +86,7 @@ class ShiftReportService
         $totalVoids = (float)($voidsSummary->total_voided ?? 0);
         $countVoids = (int)($voidsSummary->count_voided ?? 0);
         $netSales = $grossSales - $totalVoids - $totalRefunds;
+        $promotionBreakdown = $this->promotionBreakdown($saleIds, $shift->tenant_id);
 
         // 3. Payment Method Breakdown
         $paymentBreakdown = SalePayment::where('shift_id', $shift->id)
@@ -142,6 +144,7 @@ class ShiftReportService
                     'commercial' => $this->formatDecimal($salesSummary->commercial_discounts),
                     'total' => $this->formatDecimal(bcadd($salesSummary->statutory_discounts ?? '0', $salesSummary->commercial_discounts ?? '0', 4)),
                 ],
+                'promotion_breakdown' => $promotionBreakdown,
             ],
             'payments' => $paymentBreakdown->map(fn($p) => [
                 'method' => $p->name,
@@ -179,5 +182,31 @@ class ShiftReportService
             'total' => $this->formatDecimal($event->total ?? 0),
             'count' => (int) ($event->count ?? 0),
         ];
+    }
+
+    protected function promotionBreakdown(array $saleIds, string $tenantId): array
+    {
+        if (empty($saleIds)) {
+            return [];
+        }
+
+        return SalePromotion::query()
+            ->where('tenant_id', $tenantId)
+            ->whereIn('sale_id', $saleIds)
+            ->where('is_suppressed', false)
+            ->select('promotion_id', 'promotion_name')
+            ->selectRaw('COALESCE(SUM(discount_amount_centavos), 0) as discount_total_centavos')
+            ->selectRaw('COUNT(DISTINCT sale_id) as transaction_count')
+            ->groupBy('promotion_id', 'promotion_name')
+            ->orderByDesc('discount_total_centavos')
+            ->get()
+            ->map(fn ($row) => [
+                'promotion_id' => $row->promotion_id,
+                'promotion_name' => $row->promotion_name,
+                'discount_total' => $this->formatDecimal(((int) $row->discount_total_centavos) / 100),
+                'transaction_count' => (int) $row->transaction_count,
+            ])
+            ->values()
+            ->all();
     }
 }
