@@ -21,7 +21,7 @@ class CreateOwnerUserRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'email' => ['required', 'email:rfc,dns', 'max:255', 'unique:users,email'],
+            'email' => ['required', 'email:rfc', 'max:255', 'unique:users,email'],
             'first_name' => ['required', 'string', 'max:100', 'min:2'],
             'last_name' => ['required', 'string', 'max:100', 'min:2'],
             'phone' => ['nullable', 'string', 'max:20'],

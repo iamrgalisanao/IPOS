@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - 'checkpoint/**'
+      - 'feat/**'
+      - 'fix/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  laravel-tests:
+    name: Laravel Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      APP_ENV: testing
+      APP_DEBUG: 'false'
+      BCRYPT_ROUNDS: '4'
+      BROADCAST_CONNECTION: 'null'
+      CACHE_STORE: array
+      DB_CONNECTION: sqlite
+      DB_DATABASE: database/ci.sqlite
+      ENFORCE_TIMECARDS: 'false'
+      MAIL_MAILER: array
+      NIGHTWATCH_ENABLED: 'false'
+      PULSE_ENABLED: 'false'
+      QUEUE_CONNECTION: sync
+      SESSION_DRIVER: array
+      TELESCOPE_ENABLED: 'false'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: bcmath, ctype, curl, dom, fileinfo, json, mbstring, openssl, pdo_sqlite, sqlite3, tokenizer, xml
+          coverage: none
+          ini-values: memory_limit=-1
+
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Prepare Laravel environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate --no-interaction
+          touch database/ci.sqlite
+
+      - name: Run migrations
+        run: php artisan migrate:fresh --force --no-interaction
+
+      - name: Validate route registration
+        run: php artisan route:list
+
+      - name: Run Pest suite
+        run: php -d memory_limit=-1 ./vendor/bin/pest
+
+  frontend-build:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Build frontend assets
+        run: npm run build
