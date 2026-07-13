@@ -84,6 +84,54 @@ jobs:
             --log-junit storage/test-results/pest-junit.xml \
             2>&1 | tee storage/test-results/pest.log
 
+      - name: Summarize Pest diagnostics
+        if: failure()
+        run: |
+          php <<'PHP'
+          <?php
+
+          function annotation_value(string $value): string
+          {
+              $value = str_replace(["%", "\r", "\n"], ["%25", "%0D", "%0A"], $value);
+
+              return mb_substr($value, 0, 900);
+          }
+
+          $junitPath = 'storage/test-results/pest-junit.xml';
+          $logPath = 'storage/test-results/pest.log';
+
+          if (! file_exists($junitPath)) {
+              $fallback = file_exists($logPath) ? substr((string) file_get_contents($logPath), -4000) : 'Pest failed before writing diagnostics.';
+              echo '::error title=Pest diagnostics missing::' . annotation_value($fallback) . PHP_EOL;
+              exit(0);
+          }
+
+          $report = simplexml_load_file($junitPath);
+          $failures = $report === false ? [] : $report->xpath('//testcase[failure or error]');
+
+          if ($failures === false || count($failures) === 0) {
+              $fallback = file_exists($logPath) ? substr((string) file_get_contents($logPath), -4000) : 'Pest exited non-zero without JUnit failures.';
+              echo '::error title=Pest failed::' . annotation_value($fallback) . PHP_EOL;
+              exit(0);
+          }
+
+          foreach (array_slice($failures, 0, 20) as $case) {
+              $class = trim((string) $case['classname']);
+              $name = trim((string) $case['name']);
+              $defect = count($case->failure) > 0 ? $case->failure[0] : $case->error[0];
+              $message = trim((string) ($defect['message'] ?? ''));
+
+              if ($message === '') {
+                  $message = trim((string) $defect);
+              }
+
+              $message = preg_replace('/\s+/', ' ', $message) ?: 'Pest test failed without a message.';
+              $title = trim($class . ' ' . $name);
+
+              echo '::error title=' . annotation_value('Pest failed: ' . $title) . '::' . annotation_value($message) . PHP_EOL;
+          }
+          PHP
+
       - name: Upload Pest diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
