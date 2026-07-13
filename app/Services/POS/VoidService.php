@@ -93,6 +93,9 @@ class VoidService
             // 4a. Reverse Statutory Discount Totals (for Z-Reading accuracy)
             $this->reverseStatutoryDiscountOnVoid($sale, $void);
 
+            // 4b. Reverse Commercial Promotion Totals while retaining promotion snapshots.
+            $this->reverseCommercialPromotionOnVoid($sale, $void);
+
             // 5. Audit Logging
             $this->auditLogger->log(
                 action: 'sale_voided',
@@ -178,6 +181,52 @@ class VoidService
                 'void_id' => $void->id,
                 'original_discount_amount' => (string) $statutoryDiscount->discount_amount,
                 'original_vat_exempt_amount' => (string) $statutoryDiscount->vat_exempt_amount,
+                'reason_code' => $void->reason_code,
+            ]
+        );
+    }
+
+    /**
+     * Reverse commercial promotion aggregates for a full void.
+     *
+     * Applied promotion snapshots remain intact for audit; only the live sale
+     * aggregates used by X/Z reporting and remaining sale item allocations are
+     * zeroed.
+     */
+    protected function reverseCommercialPromotionOnVoid(Sale $sale, SaleVoid $void): void
+    {
+        $commercialDiscount = (float) $sale->commercial_discount_total;
+
+        if ($commercialDiscount <= 0) {
+            return;
+        }
+
+        DB::table('sales')->where('id', $sale->id)->update([
+            'commercial_discount_total' => '0.0000',
+            'discount_total' => number_format(max(0, (float) $sale->discount_total - $commercialDiscount), 4, '.', ''),
+        ]);
+
+        DB::table('sale_items')
+            ->where('sale_id', $sale->id)
+            ->where(function ($query) {
+                $query->where('promotion_discount_centavos', '>', 0)
+                    ->orWhere('promotion_adjusted_unit_price_centavos', '>', 0);
+            })
+            ->select('id', 'unit_price')
+            ->get()
+            ->each(function ($item) {
+                DB::table('sale_items')->where('id', $item->id)->update([
+                    'promotion_discount_centavos' => 0,
+                    'promotion_adjusted_unit_price_centavos' => (int) round(((float) $item->unit_price) * 100),
+                ]);
+            });
+
+        $this->auditLogger->log(
+            action: 'commercial_promotion_reversed_void',
+            auditable: $sale,
+            metadata: [
+                'void_id' => $void->id,
+                'original_commercial_discount_total' => number_format($commercialDiscount, 4, '.', ''),
                 'reason_code' => $void->reason_code,
             ]
         );

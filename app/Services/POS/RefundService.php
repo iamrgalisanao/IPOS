@@ -4,6 +4,7 @@ namespace App\Services\POS;
 
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Models\SalePromotionLine;
 use App\Models\SaleRefund;
 use App\Models\SaleRefundItem;
 use App\Models\PaymentReversal;
@@ -113,6 +114,9 @@ class RefundService
 
             // 14a. Reverse Statutory Discount proportionally for refunded items
             $this->reverseStatutoryDiscountOnRefund($sale, $refund, $refundTotal, $itemsToRefund);
+
+            // 14b. Reverse Commercial Promotion allocations for refunded quantities.
+            $this->reverseCommercialPromotionOnRefund($sale, $refund, $itemsToRefund);
 
             // 7. Audit Logging
             $this->auditLogger->log(
@@ -232,6 +236,98 @@ class RefundService
                 'reversed_discount_amount' => number_format($reversedDiscountAmount, 4, '.', ''),
                 'reversed_vat_exempt_amount' => number_format($reversedVatExemptAmount, 4, '.', ''),
                 'remaining_statutory_discount_total' => number_format($newStatutoryTotal, 4, '.', ''),
+            ]
+        );
+    }
+
+    /**
+     * Reverse commercial promotion discount allocations for refunded items.
+     *
+     * The original sale promotion snapshots stay immutable. Remaining discount
+     * fields on sales and sale_items are reduced according to cumulative refunded
+     * quantity so repeated partial refunds converge exactly to zero.
+     */
+    protected function reverseCommercialPromotionOnRefund(
+        Sale $sale,
+        SaleRefund $refund,
+        array $itemsToRefund
+    ): void {
+        $totalReversedCentavos = 0;
+        $lineReversals = [];
+
+        foreach ($itemsToRefund as $refundRequest) {
+            $saleItem = SaleItem::findOrFail($refundRequest['sale_item_id']);
+            $originalQuantity = (float) $saleItem->quantity;
+
+            if ($originalQuantity <= 0) {
+                continue;
+            }
+
+            $originalDiscountCentavos = (int) SalePromotionLine::query()
+                ->where('sale_item_id', $saleItem->id)
+                ->whereHas('salePromotion', fn ($query) => $query
+                    ->where('sale_id', $sale->id)
+                    ->where('is_suppressed', false))
+                ->sum('discount_amount_centavos');
+
+            if ($originalDiscountCentavos <= 0) {
+                continue;
+            }
+
+            $currentRemainingCentavos = (int) (DB::table('sale_items')
+                ->where('id', $saleItem->id)
+                ->value('promotion_discount_centavos') ?? 0);
+
+            $totalRefundedQuantity = (float) SaleRefundItem::where('sale_item_id', $saleItem->id)
+                ->sum('quantity_refunded');
+            $remainingQuantity = max(0, $originalQuantity - $totalRefundedQuantity);
+            $expectedRemainingCentavos = (int) round($originalDiscountCentavos * ($remainingQuantity / $originalQuantity));
+            $reversedCentavos = max(0, $currentRemainingCentavos - $expectedRemainingCentavos);
+
+            if ($reversedCentavos <= 0) {
+                continue;
+            }
+
+            $unitDiscountCentavos = $remainingQuantity > 0
+                ? (int) round($expectedRemainingCentavos / $remainingQuantity)
+                : 0;
+            $unitPriceCentavos = (int) round(((float) $saleItem->unit_price) * 100);
+
+            DB::table('sale_items')->where('id', $saleItem->id)->update([
+                'promotion_discount_centavos' => $expectedRemainingCentavos,
+                'promotion_adjusted_unit_price_centavos' => max(0, $unitPriceCentavos - $unitDiscountCentavos),
+            ]);
+
+            $totalReversedCentavos += $reversedCentavos;
+            $lineReversals[] = [
+                'sale_item_id' => $saleItem->id,
+                'quantity_refunded_total' => number_format($totalRefundedQuantity, 4, '.', ''),
+                'reversed_discount_centavos' => $reversedCentavos,
+                'remaining_discount_centavos' => $expectedRemainingCentavos,
+            ];
+        }
+
+        if ($totalReversedCentavos <= 0) {
+            return;
+        }
+
+        $reversedAmount = $totalReversedCentavos / 100;
+        $newCommercialTotal = max(0, (float) $sale->commercial_discount_total - $reversedAmount);
+        $newDiscountTotal = max(0, (float) $sale->discount_total - $reversedAmount);
+
+        DB::table('sales')->where('id', $sale->id)->update([
+            'commercial_discount_total' => number_format($newCommercialTotal, 4, '.', ''),
+            'discount_total' => number_format($newDiscountTotal, 4, '.', ''),
+        ]);
+
+        $this->auditLogger->log(
+            action: 'commercial_promotion_reversed_refund',
+            auditable: $sale,
+            metadata: [
+                'refund_id' => $refund->id,
+                'reversed_discount_amount' => number_format($reversedAmount, 4, '.', ''),
+                'remaining_commercial_discount_total' => number_format($newCommercialTotal, 4, '.', ''),
+                'line_reversals' => $lineReversals,
             ]
         );
     }

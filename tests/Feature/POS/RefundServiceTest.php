@@ -7,9 +7,13 @@ use App\Models\BranchInventory;
 use App\Models\InventoryMovement;
 use App\Models\PaymentMethod;
 use App\Models\Product;
+use App\Models\Promotion;
+use App\Models\PromotionRule;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\SalePayment;
+use App\Models\SalePromotion;
+use App\Models\SalePromotionLine;
 use App\Models\SaleRefund;
 use App\Models\SaleRefundItem;
 use App\Models\PaymentReversal;
@@ -123,6 +127,71 @@ class RefundServiceTest extends TestCase
         return $sale->refresh();
     }
 
+    protected function attachPromotionSnapshot(Sale $sale, SaleItem $item, int $discountCentavos = 4000): SalePromotion
+    {
+        DB::table('sales')->where('id', $sale->id)->update([
+            'commercial_discount_total' => number_format($discountCentavos / 100, 4, '.', ''),
+            'discount_total' => number_format($discountCentavos / 100, 4, '.', ''),
+        ]);
+
+        DB::table('sale_items')->where('id', $item->id)->update([
+            'promotion_discount_centavos' => $discountCentavos,
+            'promotion_adjusted_unit_price_centavos' => max(0, ((int) round(((float) $item->unit_price) * 100)) - (int) round($discountCentavos / (float) $item->quantity)),
+        ]);
+
+        $promotion = Promotion::create([
+            'name' => 'Refund Promo',
+            'rule_type' => 'discount_tier',
+            'priority' => 1,
+            'starts_at' => now()->subDay(),
+            'ends_at' => now()->addDay(),
+            'is_active' => true,
+        ]);
+
+        $rule = PromotionRule::create([
+            'promotion_id' => $promotion->id,
+            'condition_type' => 'minimum_spend',
+            'conditions' => ['minimum_amount_centavos' => 10000],
+            'reward_type' => 'amount_off',
+            'rewards' => ['amount_centavos' => $discountCentavos],
+            'is_active' => true,
+        ]);
+
+        $salePromotion = SalePromotion::create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branch->id,
+            'sale_id' => $sale->id,
+            'promotion_id' => $promotion->id,
+            'promotion_rule_id' => $rule->id,
+            'promotion_name' => 'Refund Promo',
+            'rule_type' => 'discount_tier',
+            'condition_type' => 'minimum_spend',
+            'reward_type' => 'amount_off',
+            'priority' => 1,
+            'stackable' => false,
+            'base_amount_centavos' => (int) round(((float) $item->subtotal) * 100),
+            'discount_amount_centavos' => $discountCentavos,
+            'rule_snapshot_json' => ['name' => 'Refund Promo'],
+            'condition_snapshot_json' => ['minimum_amount_centavos' => 10000],
+            'reward_snapshot_json' => ['amount_centavos' => $discountCentavos],
+            'calculation_snapshot_json' => ['engine_version' => 'EPIC37_V1'],
+            'promotion_rules_version_hash' => str_repeat('e', 64),
+        ]);
+
+        SalePromotionLine::create([
+            'sale_promotion_id' => $salePromotion->id,
+            'sale_item_id' => $item->id,
+            'product_id' => $item->product_id,
+            'role' => 'discounted',
+            'quantity_applied' => $item->quantity,
+            'original_amount_centavos' => (int) round(((float) $item->subtotal) * 100),
+            'discount_amount_centavos' => $discountCentavos,
+            'final_amount_centavos' => max(0, (int) round(((float) $item->subtotal) * 100) - $discountCentavos),
+        ]);
+
+        return $salePromotion;
+    }
+
     /** 1, 2, 6, 7, 11, 12, 20, 21, 26, 27, 28, 29, 33, 34, 35, 36: Full/Partial Refund Integrity */
     public function test_refund_integrity_and_allocation(): void
     {
@@ -165,6 +234,38 @@ class RefundServiceTest extends TestCase
         $audit = AuditLog::where('action', 'sale_refunded')->where('auditable_id', $sale->id)->first();
         $this->assertNotNull($audit); // 33
         $this->assertEquals($this->tenant->id, $audit->tenant_id); // 34
+    }
+
+    public function test_refund_reverses_commercial_promotion_proportionally(): void
+    {
+        $sale = $this->createComplexPaidSale(400);
+        $item = $sale->items->first();
+        $salePromotion = $this->attachPromotionSnapshot($sale, $item, 4000);
+
+        $refund = $this->refundService->refund($sale->refresh(), [
+            ['sale_item_id' => $item->id, 'quantity' => 1, 'restock_action' => 'do_not_restock'],
+        ], 'promo_refund', 'Half of promoted item');
+
+        $sale->refresh();
+        $this->assertEquals(20.00, (float) $sale->commercial_discount_total);
+        $this->assertEquals(2000, (int) DB::table('sale_items')->where('id', $item->id)->value('promotion_discount_centavos'));
+        $this->assertDatabaseHas('sale_promotions', [
+            'id' => $salePromotion->id,
+            'discount_amount_centavos' => 4000,
+        ]);
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'commercial_promotion_reversed_refund',
+            'auditable_id' => $sale->id,
+        ]);
+
+        $this->refundService->refund($sale, [
+            ['sale_item_id' => $item->id, 'quantity' => 1, 'restock_action' => 'do_not_restock'],
+        ], 'promo_refund_rest', 'Remaining promoted quantity');
+
+        $sale->refresh();
+        $this->assertEquals(0.00, (float) $sale->commercial_discount_total);
+        $this->assertEquals(0, (int) DB::table('sale_items')->where('id', $item->id)->value('promotion_discount_centavos'));
+        $this->assertEquals(100, (float) $refund->refund_total);
     }
 
     /** 3, 4, 5, 8, 9, 10, 13: Guards */

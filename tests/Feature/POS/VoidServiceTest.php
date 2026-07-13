@@ -7,9 +7,13 @@ use App\Models\BranchInventory;
 use App\Models\InventoryMovement;
 use App\Models\PaymentMethod;
 use App\Models\Product;
+use App\Models\Promotion;
+use App\Models\PromotionRule;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\SalePayment;
+use App\Models\SalePromotion;
+use App\Models\SalePromotionLine;
 use App\Models\SaleVoid;
 use App\Models\PaymentReversal;
 use App\Models\AuditLog;
@@ -114,6 +118,73 @@ class VoidServiceTest extends TestCase
         return $sale->refresh();
     }
 
+    protected function attachPromotionSnapshot(Sale $sale, int $discountCentavos = 3000): SalePromotion
+    {
+        $item = $sale->items()->firstOrFail();
+
+        DB::table('sales')->where('id', $sale->id)->update([
+            'commercial_discount_total' => number_format($discountCentavos / 100, 4, '.', ''),
+            'discount_total' => number_format($discountCentavos / 100, 4, '.', ''),
+        ]);
+
+        DB::table('sale_items')->where('id', $item->id)->update([
+            'promotion_discount_centavos' => $discountCentavos,
+            'promotion_adjusted_unit_price_centavos' => max(0, ((int) round(((float) $item->unit_price) * 100)) - $discountCentavos),
+        ]);
+
+        $promotion = Promotion::create([
+            'name' => 'Void Promo',
+            'rule_type' => 'discount_tier',
+            'priority' => 1,
+            'starts_at' => now()->subDay(),
+            'ends_at' => now()->addDay(),
+            'is_active' => true,
+        ]);
+
+        $rule = PromotionRule::create([
+            'promotion_id' => $promotion->id,
+            'condition_type' => 'minimum_spend',
+            'conditions' => ['minimum_amount_centavos' => 10000],
+            'reward_type' => 'amount_off',
+            'rewards' => ['amount_centavos' => $discountCentavos],
+            'is_active' => true,
+        ]);
+
+        $salePromotion = SalePromotion::create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branch->id,
+            'sale_id' => $sale->id,
+            'promotion_id' => $promotion->id,
+            'promotion_rule_id' => $rule->id,
+            'promotion_name' => 'Void Promo',
+            'rule_type' => 'discount_tier',
+            'condition_type' => 'minimum_spend',
+            'reward_type' => 'amount_off',
+            'priority' => 1,
+            'stackable' => false,
+            'base_amount_centavos' => (int) round(((float) $item->subtotal) * 100),
+            'discount_amount_centavos' => $discountCentavos,
+            'rule_snapshot_json' => ['name' => 'Void Promo'],
+            'condition_snapshot_json' => ['minimum_amount_centavos' => 10000],
+            'reward_snapshot_json' => ['amount_centavos' => $discountCentavos],
+            'calculation_snapshot_json' => ['engine_version' => 'EPIC37_V1'],
+            'promotion_rules_version_hash' => str_repeat('d', 64),
+        ]);
+
+        SalePromotionLine::create([
+            'sale_promotion_id' => $salePromotion->id,
+            'sale_item_id' => $item->id,
+            'product_id' => $item->product_id,
+            'role' => 'discounted',
+            'quantity_applied' => $item->quantity,
+            'original_amount_centavos' => (int) round(((float) $item->subtotal) * 100),
+            'discount_amount_centavos' => $discountCentavos,
+            'final_amount_centavos' => max(0, (int) round(((float) $item->subtotal) * 100) - $discountCentavos),
+        ]);
+
+        return $salePromotion;
+    }
+
     /** 1-17, 22-30: Full Void Success and Integrity */
     public function test_full_sale_void_integrity(): void
     {
@@ -171,6 +242,26 @@ class VoidServiceTest extends TestCase
             'source_id' => $void->id,
         ]);
         $this->assertDatabaseEmpty('sale_refunds'); // 29
+    }
+
+    public function test_void_reverses_commercial_promotion_totals_without_deleting_snapshot(): void
+    {
+        $sale = $this->createComplexPaidSale(300);
+        $salePromotion = $this->attachPromotionSnapshot($sale, 3000);
+
+        $this->voidService->void($sale->refresh(), 'void_promo', 'Promotion reversal');
+
+        $sale->refresh();
+        $this->assertEquals(0.00, (float) $sale->commercial_discount_total);
+        $this->assertEquals(0, (int) DB::table('sale_items')->where('sale_id', $sale->id)->sum('promotion_discount_centavos'));
+        $this->assertDatabaseHas('sale_promotions', [
+            'id' => $salePromotion->id,
+            'discount_amount_centavos' => 3000,
+        ]);
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'commercial_promotion_reversed_void',
+            'auditable_id' => $sale->id,
+        ]);
     }
 
     /** 2, 3, 4, 9: Status Guards */
