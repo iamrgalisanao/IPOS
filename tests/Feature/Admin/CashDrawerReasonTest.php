@@ -102,6 +102,69 @@ class CashDrawerReasonTest extends TestCase
         $response->assertSessionHasErrors('code');
     }
 
+    public function test_admin_cannot_store_reason_for_another_tenant_branch(): void
+    {
+        $otherTenant = \App\Models\Tenant::factory()->create(['status' => 'active']);
+        app(\App\Services\TenantContext::class)->setTenant($otherTenant);
+        $otherBranch = Branch::factory()->create([
+            'tenant_id' => $otherTenant->id,
+            'status' => 'active',
+        ]);
+        app(\App\Services\TenantContext::class)->setTenant($this->tenant);
+
+        $response = $this->actingAs($this->admin)
+            ->post(route('admin.cash-drawer-reasons.store'), [
+                'event_type' => 'cash_drop',
+                'code' => 'OTHER_BRANCH',
+                'name' => 'Other Branch',
+                'branch_id' => $otherBranch->id,
+                'requires_manager_approval' => false,
+                'sort_order' => 1,
+            ]);
+
+        $response->assertSessionHasErrors('branch_id');
+
+        $this->assertDatabaseMissing('cash_drawer_reasons', [
+            'code' => 'OTHER_BRANCH',
+        ]);
+    }
+
+    public function test_admin_cannot_update_or_destroy_another_tenant_reason(): void
+    {
+        $otherTenant = \App\Models\Tenant::factory()->create(['status' => 'active']);
+        app(\App\Services\TenantContext::class)->setTenant($otherTenant);
+        $reason = CashDrawerReason::create([
+            'tenant_id' => $otherTenant->id,
+            'event_type' => 'cash_drop',
+            'code' => 'OTHER_TENANT',
+            'name' => 'Other Tenant',
+            'branch_id' => null,
+            'requires_manager_approval' => false,
+            'is_active' => true,
+            'sort_order' => 1,
+        ]);
+        app(\App\Services\TenantContext::class)->setTenant($this->tenant);
+
+        $this->actingAs($this->admin)
+            ->put(route('admin.cash-drawer-reasons.update', $reason->id), [
+                'name' => 'Changed',
+                'requires_manager_approval' => true,
+                'is_active' => true,
+                'sort_order' => 2,
+            ])
+            ->assertStatus(404);
+
+        $this->actingAs($this->admin)
+            ->delete(route('admin.cash-drawer-reasons.destroy', $reason->id))
+            ->assertStatus(404);
+
+        $this->assertDatabaseHas('cash_drawer_reasons', [
+            'id' => $reason->id,
+            'name' => 'Other Tenant',
+            'is_active' => true,
+        ]);
+    }
+
     public function test_admin_can_update_reason(): void
     {
         $reason = CashDrawerReason::create([

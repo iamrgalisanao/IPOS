@@ -48,7 +48,11 @@ class EnforceSubscriptionGate
         }
 
         if ($request->header('X-Inertia')) {
-            return redirect()->route('pos.terminal.checkout')->with('error', 'This feature requires a premium subscription upgrade.');
+            if ($request->routeIs('pos.terminal.checkout')) {
+                abort(403, 'This feature requires a premium subscription upgrade.');
+            }
+
+            return redirect()->back()->with('error', 'This feature requires a premium subscription upgrade.');
         }
 
         // Standard web fallback abort

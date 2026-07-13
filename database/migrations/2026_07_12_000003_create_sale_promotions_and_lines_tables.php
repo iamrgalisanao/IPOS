@@ -29,6 +29,8 @@ return new class extends Migration
             $table->bigInteger('base_amount_centavos')->default(0);
             $table->bigInteger('discount_amount_centavos')->default(0);
             $table->jsonb('rule_snapshot_json');
+            $table->jsonb('condition_snapshot_json');
+            $table->jsonb('reward_snapshot_json');
             $table->jsonb('calculation_snapshot_json');
             $table->string('promotion_rules_version_hash');
             $table->timestamps();

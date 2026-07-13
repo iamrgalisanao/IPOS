@@ -101,6 +101,7 @@ class PromotionController extends Controller
             $validated['rewards']
         );
         $this->validateRuleTypePairing($validated['rule_type'], $validated['condition_type']);
+        $this->validateConditionRewardPairing($validated['condition_type'], $validated['reward_type']);
         $this->validateRuleReferences($tenantId, $validated['condition_type'], $validated['reward_type'], $validated['conditions'], $validated['rewards']);
 
         $promotion = DB::transaction(function () use ($validated, $tenantId, $user) {
@@ -186,6 +187,7 @@ class PromotionController extends Controller
             $validated['rewards']
         );
         $this->validateRuleTypePairing($promotion->rule_type, $validated['condition_type']);
+        $this->validateConditionRewardPairing($validated['condition_type'], $validated['reward_type']);
         $this->validateRuleReferences($user->tenant_id, $validated['condition_type'], $validated['reward_type'], $validated['conditions'], $validated['rewards']);
 
         DB::transaction(function () use ($promotion, $validated, $user) {
@@ -315,6 +317,21 @@ class PromotionController extends Controller
         if (($expected[$ruleType] ?? null) !== $conditionType) {
             throw ValidationException::withMessages([
                 'condition_type' => "The {$conditionType} condition is not valid for {$ruleType} promotions.",
+            ]);
+        }
+    }
+
+    protected function validateConditionRewardPairing(string $conditionType, string $rewardType): void
+    {
+        $allowed = [
+            'minimum_spend' => ['percent_off', 'amount_off'],
+            'buy_x_get_y' => ['percent_off', 'amount_off'],
+            'bundle_match' => ['fixed_bundle_price', 'amount_off'],
+        ];
+
+        if (!in_array($rewardType, $allowed[$conditionType] ?? [], true)) {
+            throw ValidationException::withMessages([
+                'reward_type' => "The {$rewardType} reward is not supported for {$conditionType} promotion rules.",
             ]);
         }
     }

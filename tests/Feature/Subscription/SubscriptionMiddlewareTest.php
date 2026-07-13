@@ -15,6 +15,10 @@ beforeEach(function () {
     Route::get('/_test/api/feature-gated', function () {
         return response()->json(['status' => 'success']);
     })->middleware(['tenant', 'subscription.feature:quickbooks.sync']);
+
+    Route::get('/_test/inertia/feature-gated', function () {
+        return response('Success', 200);
+    })->name('test.inertia.feature-gated')->middleware(['tenant', 'subscription.feature:quickbooks.sync']);
 });
 
 test('it blocks web requests with 403 when active tenant lacks feature entitlement', function () {
@@ -59,6 +63,20 @@ test('it blocks api requests returning standardized JSON with TSMS_SUB_001 code'
         'code' => 'TSMS_SUB_001',
         'message' => 'This feature requires a premium subscription upgrade.'
     ]);
+});
+
+test('it redirects inertia feature gate failures back instead of to POS checkout', function () {
+    $tenant = Tenant::factory()->create([
+        'subscription_metadata' => ['plan' => 'basic']
+    ]);
+
+    $response = $this->withHeader('X-Tenant-ID', $tenant->id)
+        ->withHeader('X-Inertia', 'true')
+        ->from('/accounting/dashboard')
+        ->get('/_test/inertia/feature-gated');
+
+    $response->assertRedirect('/accounting/dashboard');
+    $response->assertSessionHas('error', 'This feature requires a premium subscription upgrade.');
 });
 
 test('it permits api requests when active tenant is entitled to feature', function () {

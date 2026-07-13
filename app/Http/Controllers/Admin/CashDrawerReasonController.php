@@ -72,7 +72,11 @@ class CashDrawerReasonController extends Controller
                 }),
             ],
             'name' => ['required', 'string', 'max:100'],
-            'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
+            'branch_id' => [
+                'nullable',
+                'uuid',
+                Rule::exists('branches', 'id')->where(fn ($query) => $query->where('tenant_id', $tenantId)),
+            ],
             'requires_manager_approval' => ['required', 'boolean'],
             'sort_order' => ['required', 'integer', 'min:0'],
         ], [
@@ -105,6 +109,8 @@ class CashDrawerReasonController extends Controller
         if (!$request->user()->hasPermission('manage_cash_drawer_reasons')) {
             abort(403, 'Unauthorized.');
         }
+
+        abort_unless($reason->tenant_id === $this->tenantContext->getTenantId(), 403);
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:100'],
@@ -149,6 +155,8 @@ class CashDrawerReasonController extends Controller
         if (!$request->user()->hasPermission('manage_cash_drawer_reasons')) {
             abort(403, 'Unauthorized.');
         }
+
+        abort_unless($reason->tenant_id === $this->tenantContext->getTenantId(), 403);
 
         $beforeValues = ['is_active' => (bool)$reason->is_active];
         $reason->update(['is_active' => false]);

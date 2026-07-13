@@ -181,6 +181,43 @@ class POSDrawerReasonTest extends TestCase
         ]);
     }
 
+    public function test_branch_specific_reason_overrides_global_reason_with_same_code(): void
+    {
+        $this->givePermissionTo($this->cashier, 'manage_cash_drawer');
+
+        CashDrawerReason::create([
+            'tenant_id' => $this->tenant->id,
+            'event_type' => 'cash_drop',
+            'code' => 'SKIM',
+            'name' => 'Branch Skim Without Approval',
+            'branch_id' => $this->branch->id,
+            'requires_manager_approval' => false,
+            'is_active' => true,
+            'sort_order' => 1,
+        ]);
+
+        $response = $this->actingAs($this->cashier)
+            ->withHeaders([
+                'X-Tenant-ID' => $this->tenant->id,
+                'X-Branch-ID' => $this->branch->id,
+            ])
+            ->postJson("/api/pos/shifts/{$this->shift->id}/drawer-events", [
+                'event_type' => 'cash_drop',
+                'amount' => 100,
+                'reason_code' => 'SKIM',
+                'reason_notes' => 'Branch override skim',
+            ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('success', true);
+
+        $this->assertDatabaseHas('cash_drawer_events', [
+            'shift_id' => $this->shift->id,
+            'event_type' => 'cash_drop',
+            'reason_code' => 'SKIM',
+        ]);
+    }
+
     public function test_record_drawer_event_blocks_self_approval(): void
     {
         // If the shift owner (cashier) attempts to self-approve with their own credentials

@@ -269,6 +269,238 @@ class PromotionCalculationTest extends TestCase
     }
 
     /** @test */
+    public function test_sale_creation_uses_exact_promotion_line_amounts_not_rounded_unit_totals(): void
+    {
+        $promo = Promotion::create([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'One Peso Off',
+            'rule_type' => 'discount_tier',
+            'priority' => 10,
+            'starts_at' => now()->subDay(),
+            'ends_at' => now()->addDay(),
+            'is_active' => true,
+        ]);
+
+        PromotionRule::create([
+            'promotion_id' => $promo->id,
+            'condition_type' => 'minimum_spend',
+            'reward_type' => 'amount_off',
+            'conditions' => ['min_spend_centavos' => 1000],
+            'rewards' => ['amount_centavos' => 100],
+            'stackable' => false,
+            'min_spend_centavos' => 1000,
+        ]);
+
+        $response = app(SaleCreationService::class)->createFromPayload(
+            $this->tenant->id,
+            $this->branchA->id,
+            $this->cashier->id,
+            Str::uuid()->toString(),
+            [['product_id' => $this->espresso->id, 'quantity' => 3]],
+            [],
+            false,
+            $this->terminal->id
+        );
+
+        $this->assertEquals('created', $response['status']);
+
+        $sale = $response['sale']->fresh();
+        $item = SaleItem::where('sale_id', $sale->id)->firstOrFail();
+        $promotionLine = SalePromotionLine::whereHas('salePromotion', fn ($query) => $query->where('sale_id', $sale->id))->firstOrFail();
+
+        $this->assertEquals(100, $item->promotion_discount_centavos);
+        $this->assertEquals(2900, $promotionLine->final_amount_centavos);
+    }
+
+    /** @test */
+    public function test_duplicate_product_promotion_audit_lines_link_to_exact_sale_items(): void
+    {
+        $promo = Promotion::create([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Duplicate Line Discount',
+            'rule_type' => 'discount_tier',
+            'priority' => 10,
+            'starts_at' => now()->subDay(),
+            'ends_at' => now()->addDay(),
+            'is_active' => true,
+        ]);
+
+        PromotionRule::create([
+            'promotion_id' => $promo->id,
+            'condition_type' => 'minimum_spend',
+            'reward_type' => 'percent_off',
+            'conditions' => ['min_spend_centavos' => 1000],
+            'rewards' => ['percent' => 10],
+            'stackable' => false,
+            'min_spend_centavos' => 1000,
+        ]);
+
+        $response = app(SaleCreationService::class)->createFromPayload(
+            $this->tenant->id,
+            $this->branchA->id,
+            $this->cashier->id,
+            Str::uuid()->toString(),
+            [
+                ['product_id' => $this->espresso->id, 'quantity' => 1],
+                ['product_id' => $this->espresso->id, 'quantity' => 1],
+            ],
+            [],
+            false,
+            $this->terminal->id
+        );
+
+        $this->assertEquals('created', $response['status']);
+
+        $sale = $response['sale'];
+        $lineSaleItemIds = SalePromotionLine::whereHas('salePromotion', fn ($query) => $query->where('sale_id', $sale->id))
+            ->pluck('sale_item_id')
+            ->unique()
+            ->values();
+
+        $this->assertCount(2, $lineSaleItemIds);
+    }
+
+    /** @test */
+    public function test_bogo_does_not_apply_when_full_reward_quantity_is_unavailable(): void
+    {
+        $promo = Promotion::create([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Pastry Buys Coffee Reward',
+            'rule_type' => 'bogo',
+            'priority' => 10,
+            'starts_at' => now()->subDay(),
+            'ends_at' => now()->addDay(),
+            'is_active' => true,
+        ]);
+
+        PromotionRule::create([
+            'promotion_id' => $promo->id,
+            'condition_type' => 'buy_x_get_y',
+            'reward_type' => 'percent_off',
+            'conditions' => [
+                'buy_qty' => 1,
+                'buy_product_ids' => [$this->croissant->id],
+                'reward_qty' => 1,
+                'reward_product_ids' => [$this->espresso->id],
+            ],
+            'rewards' => ['percent' => 100],
+            'stackable' => false,
+            'min_spend_centavos' => 0,
+        ]);
+
+        $result = (new PromotionCalculationService())->calculate($this->tenant->id, $this->branchA->id, [
+            ['product_id' => $this->croissant->id, 'quantity' => 2, 'unit_price_centavos' => 1500],
+        ]);
+
+        $this->assertEquals(0, $result->promotionDiscountCentavos);
+        $this->assertCount(0, $result->appliedPromotions);
+    }
+
+    /** @test */
+    public function test_bundle_requirements_do_not_reuse_the_same_quantity_for_overlapping_product_and_category_rules(): void
+    {
+        $promo = Promotion::create([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Overlapping Bundle',
+            'rule_type' => 'combo_package',
+            'priority' => 10,
+            'starts_at' => now()->subDay(),
+            'ends_at' => now()->addDay(),
+            'is_active' => true,
+        ]);
+
+        PromotionRule::create([
+            'promotion_id' => $promo->id,
+            'condition_type' => 'bundle_match',
+            'reward_type' => 'amount_off',
+            'conditions' => [
+                'required_items' => [
+                    ['product_id' => $this->espresso->id, 'qty' => 1],
+                    ['category_id' => $this->coffeeCategory->id, 'qty' => 1],
+                ],
+            ],
+            'rewards' => ['amount_centavos' => 100],
+            'stackable' => false,
+            'min_spend_centavos' => 0,
+        ]);
+
+        $result = (new PromotionCalculationService())->calculate($this->tenant->id, $this->branchA->id, [
+            ['product_id' => $this->espresso->id, 'quantity' => 1, 'unit_price_centavos' => 1000],
+        ]);
+
+        $this->assertEquals(0, $result->promotionDiscountCentavos);
+    }
+
+    /** @test */
+    public function test_capped_discount_allocations_sum_to_the_capped_benefit(): void
+    {
+        $promo = Promotion::create([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Capped Multi Line Discount',
+            'rule_type' => 'discount_tier',
+            'priority' => 10,
+            'starts_at' => now()->subDay(),
+            'ends_at' => now()->addDay(),
+            'is_active' => true,
+        ]);
+
+        PromotionRule::create([
+            'promotion_id' => $promo->id,
+            'condition_type' => 'minimum_spend',
+            'reward_type' => 'percent_off',
+            'conditions' => ['min_spend_centavos' => 1000],
+            'rewards' => ['percent' => 10],
+            'stackable' => false,
+            'min_spend_centavos' => 1000,
+            'max_discount_centavos' => 333,
+        ]);
+
+        $result = (new PromotionCalculationService())->calculate($this->tenant->id, $this->branchA->id, [
+            ['product_id' => $this->espresso->id, 'quantity' => 2, 'unit_price_centavos' => 1000],
+            ['product_id' => $this->croissant->id, 'quantity' => 2, 'unit_price_centavos' => 1500],
+        ]);
+
+        $this->assertEquals(333, $result->promotionDiscountCentavos);
+        $this->assertEquals(333, array_sum(array_column($result->appliedPromotions[0]['applied_lines'], 'discount_amount_centavos')));
+    }
+
+    /** @test */
+    public function test_promotion_rules_version_hash_changes_when_rule_content_changes(): void
+    {
+        $promo = Promotion::create([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Hash Sensitive Discount',
+            'rule_type' => 'discount_tier',
+            'priority' => 10,
+            'starts_at' => now()->subDay(),
+            'ends_at' => now()->addDay(),
+            'is_active' => true,
+        ]);
+
+        $rule = PromotionRule::create([
+            'promotion_id' => $promo->id,
+            'condition_type' => 'minimum_spend',
+            'reward_type' => 'percent_off',
+            'conditions' => ['min_spend_centavos' => 1000],
+            'rewards' => ['percent' => 10],
+            'stackable' => false,
+            'min_spend_centavos' => 1000,
+        ]);
+
+        $cart = [
+            ['product_id' => $this->espresso->id, 'quantity' => 2, 'unit_price_centavos' => 1000],
+        ];
+
+        $initialHash = (new PromotionCalculationService())->calculate($this->tenant->id, $this->branchA->id, $cart)->promotionRulesVersionHash;
+
+        $rule->update(['rewards' => ['percent' => 20]]);
+
+        $updatedHash = (new PromotionCalculationService())->calculate($this->tenant->id, $this->branchA->id, $cart)->promotionRulesVersionHash;
+
+        $this->assertNotSame($initialHash, $updatedHash);
+    }
+
+    /** @test */
     public function test_non_stackable_promotions_lock_quantities(): void
     {
         // Promo A (Priority 10): BOGO Espresso (requires 2, rewards 1)

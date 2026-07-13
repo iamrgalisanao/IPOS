@@ -152,11 +152,12 @@ export default function Index({ auth, promotions, branches, products, categories
 
     const setConditionType = (conditionType) => {
         if (conditionType === 'buy_x_get_y') {
+            const rewardType = ['percent_off', 'amount_off'].includes(data.reward_type) ? data.reward_type : 'percent_off';
             setData({
                 ...data,
                 rule_type: 'bogo',
                 condition_type: conditionType,
-                reward_type: data.reward_type === 'fixed_bundle_price' ? 'percent_off' : data.reward_type,
+                reward_type: rewardType,
                 conditions: {
                     buy_qty: 1,
                     reward_qty: 1,
@@ -165,7 +166,7 @@ export default function Index({ auth, promotions, branches, products, categories
                     reward_product_ids: [],
                     reward_category_ids: [],
                 },
-                rewards: data.reward_type === 'amount_off' ? { amount_centavos: 100 } : { percent: 100 },
+                rewards: rewardType === 'amount_off' ? { amount_centavos: 100 } : { percent: 100 },
                 min_spend_centavos: 0,
             });
             return;
@@ -566,6 +567,7 @@ export default function Index({ auth, promotions, branches, products, categories
                             >
                                 {rewardTypes
                                     .filter((type) => data.condition_type !== 'minimum_spend' || ['percent_off', 'amount_off'].includes(type.value))
+                                    .filter((type) => data.condition_type !== 'buy_x_get_y' || ['percent_off', 'amount_off'].includes(type.value))
                                     .filter((type) => data.condition_type !== 'bundle_match' || ['fixed_bundle_price', 'amount_off'].includes(type.value))
                                     .map((type) => (
                                         <option key={type.value} value={type.value}>{type.label}</option>

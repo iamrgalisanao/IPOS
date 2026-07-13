@@ -58,7 +58,7 @@ export default function SyncStatus({ terminal_context, sync_guidance }) {
             setQueueCounts({
                 pendingSales: salesSummary.pending || 0,
                 failedSales: salesSummary.failed || 0,
-                conflictSales: (salesSummary.conflict || 0) + (salesSummary.acceptedWithWarning || 0),
+                conflictSales: (salesSummary.conflict || 0) + (salesSummary.accepted_with_warning ?? salesSummary.acceptedWithWarning ?? 0),
                 pendingPayments: paymentSummary.pending || 0,
                 failedPayments: paymentSummary.failed || 0,
             });

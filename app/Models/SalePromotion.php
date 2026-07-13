@@ -27,12 +27,16 @@ class SalePromotion extends Model
         'base_amount_centavos',
         'discount_amount_centavos',
         'rule_snapshot_json',
+        'condition_snapshot_json',
+        'reward_snapshot_json',
         'calculation_snapshot_json',
         'promotion_rules_version_hash',
     ];
 
     protected $casts = [
         'rule_snapshot_json' => 'array',
+        'condition_snapshot_json' => 'array',
+        'reward_snapshot_json' => 'array',
         'calculation_snapshot_json' => 'array',
         'stackable' => 'boolean',
         'priority' => 'integer',

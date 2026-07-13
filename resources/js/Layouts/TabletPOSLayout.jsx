@@ -23,7 +23,9 @@ export default function TabletPOSLayout({ children }) {
                 const pending = Number(salesSummary.pending || 0) + Number(paymentSummary.pending || 0);
                 const syncing = Number(salesSummary.syncing || 0) + Number(paymentSummary.syncing || 0);
                 const failed = Number(salesSummary.failed || 0) + Number(paymentSummary.failed || 0);
-                const conflict = Number(salesSummary.conflict || 0) + Number(salesSummary.acceptedWithWarning || 0) + Number(paymentSummary.conflict || 0);
+                const conflict = Number(salesSummary.conflict || 0)
+                    + Number(salesSummary.accepted_with_warning ?? salesSummary.acceptedWithWarning ?? 0)
+                    + Number(paymentSummary.conflict || 0);
 
                 if (conflict > 0 || failed > 0) {
                     setQueueBadge({

@@ -21,7 +21,7 @@ class PromotionCalculationService
             ->active()
             ->dateRange($time)
             ->forBranch($branchId)
-            ->with(['rules' => function ($q) {
+            ->with(['branches', 'rules' => function ($q) {
                 $q->active();
             }])
             ->get();
@@ -126,6 +126,7 @@ class PromotionCalculationService
             $finalAmount = $originalAmount - $lineDiscount;
 
             $adjustedLines[] = [
+                'line_index' => $index,
                 'product_id' => $state['product_id'],
                 'quantity' => $state['total_quantity'],
                 'original_unit_price_centavos' => $state['unit_price_centavos'],
@@ -137,9 +138,8 @@ class PromotionCalculationService
             ];
         }
 
-        // Generate stable promotions config hash for offline sync drift checks
-        $hashString = $promotions->sortBy('id')->map(fn($p) => $p->id . '-' . $p->updated_at->timestamp)->implode('|');
-        $rulesVersionHash = hash('sha256', $hashString ?: 'no-promotions');
+        // Generate stable promotions config hash for offline sync drift checks.
+        $rulesVersionHash = $this->hashPromotionConfiguration($promotions);
 
         return new PromotionCalculationResult(
             $originalSubtotal,
@@ -298,6 +298,10 @@ class PromotionCalculationService
             return null;
         }
 
+        if ($neededReward > 0) {
+            return null;
+        }
+
         // Enforce maximum discount limit if set
         if ($rule->max_discount_centavos !== null && $benefit > $rule->max_discount_centavos) {
             $ratio = $rule->max_discount_centavos / $benefit;
@@ -305,6 +309,8 @@ class PromotionCalculationService
             foreach ($grantDetails as &$detail) {
                 $detail['discount_amount_centavos'] = (int) round($detail['discount_amount_centavos'] * $ratio);
             }
+            unset($detail);
+            $this->reconcileGrantDetails($grantDetails, $benefit);
         }
 
         return [
@@ -327,10 +333,13 @@ class PromotionCalculationService
         $eligibleIndices = [];
         foreach ($lineStates as $index => $line) {
             // If specific scopes are defined, restrict minimum spend computation
-            $matchesProduct = empty($eligibleProductIds) || in_array($line['product_id'], $eligibleProductIds);
-            $matchesCategory = empty($eligibleCategoryIds) || in_array($line['category_id'], $eligibleCategoryIds);
+            $hasProductScope = !empty($eligibleProductIds);
+            $hasCategoryScope = !empty($eligibleCategoryIds);
+            $matchesProduct = $hasProductScope && in_array($line['product_id'], $eligibleProductIds);
+            $matchesCategory = $hasCategoryScope && in_array($line['category_id'], $eligibleCategoryIds);
+            $matchesScope = (!$hasProductScope && !$hasCategoryScope) || $matchesProduct || $matchesCategory;
 
-            if ($matchesProduct && $matchesCategory && $line['available_quantity'] > 0) {
+            if ($matchesScope && $line['available_quantity'] > 0) {
                 $currentSpend += (int) round($line['unit_price_centavos'] * $line['available_quantity']);
                 $eligibleIndices[] = $index;
             }
@@ -393,6 +402,8 @@ class PromotionCalculationService
             foreach ($grantDetails as &$detail) {
                 $detail['discount_amount_centavos'] = (int) round($detail['discount_amount_centavos'] * $ratio);
             }
+            unset($detail);
+            $this->reconcileGrantDetails($grantDetails, $benefit);
         }
 
         return [
@@ -408,6 +419,7 @@ class PromotionCalculationService
         // Check if bundle can match
         $maxApps = 999;
         $matchMappings = [];
+        $eligibilityLineStates = $lineStates;
 
         foreach ($requiredItems as $req) {
             $reqProdId = $req['product_id'] ?? null;
@@ -416,7 +428,7 @@ class PromotionCalculationService
 
             $availableQty = 0.0;
             $indices = [];
-            foreach ($lineStates as $index => $line) {
+            foreach ($eligibilityLineStates as $index => $line) {
                 $matchesProduct = $reqProdId && $line['product_id'] === $reqProdId;
                 $matchesCategory = $reqCatId && $line['category_id'] === $reqCatId;
 
@@ -427,6 +439,18 @@ class PromotionCalculationService
             }
 
             if ($availableQty < $reqQty) {
+                return null;
+            }
+
+            $neededForEligibility = $reqQty;
+            foreach ($indices as $idx) {
+                if ($neededForEligibility <= 0) break;
+                $reserve = min($neededForEligibility, $eligibilityLineStates[$idx]['available_quantity']);
+                $eligibilityLineStates[$idx]['available_quantity'] -= $reserve;
+                $neededForEligibility -= $reserve;
+            }
+
+            if ($neededForEligibility > 0) {
                 return null;
             }
 
@@ -468,6 +492,10 @@ class PromotionCalculationService
                 $totalOriginalBundlePrice += (int) round($tempLineStates[$idx]['unit_price_centavos'] * $consume);
                 $bundleQuantityConsumedMap[$idx] = ($bundleQuantityConsumedMap[$idx] ?? 0.0) + $consume;
             }
+
+            if ($needed > 0) {
+                return null;
+            }
         }
 
         if ($rule->reward_type === 'fixed_bundle_price') {
@@ -495,6 +523,8 @@ class PromotionCalculationService
                 'discount_amount_centavos' => $proportionalDiscount,
             ];
         }
+
+        $this->reconcileGrantDetails($grantDetails, $benefit);
 
         return [
             'benefit_centavos' => $benefit,
@@ -530,6 +560,7 @@ class PromotionCalculationService
 
                 $appliedLines[] = [
                     'product_id' => $lineStates[$idx]['product_id'],
+                    'line_index' => $idx,
                     'quantity' => $consume,
                     'original_unit_price_centavos' => $lineStates[$idx]['unit_price_centavos'],
                     'discount_amount_centavos' => 0,
@@ -551,6 +582,7 @@ class PromotionCalculationService
 
                 $appliedLines[] = [
                     'product_id' => $lineStates[$idx]['product_id'],
+                    'line_index' => $idx,
                     'quantity' => $consumedQty,
                     'original_unit_price_centavos' => $lineStates[$idx]['unit_price_centavos'],
                     'discount_amount_centavos' => 0,
@@ -589,6 +621,7 @@ class PromotionCalculationService
 
             $appliedLines[] = [
                 'product_id' => $lineStates[$idx]['product_id'],
+                'line_index' => $idx,
                 'quantity' => $qty,
                 'original_unit_price_centavos' => $lineStates[$idx]['unit_price_centavos'],
                 'discount_amount_centavos' => $discount,
@@ -610,8 +643,84 @@ class PromotionCalculationService
             'base_amount_centavos' => (int) round($details['benefit_centavos'] / (($rule->reward_type === 'percent_off' ? ($rule->rewards['percent'] / 100) : 1) ?: 1)),
             'discount_amount_centavos' => (int) $details['benefit_centavos'],
             'rule_snapshot_json' => $rule->toArray(),
+            'condition_snapshot_json' => $rule->conditions ?? [],
+            'reward_snapshot_json' => $rule->rewards ?? [],
             'calculation_snapshot_json' => $details,
             'applied_lines' => $appliedLines,
         ];
+    }
+
+    protected function reconcileGrantDetails(array &$grantDetails, int $targetBenefit): void
+    {
+        if (empty($grantDetails)) {
+            return;
+        }
+
+        $allocated = array_sum(array_column($grantDetails, 'discount_amount_centavos'));
+        $delta = $targetBenefit - $allocated;
+
+        if ($delta === 0) {
+            return;
+        }
+
+        $lastIndex = array_key_last($grantDetails);
+        $grantDetails[$lastIndex]['discount_amount_centavos'] += $delta;
+    }
+
+    protected function hashPromotionConfiguration($promotions): string
+    {
+        $payload = $promotions
+            ->sortBy('id')
+            ->map(function (Promotion $promotion) {
+                return [
+                    'id' => $promotion->id,
+                    'updated_at' => $promotion->updated_at?->toIso8601String(),
+                    'priority' => $promotion->priority,
+                    'starts_at' => $promotion->starts_at?->toIso8601String(),
+                    'ends_at' => $promotion->ends_at?->toIso8601String(),
+                    'branches' => $promotion->branches
+                        ->pluck('id')
+                        ->sort()
+                        ->values()
+                        ->all(),
+                    'rules' => $promotion->rules
+                        ->sortBy('id')
+                        ->map(fn (PromotionRule $rule) => [
+                            'id' => $rule->id,
+                            'updated_at' => $rule->updated_at?->toIso8601String(),
+                            'condition_type' => $rule->condition_type,
+                            'reward_type' => $rule->reward_type,
+                            'conditions' => $this->canonicalize($rule->conditions ?? []),
+                            'rewards' => $this->canonicalize($rule->rewards ?? []),
+                            'stackable' => (bool) $rule->stackable,
+                            'min_spend_centavos' => $rule->min_spend_centavos,
+                            'max_applications_per_sale' => $rule->max_applications_per_sale,
+                            'max_discount_centavos' => $rule->max_discount_centavos,
+                            'exclusive_group' => $rule->exclusive_group,
+                            'is_active' => (bool) $rule->is_active,
+                        ])
+                        ->values()
+                        ->all(),
+                ];
+            })
+            ->values()
+            ->all();
+
+        return hash('sha256', json_encode($this->canonicalize($payload)));
+    }
+
+    protected function canonicalize(mixed $value): mixed
+    {
+        if (!is_array($value)) {
+            return $value;
+        }
+
+        if (array_is_list($value)) {
+            return array_map(fn ($item) => $this->canonicalize($item), $value);
+        }
+
+        ksort($value);
+
+        return array_map(fn ($item) => $this->canonicalize($item), $value);
     }
 }

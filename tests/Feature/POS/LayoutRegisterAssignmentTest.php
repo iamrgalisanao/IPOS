@@ -546,6 +546,46 @@ it('assigns layout override via profile update and logs it', function () {
     ]);
 });
 
+it('rejects profile layout override when branch layout assignment is inactive', function () {
+    ['tenant' => $tenant, 'branch' => $branch, 'profile' => $profile, 'admin' => $admin] = makeTenantBranchProfile();
+    $layout = PosLayout::factory()->create(['tenant_id' => $tenant->id, 'status' => PosLayout::STATUS_PUBLISHED]);
+    publishLayoutToBranch($layout, $branch, $tenant);
+    DB::table('branch_pos_layout')
+        ->where('branch_id', $branch->id)
+        ->where('pos_layout_id', $layout->id)
+        ->update(['is_active' => false]);
+
+    $this->actingAs($admin)
+        ->put("/admin/sales-machine-profiles/{$profile->id}", [
+            'pos_layout_id' => $layout->id,
+        ])
+        ->assertSessionHasErrors('pos_layout_id');
+
+    expect($profile->fresh()->pos_layout_id)->toBeNull();
+});
+
+it('allows saving unrelated profile settings when existing override assignment became inactive', function () {
+    ['tenant' => $tenant, 'branch' => $branch, 'profile' => $profile, 'admin' => $admin] = makeTenantBranchProfile();
+    $layout = PosLayout::factory()->create(['tenant_id' => $tenant->id, 'status' => PosLayout::STATUS_PUBLISHED]);
+    publishLayoutToBranch($layout, $branch, $tenant);
+    $profile->update(['pos_layout_id' => $layout->id]);
+    DB::table('branch_pos_layout')
+        ->where('branch_id', $branch->id)
+        ->where('pos_layout_id', $layout->id)
+        ->update(['is_active' => false]);
+
+    $this->actingAs($admin)
+        ->put("/admin/sales-machine-profiles/{$profile->id}", [
+            'offline_sales_enabled' => true,
+            'pos_layout_id' => $layout->id,
+        ])
+        ->assertRedirect();
+
+    $profile->refresh();
+    expect($profile->offline_sales_enabled)->toBeTrue();
+    expect($profile->pos_layout_id)->toBe($layout->id);
+});
+
 it('profile update layout assignment change alters layout hash and triggers heartbeat drift', function () {
     ['tenant' => $tenant, 'branch' => $branch, 'profile' => $profile, 'admin' => $admin] = makeTenantBranchProfile();
     $branchLayout = PosLayout::factory()->create(['tenant_id' => $tenant->id, 'status' => PosLayout::STATUS_PUBLISHED]);

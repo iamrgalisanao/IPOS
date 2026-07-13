@@ -187,6 +187,7 @@ export default function Index({ categories, initial_products, payment_methods, d
         lastSyncedAt,
         terminalContextInvalid,
         triggerSync,
+        refreshConfiguration,
         checkConnectivity
     } = useConnectivityStore();
 
@@ -274,12 +275,14 @@ export default function Index({ categories, initial_products, payment_methods, d
         }
     };
 
-    const showLayoutEditControls = is_admin_mode && !route().current('pos.terminal.checkout');
+    const showLayoutEditControls = Boolean(is_admin_mode);
 
     const handleRefreshConfig = async () => {
         try {
-            await checkConnectivity?.();
-            window.location.reload();
+            const result = await refreshConfiguration?.();
+            if (!result || result.status === 'success') {
+                window.location.reload();
+            }
         } catch (err) {
             console.error('Failed to refresh config:', err);
         }
@@ -1257,7 +1260,6 @@ export default function Index({ categories, initial_products, payment_methods, d
     };
 
     const clearCartState = () => {
-        if (!activeShift && !is_admin_mode) return;
         setIsSubmitting(false);
         setCart([]);
         setCheckoutState('draft');
@@ -1715,7 +1717,7 @@ export default function Index({ categories, initial_products, payment_methods, d
             )}
 
             {/* Compact Offline Mode strip */}
-            {isOffline && !checkoutAlert && (
+            {connOffline && !checkoutAlert && (
                 <div className="mx-6 mt-4 bg-amber-500/10 border border-amber-500/20 text-amber-300 px-4 py-2.5 rounded-xl flex items-center justify-between text-xs animate-in fade-in duration-200">
                     <div className="flex items-center gap-2">
                         <WifiOff className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />

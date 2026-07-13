@@ -189,6 +189,24 @@ class PromotionManagementTest extends TestCase
         $this->assertDatabaseCount('promotion_rules', 0);
     }
 
+    public function test_admin_cannot_store_condition_reward_pairing_the_engine_does_not_support(): void
+    {
+        $response = $this->actingAs($this->admin)
+            ->post(route('admin.promotions.store'), $this->minimumSpendPayload([
+                'branch_ids' => [$this->branch->id],
+                'reward_type' => 'free_item',
+                'rewards' => [
+                    'product_id' => $this->product->id,
+                    'quantity' => 1,
+                ],
+            ]));
+
+        $response->assertSessionHasErrors('reward_type');
+
+        $this->assertDatabaseCount('promotions', 0);
+        $this->assertDatabaseCount('promotion_rules', 0);
+    }
+
     public function test_branch_scoped_manager_cannot_create_global_promotion(): void
     {
         $response = $this->actingAs($this->admin)

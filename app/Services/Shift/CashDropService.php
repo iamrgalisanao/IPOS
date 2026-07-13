@@ -78,11 +78,20 @@ class CashDropService
         $reason = \App\Models\CashDrawerReason::where('tenant_id', $tenantId)
             ->where('event_type', 'cash_drop')
             ->where('code', $reasonCode)
+            ->where(function ($query) use ($shift) {
+                $query->whereNull('branch_id')
+                    ->orWhere('branch_id', $shift->branch_id);
+            })
             ->active()
+            ->orderByRaw('branch_id IS NULL')
             ->first();
 
         $reasonsExist = \App\Models\CashDrawerReason::where('tenant_id', $tenantId)
             ->where('event_type', 'cash_drop')
+            ->where(function ($query) use ($shift) {
+                $query->whereNull('branch_id')
+                    ->orWhere('branch_id', $shift->branch_id);
+            })
             ->exists();
 
         if ($reasonsExist && !$reason) {

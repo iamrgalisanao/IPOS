@@ -91,7 +91,9 @@ class SalesMachineProfileController extends Controller
         $posLayouts = \App\Models\PosLayout::where('tenant_id', $salesMachineProfile->tenant_id)
             ->where('status', \App\Models\PosLayout::STATUS_PUBLISHED)
             ->whereHas('branches', function ($query) use ($salesMachineProfile) {
-                $query->where('branches.id', $salesMachineProfile->branch_id);
+                $query->where('branches.id', $salesMachineProfile->branch_id)
+                    ->wherePivot('tenant_id', $salesMachineProfile->tenant_id)
+                    ->wherePivot('is_active', true);
             })
             ->orderBy('name')
             ->get(['id', 'name', 'version']);
@@ -193,6 +195,9 @@ class SalesMachineProfileController extends Controller
                     if ($value === null) {
                         return;
                     }
+                    if ($value === $salesMachineProfile->pos_layout_id) {
+                        return;
+                    }
                     $layout = \App\Models\PosLayout::withoutGlobalScopes()->find($value);
                     if (!$layout) {
                         $fail('The selected POS layout does not exist.');
@@ -209,6 +214,8 @@ class SalesMachineProfileController extends Controller
                     $branchAssociated = \Illuminate\Support\Facades\DB::table('branch_pos_layout')
                         ->where('pos_layout_id', $value)
                         ->where('branch_id', $salesMachineProfile->branch_id)
+                        ->where('tenant_id', $salesMachineProfile->tenant_id)
+                        ->where('is_active', true)
                         ->exists();
                     if (!$branchAssociated) {
                         $fail('The selected layout is not published to this terminal\'s branch.');

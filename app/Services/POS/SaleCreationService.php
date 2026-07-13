@@ -118,6 +118,7 @@ class SaleCreationService
         $promoResult = $this->promotionService->calculate($tenantId, $branchId, $promoItems);
 
         $saleItemsData = [];
+        $saleItemIdsByLineIndex = [];
         $subtotal      = 0.0;
         $taxTotal      = 0.0;
 
@@ -174,7 +175,7 @@ class SaleCreationService
             $promotionDiscount = (float) ($promoAdjustedLine['discount_amount_centavos'] / 100);
             $promotionAdjustedPrice = (float) ($promoAdjustedLine['final_unit_price_centavos'] / 100);
 
-            $lineSubtotal = $promotionAdjustedPrice * $quantity;
+            $lineSubtotal = (float) ($promoAdjustedLine['final_amount_centavos'] / 100);
             $discountAmt  = 0.0; 
 
             // If statutory discount is applied, we distribute it proportionally across eligible items
@@ -264,8 +265,11 @@ class SaleCreationService
             $finalAmtCentavos = ($promoAdjustedLine['final_amount_centavos']) - (int) round($discountAmt * 100);
             $finalUnitPriceCentavos = (int) round($finalAmtCentavos / ($quantity ?: 1));
 
+            $saleItemId = Str::uuid()->toString();
+            $saleItemIdsByLineIndex[$i] = $saleItemId;
+
             $saleItemsData[] = [
-                'id'                                     => Str::uuid()->toString(),
+                'id'                                     => $saleItemId,
                 'tenant_id'                              => $tenantId,
                 'branch_id'                              => $branchId,
                 // sale_id filled after Sale is inserted
@@ -331,7 +335,7 @@ class SaleCreationService
             $machineProfile, $profileSnapshot, $saleItemsData,
             $rawItems, $products, $isTrainingMode,
             $statutoryResult, $statutoryDiscount, $discountType, $approvalRequired,
-            $promoResult, $terminalId
+            $promoResult, $terminalId, $saleItemIdsByLineIndex
         ) {
             $principalInvoiceNumber = null;
             if ($machineProfile) {
@@ -442,7 +446,7 @@ class SaleCreationService
             SaleItem::insert($rows);
 
             // Persist applied promotions and line allocations
-            $insertedSaleItems = SaleItem::where('sale_id', $sale->id)->get()->keyBy('product_id');
+            $insertedSaleItems = SaleItem::where('sale_id', $sale->id)->get()->keyBy('id');
             foreach ($promoResult->appliedPromotions as $applied) {
                 $salePromo = \App\Models\SalePromotion::create([
                     'id' => $applied['id'],
@@ -462,13 +466,19 @@ class SaleCreationService
                     'base_amount_centavos' => $applied['base_amount_centavos'],
                     'discount_amount_centavos' => $applied['discount_amount_centavos'],
                     'rule_snapshot_json' => $applied['rule_snapshot_json'],
+                    'condition_snapshot_json' => $applied['condition_snapshot_json'],
+                    'reward_snapshot_json' => $applied['reward_snapshot_json'],
                     'calculation_snapshot_json' => $applied['calculation_snapshot_json'],
                     'promotion_rules_version_hash' => $promoResult->promotionRulesVersionHash,
                 ]);
 
                 foreach ($applied['applied_lines'] as $appliedLine) {
-                    $matchedSaleItem = $insertedSaleItems[$appliedLine['product_id']] ?? null;
+                    $lineIndex = $appliedLine['line_index'] ?? null;
+                    $saleItemId = $lineIndex !== null ? ($saleItemIdsByLineIndex[$lineIndex] ?? null) : null;
+                    $matchedSaleItem = $saleItemId ? ($insertedSaleItems[$saleItemId] ?? null) : null;
                     if ($matchedSaleItem) {
+                        $originalAmountCentavos = (int) round($appliedLine['original_unit_price_centavos'] * $appliedLine['quantity']);
+                        $discountAmountCentavos = (int) round($appliedLine['discount_amount_centavos']);
                         \App\Models\SalePromotionLine::create([
                             'id' => Str::uuid()->toString(),
                             'sale_promotion_id' => $salePromo->id,
@@ -476,9 +486,9 @@ class SaleCreationService
                             'product_id' => $appliedLine['product_id'],
                             'role' => $appliedLine['role'],
                             'quantity_applied' => $appliedLine['quantity'],
-                            'original_amount_centavos' => $appliedLine['original_unit_price_centavos'] * $appliedLine['quantity'],
-                            'discount_amount_centavos' => $appliedLine['discount_amount_centavos'],
-                            'final_amount_centavos' => ($appliedLine['original_unit_price_centavos'] * $appliedLine['quantity']) - $appliedLine['discount_amount_centavos'],
+                            'original_amount_centavos' => $originalAmountCentavos,
+                            'discount_amount_centavos' => $discountAmountCentavos,
+                            'final_amount_centavos' => $originalAmountCentavos - $discountAmountCentavos,
                         ]);
                     }
                 }

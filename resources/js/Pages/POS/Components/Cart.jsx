@@ -349,7 +349,7 @@ export default function Cart({ items, onUpdateQuantity, onClear, onCheckout, isS
                     {activeItemCount > 0 && (
                         <button
                             onClick={onClear}
-                            disabled={isActivelySubmitting || !hasActiveShift}
+                            disabled={isActivelySubmitting}
                             className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-slate-800/40 hover:bg-slate-800 text-slate-400 hover:text-slate-200 rounded-xl font-medium transition-all text-xs border border-slate-800"
                         >
                             <Trash2 className="w-3.5 h-3.5 shrink-0" />
