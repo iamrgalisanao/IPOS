@@ -72,7 +72,25 @@ jobs:
       - name: Run Pest suite
         env:
           DB_DATABASE: ':memory:'
-        run: php -d memory_limit=-1 ./vendor/bin/pest
+        run: |
+          set -o pipefail
+          mkdir -p storage/test-results
+          php -d memory_limit=-1 ./vendor/bin/pest \
+            --colors=never \
+            --display-errors \
+            --display-warnings \
+            --display-deprecations \
+            --display-notices \
+            --log-junit storage/test-results/pest-junit.xml \
+            2>&1 | tee storage/test-results/pest.log
+
+      - name: Upload Pest diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pest-diagnostics
+          path: storage/test-results/
+          if-no-files-found: ignore
 
   frontend-build:
     name: Frontend Build

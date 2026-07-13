@@ -32,6 +32,7 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <env name="ENFORCE_TERMINAL_BINDING" value="false"/>
         <env name="ENFORCE_TIMECARDS" value="false"/>
     </php>
 </phpunit>
