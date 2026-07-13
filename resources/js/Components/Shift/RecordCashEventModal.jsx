@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from '@inertiajs/react';
 import Modal from '@/Components/Modal';
 import InputLabel from '@/Components/InputLabel';
@@ -7,6 +7,16 @@ import InputError from '@/Components/InputError';
 import SecondaryButton from '@/Components/SecondaryButton';
 import PrimaryButton from '@/Components/PrimaryButton';
 import { AlertCircle, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
+import { catalogCache } from '@/POS/offline/catalogCache';
+
+const FALLBACK_REASONS = [
+    { event_type: 'cash_drop', code: 'SKIM', name: 'Skim (Excess Cash)', requires_manager_approval: true },
+    { event_type: 'cash_drop', code: 'EXPENSE', name: 'Petty Cash Expense', requires_manager_approval: false },
+    { event_type: 'cash_drop', code: 'ERROR', name: 'Correction', requires_manager_approval: false },
+    { event_type: 'cash_top_up', code: 'REPLENISH', name: 'Replenish Change', requires_manager_approval: false },
+    { event_type: 'cash_top_up', code: 'LOAN', name: 'Initial Float Addition', requires_manager_approval: false },
+    { event_type: 'cash_top_up', code: 'ERROR', name: 'Correction', requires_manager_approval: false }
+];
 
 export default function RecordCashEventModal({ show, onClose, shift }) {
     const { data, setData, post, processing, errors, reset } = useForm({
@@ -19,10 +29,43 @@ export default function RecordCashEventModal({ show, onClose, shift }) {
         manager_password: '',
     });
 
+    const [reasons, setReasons] = useState([]);
+
+    useEffect(() => {
+        catalogCache.getCachedCatalog().then(payload => {
+            if (payload && payload.cash_drawer_reasons && payload.cash_drawer_reasons.length > 0) {
+                setReasons(payload.cash_drawer_reasons);
+            }
+        }).catch(err => {
+            console.error('Failed to load cached cash drawer reasons', err);
+        });
+    }, [show]);
+
+    useEffect(() => {
+        const filtered = reasons.length > 0
+            ? reasons.filter(r => r.event_type === data.event_type)
+            : FALLBACK_REASONS.filter(r => r.event_type === data.event_type);
+        if (filtered.length > 0) {
+            // Check if the current reason_code is already in the filtered list
+            const currentIsValid = filtered.some(r => r.code === data.reason_code);
+            if (!currentIsValid) {
+                setData('reason_code', filtered[0].code);
+            }
+        }
+    }, [data.event_type, reasons]);
+
     if (!shift) return null;
 
     const THRESHOLD = 5000;
 
+    const activeReasons = reasons.length > 0
+        ? reasons.filter(r => r.event_type === data.event_type)
+        : FALLBACK_REASONS.filter(r => r.event_type === data.event_type);
+
+    const selectedReason = activeReasons.find(r => r.code === data.reason_code);
+    const reasonRequiresApproval = selectedReason?.requires_manager_approval || false;
+    const isHighValueDrop = data.event_type === 'cash_drop' && Number(data.amount) > THRESHOLD;
+    const isApprovalRequired = isHighValueDrop || reasonRequiresApproval;
     const handleSubmit = (e) => {
         e.preventDefault();
         post(route('shifts.drawer-events'), {
@@ -32,8 +75,6 @@ export default function RecordCashEventModal({ show, onClose, shift }) {
             },
         });
     };
-
-    const isHighValueDrop = data.event_type === 'cash_drop' && Number(data.amount) > THRESHOLD;
 
     return (
         <Modal show={show} onClose={onClose}>
@@ -97,19 +138,11 @@ export default function RecordCashEventModal({ show, onClose, shift }) {
                             value={data.reason_code}
                             onChange={(e) => setData('reason_code', e.target.value)}
                         >
-                            {data.event_type === 'cash_drop' ? (
-                                <>
-                                    <option value="SKIM">Skim (Excess Cash)</option>
-                                    <option value="EXPENSE">Petty Cash Expense</option>
-                                    <option value="ERROR">Correction</option>
-                                </>
-                            ) : (
-                                <>
-                                    <option value="REPLENISH">Replenish Change</option>
-                                    <option value="LOAN">Initial Float Addition</option>
-                                    <option value="ERROR">Correction</option>
-                                </>
-                            )}
+                            {activeReasons.map(r => (
+                                <option key={r.code} value={r.code}>
+                                    {r.name} {r.requires_manager_approval ? '(Requires Manager)' : ''}
+                                </option>
+                            ))}
                         </select>
                         <InputError message={errors.reason_code} className="mt-2" />
                     </div>
@@ -129,13 +162,17 @@ export default function RecordCashEventModal({ show, onClose, shift }) {
                     </div>
 
                     {/* Threshold Warning */}
-                    {isHighValueDrop && (
+                    {isApprovalRequired && (
                         <div className="space-y-4">
                             <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg flex gap-3">
                                 <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
                                 <div className="text-xs text-amber-200">
                                     <p className="font-bold">Manager Approval Required</p>
-                                    <p>This drop exceeds ₱{THRESHOLD.toLocaleString()}. A manager must authorize this transaction.</p>
+                                    <p>
+                                        {isHighValueDrop
+                                            ? `This drop exceeds ₱${THRESHOLD.toLocaleString()}. A manager must authorize this transaction.`
+                                            : `The selected reason "${selectedReason?.name || data.reason_code}" requires manager authorization.`}
+                                    </p>
                                 </div>
                             </div>
                             
@@ -151,7 +188,7 @@ export default function RecordCashEventModal({ show, onClose, shift }) {
                                             className="mt-1 block w-full bg-slate-950 border-slate-700"
                                             value={data.manager_email}
                                             onChange={(e) => setData('manager_email', e.target.value)}
-                                            required={isHighValueDrop}
+                                            required={isApprovalRequired}
                                         />
                                         <InputError message={errors.manager_email} className="mt-2" />
                                     </div>
@@ -164,7 +201,7 @@ export default function RecordCashEventModal({ show, onClose, shift }) {
                                             className="mt-1 block w-full bg-slate-950 border-slate-700"
                                             value={data.manager_password}
                                             onChange={(e) => setData('manager_password', e.target.value)}
-                                            required={isHighValueDrop}
+                                            required={isApprovalRequired}
                                         />
                                         <InputError message={errors.manager_password} className="mt-2" />
                                     </div>

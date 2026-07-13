@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Head, useForm } from '@inertiajs/react';
+import { Head, Link, useForm } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import Modal from '@/Components/Modal';
 import InputLabel from '@/Components/InputLabel';
@@ -13,7 +13,8 @@ import {
     X,
     CheckCircle2,
     AlertTriangle,
-    ShieldAlert
+    ShieldAlert,
+    CreditCard
 } from 'lucide-react';
 
 export default function Index({ auth, branches, filters }) {
@@ -155,15 +156,24 @@ export default function Index({ auth, branches, filters }) {
                                                     </span>
                                                 </td>
                                                 <td className="px-8 py-5">
-                                                    <div className="flex items-center justify-end gap-2">
-                                                        <button
-                                                            onClick={() => openEditModal(branch)}
-                                                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
-                                                            title="Edit Deduction Policy"
-                                                        >
-                                                            <Edit2 size={18} />
-                                                        </button>
-                                                    </div>
+                                                     <div className="flex items-center justify-end gap-2">
+                                                         {auth.permissions?.includes('manage_payment_methods') && (
+                                                             <Link
+                                                                 href={route('admin.branches.payment-settings.edit', branch.id)}
+                                                                 className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+                                                                 title="Manage Payment Settings"
+                                                             >
+                                                                 <CreditCard size={18} />
+                                                             </Link>
+                                                         )}
+                                                         <button
+                                                             onClick={() => openEditModal(branch)}
+                                                             className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+                                                             title="Edit Deduction Policy"
+                                                         >
+                                                             <Edit2 size={18} />
+                                                         </button>
+                                                     </div>
                                                 </td>
                                             </tr>
                                         ))

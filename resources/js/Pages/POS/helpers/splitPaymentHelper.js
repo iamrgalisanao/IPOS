@@ -118,16 +118,31 @@ export const validatePaymentRows = (rows, paymentMethods, saleTotal, isOffline =
                 }
             }
 
-            // Offline Limit Validation
-            if (isOffline && method.offline_max_limit_centavos !== null && method.offline_max_limit_centavos !== undefined) {
-                const amountCentavos = Math.round(amount * 100);
-                if (amountCentavos > method.offline_max_limit_centavos) {
-                    const limitFormatted = (method.offline_max_limit_centavos / 100).toFixed(2);
-                    errors.push(`Row ${index + 1}: Offline payment limit exceeded for ${method.name} (Max: ₱${limitFormatted}).`);
-                }
-            }
+            // Offline Limit Validation is now aggregated per-method across all rows (see below)
         }
     });
+
+    if (isOffline) {
+        const totalsByMethod = {};
+        rows.forEach((row) => {
+            const methodId = row.payment_method_id;
+            const amount = Number(row.amount) || 0;
+            if (methodId && amount > 0) {
+                totalsByMethod[methodId] = (totalsByMethod[methodId] || 0) + amount;
+            }
+        });
+
+        Object.entries(totalsByMethod).forEach(([methodId, totalAmount]) => {
+            const method = paymentMethods.find((m) => m.id === methodId);
+            if (method && method.offline_max_limit_centavos !== null && method.offline_max_limit_centavos !== undefined) {
+                const totalCentavos = Math.round(totalAmount * 100);
+                if (totalCentavos > method.offline_max_limit_centavos) {
+                    const limitFormatted = (method.offline_max_limit_centavos / 100).toFixed(2);
+                    errors.push(`${method.name} offline limit is ₱${limitFormatted} per offline sale. Reduce the amount or reconnect to continue.`);
+                }
+            }
+        });
+    }
 
     if (totals.isUnderpaid) {
         errors.push("Payment total is less than the sale total.");

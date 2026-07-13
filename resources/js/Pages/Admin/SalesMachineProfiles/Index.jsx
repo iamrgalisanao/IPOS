@@ -239,14 +239,19 @@ export default function Index({ auth, profiles, branches, filters, flash = {} })
                                                         {profile.branch?.name}
                                                     </td>
                                                     <td className="px-6 py-6">
-                                                        {profile.pos_layout ? (
+                                                        <div className="flex flex-col gap-0.5">
                                                             <div className="flex items-center gap-1.5 text-sm text-slate-700 font-bold">
                                                                 <Layers size={14} className="text-slate-400" />
-                                                                {profile.pos_layout.name}
+                                                                {profile.effective_layout_name}
                                                             </div>
-                                                        ) : (
-                                                            <span className="text-xs text-slate-400 font-medium italic">Branch Default</span>
-                                                        )}
+                                                            <span className={`text-[10px] font-black uppercase tracking-wider ${
+                                                                profile.effective_layout_source === 'Override'
+                                                                    ? 'text-indigo-600'
+                                                                    : 'text-slate-400'
+                                                            }`}>
+                                                                {profile.effective_layout_source}
+                                                            </span>
+                                                        </div>
                                                     </td>
                                                     <td className="px-6 py-6">
                                                         <div className="flex flex-col gap-1.5">

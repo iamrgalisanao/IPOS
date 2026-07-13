@@ -36,6 +36,7 @@ export default function Receipt({ data, tenantId, branchId, onClose }) {
         setIsSubmittingReprint(true);
         try {
             const response = await fetch(`/pos/sales/${localData.sale_id}/receipt?reprint_reason=${encodeURIComponent(reason)}`, {
+                credentials: 'same-origin',
                 headers: {
                     'Accept': 'application/json',
                     'X-Tenant-ID': tenantId,

@@ -352,7 +352,7 @@ class PrinterProfileManagementTest extends TestCase
             $this->branch1->id,
             $this->terminal->id
         );
-        $this->assertSame('no-printer-profile', $hash);
+        $this->assertSame(hash('sha256', 'no-printer-profile'), $hash);
     }
 
     /** @test */

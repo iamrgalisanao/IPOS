@@ -425,10 +425,10 @@ class QuickBooksConnectionManagementTest extends TestCase
 
         $this->actingAs($cashier)
             ->withHeader('X-Tenant-ID', $this->tenant->id)
-            ->get(route('pos.index'))
+            ->get(route('pos.terminal.checkout'))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
-                ->component('POS/Index')
+                ->component('POS/Terminal/Checkout')
                 ->missing('quickbooks')
                 ->missing('quickbooks_connection')
                 ->missing('accounting')

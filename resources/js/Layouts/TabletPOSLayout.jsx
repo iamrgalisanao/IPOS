@@ -2,12 +2,70 @@ import React from 'react';
 import { Clock3, History, Settings, Wifi, WifiOff, RefreshCw, LayoutGrid } from 'lucide-react';
 import { useConnectivityStore } from '@/POS/offline/connectivityStore';
 import { Head, Link } from '@inertiajs/react';
+import { offlineSalesQueue } from '@/POS/offline/offlineSalesQueue';
+import { offlinePaymentQueue } from '@/POS/offline/offlinePaymentQueue';
 
 export default function TabletPOSLayout({ children }) {
     const { isOnline, status, lastSyncedAt } = useConnectivityStore();
     const [isRefreshProtected, setIsRefreshProtected] = React.useState(
         typeof window !== 'undefined' ? Boolean(window.IPOS_SERVICE_WORKER_READY) : false
     );
+    const [queueBadge, setQueueBadge] = React.useState(null);
+
+    React.useEffect(() => {
+        const updateQueueBadge = async () => {
+            try {
+                const [salesSummary, paymentSummary] = await Promise.all([
+                    offlineSalesQueue.getStatusSummary(),
+                    offlinePaymentQueue.getStatusSummary(),
+                ]);
+
+                const pending = Number(salesSummary.pending || 0) + Number(paymentSummary.pending || 0);
+                const syncing = Number(salesSummary.syncing || 0) + Number(paymentSummary.syncing || 0);
+                const failed = Number(salesSummary.failed || 0) + Number(paymentSummary.failed || 0);
+                const conflict = Number(salesSummary.conflict || 0) + Number(salesSummary.acceptedWithWarning || 0) + Number(paymentSummary.conflict || 0);
+
+                if (conflict > 0 || failed > 0) {
+                    setQueueBadge({
+                        type: 'review',
+                        label: 'Sales Need Review',
+                        tone: 'red',
+                        count: conflict + failed
+                    });
+                } else if (syncing > 0) {
+                    setQueueBadge({
+                        type: 'syncing',
+                        label: 'Syncing Local Sales',
+                        tone: 'indigo',
+                        count: syncing
+                    });
+                } else if (pending > 0) {
+                    setQueueBadge({
+                        type: 'protected',
+                        label: 'Unsynced Sales Protected',
+                        tone: 'blue',
+                        count: pending
+                    });
+                } else {
+                    setQueueBadge(null);
+                }
+            } catch (err) {
+                console.warn('Failed to resolve offline queue summaries for badge:', err);
+                setQueueBadge(null);
+            }
+        };
+
+        updateQueueBadge();
+
+        const unsubscribeSales = offlineSalesQueue.subscribe(updateQueueBadge);
+        const unsubscribePayments = offlinePaymentQueue.subscribe(updateQueueBadge);
+
+        return () => {
+            unsubscribeSales();
+            unsubscribePayments();
+        };
+    }, []);
+
     const navItems = [
         { label: 'Checkout', routeName: 'pos.terminal.checkout', icon: LayoutGrid },
         { label: 'Shift', routeName: 'pos.terminal.shift', icon: Clock3 },
@@ -125,11 +183,21 @@ export default function TabletPOSLayout({ children }) {
                             {lastSyncedAt ? new Date(lastSyncedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Pending'}
                         </span>
                     </div>
-                    {/* Network Status */}
-                    <div className={`hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-full ${isRefreshProtected ? 'bg-blue-500/10 text-blue-300' : 'bg-amber-500/10 text-amber-300'}`}>
-                        <span className="h-2 w-2 rounded-full bg-current" />
-                        <span>{isRefreshProtected ? 'Refresh Protected' : 'Refresh Not Protected'}</span>
-                    </div>
+                    {queueBadge && (
+                        <div 
+                            className={`hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold ${
+                                queueBadge.tone === 'red' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
+                                queueBadge.tone === 'indigo' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 animate-pulse' :
+                                'bg-blue-500/10 text-blue-300 border border-blue-500/20 animate-pulse'
+                            }`}
+                        >
+                            <span className={`h-2 w-2 rounded-full ${
+                                queueBadge.tone === 'red' ? 'bg-rose-500 animate-pulse' :
+                                queueBadge.tone === 'indigo' ? 'bg-indigo-500 animate-pulse' : 'bg-blue-400 animate-pulse'
+                            }`} />
+                            <span>{queueBadge.label} ({queueBadge.count})</span>
+                        </div>
+                    )}
                     <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full ${isOnline ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
                         {isOnline ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
                         <span>{status === 'online' ? 'Online' : 'Offline'}</span>

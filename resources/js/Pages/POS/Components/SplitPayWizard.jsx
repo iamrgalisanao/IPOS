@@ -210,6 +210,7 @@ export default function SplitPayWizard({ sale, paymentMethods = [], onClose, onP
             const payload = buildSplitPaymentPayload(validationRows);
             const response = await fetch(`/pos/sales/${sale.id}/payments/split`, {
                 method: 'POST',
+                credentials: 'same-origin',
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
@@ -878,14 +879,14 @@ export default function SplitPayWizard({ sale, paymentMethods = [], onClose, onP
                             Configure at least one active payment method to record payment.
                         </p>
                     )}
-                    {hasPaymentMethods && remainingBalance > 0.001 && (
-                        <p className="text-[9px] text-center text-indigo-400 mt-2.5 uppercase tracking-widest font-black">
-                            Split Remaining Balance: ₱{remainingBalance.toLocaleString(undefined, {minimumFractionDigits: 2})} to complete payment.
-                        </p>
-                    )}
-                    {hasPaymentMethods && remainingBalance <= 0.001 && !validation.isValid && validation.errors.length > 0 && (
+                    {hasPaymentMethods && !validation.isValid && validation.errors.length > 0 && (
                         <p className="text-[9px] text-center text-rose-400 mt-2.5 uppercase tracking-widest font-black">
                             {validation.errors[0]}
+                        </p>
+                    )}
+                    {hasPaymentMethods && validation.isValid && remainingBalance > 0.001 && (
+                        <p className="text-[9px] text-center text-indigo-400 mt-2.5 uppercase tracking-widest font-black">
+                            Split Remaining Balance: ₱{remainingBalance.toLocaleString(undefined, {minimumFractionDigits: 2})} to complete payment.
                         </p>
                     )}
                 </div>

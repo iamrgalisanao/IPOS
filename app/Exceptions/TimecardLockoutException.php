@@ -10,7 +10,7 @@ class TimecardLockoutException extends Exception
 {
     public function render(Request $request)
     {
-        if ($request->expectsJson() || $request->header('X-Inertia')) {
+        if ($request->expectsJson() && !$request->header('X-Inertia')) {
             return response()->json([
                 'success' => false,
                 'code' => 'PIN_RATE_LIMITED',
@@ -19,6 +19,8 @@ class TimecardLockoutException extends Exception
             ], 429);
         }
 
-        abort(429, 'PIN verification is temporarily unavailable. Please try again later or contact a supervisor.');
+        return redirect()->back()->withErrors([
+            'pin' => 'PIN verification is temporarily unavailable. Please try again later or contact a supervisor.'
+        ]);
     }
 }

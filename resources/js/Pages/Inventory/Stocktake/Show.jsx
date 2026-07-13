@@ -145,7 +145,9 @@ export default function Show({ auth, session, lines, isBlindCount }) {
 
         setIsSearchingCatalog(true);
         try {
-            const response = await fetch(route('inventory.stocktakes.catalog.search', { q: query }));
+            const response = await fetch(route('inventory.stocktakes.catalog.search', { q: query }), {
+                credentials: 'same-origin'
+            });
             const results = await response.json();
             setCatalogResults(results);
         } catch (error) {

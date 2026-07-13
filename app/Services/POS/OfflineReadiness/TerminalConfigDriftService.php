@@ -37,6 +37,7 @@ class TerminalConfigDriftService
             ? $this->bootstrapService->calculateTerminalPolicyVersionHash($tenant, $branch, $profile)
             : null;
         $printerProfile = $this->bootstrapService->calculatePrinterProfileVersionHash($tenantId, $branchId, $profile->id);
+        $cashDrawerReasons = $this->bootstrapService->calculateCashDrawerReasonsVersionHash($tenantId, $branchId);
 
         $snapshot = [
             'schema_version' => 1,
@@ -50,6 +51,7 @@ class TerminalConfigDriftService
             'payment_methods_version_hash' => $paymentMethods,
             'terminal_policy_version_hash' => $terminalPolicy,
             'printer_profile_version_hash' => $printerProfile,
+            'cash_drawer_reasons_version_hash' => $cashDrawerReasons,
         ];
 
         $snapshotHash = $this->hashCanonical($snapshot);
@@ -63,6 +65,7 @@ class TerminalConfigDriftService
             'payment_methods' => $paymentMethods,
             'terminal_policy' => $terminalPolicy,
             'printer_profile' => $printerProfile,
+            'cash_drawer_reasons' => $cashDrawerReasons,
             'config_snapshot_hash' => $snapshotHash,
         ];
     }
@@ -113,6 +116,17 @@ class TerminalConfigDriftService
             ?? data_get($payload, 'offline.printer_profile_version_hash')
             ?? data_get($payload, 'printer_profile_version_hash');
 
+        $cashDrawerReasons = data_get($payload, 'config_snapshot.cash_drawer_reasons_version_hash')
+            ?? data_get($payload, 'offline.cash_drawer_reasons_version_hash')
+            ?? data_get($payload, 'cash_drawer_reasons_version_hash');
+
+        $configSnapshot = data_get($payload, 'config_snapshot') ?: [];
+        $offlinePayload = data_get($payload, 'offline') ?: [];
+
+        $cashDrawerReasonsExists = array_key_exists('cash_drawer_reasons_version_hash', $configSnapshot)
+            || array_key_exists('cash_drawer_reasons_version_hash', $offlinePayload)
+            || array_key_exists('cash_drawer_reasons_version_hash', $payload ?: []);
+
         return [
             'layout' => $layout,
             'catalog' => $catalog,
@@ -121,6 +135,8 @@ class TerminalConfigDriftService
             'payment_methods' => $paymentMethods,
             'terminal_policy' => $terminalPolicy,
             'printer_profile' => $printerProfile,
+            'cash_drawer_reasons' => $cashDrawerReasons,
+            'cash_drawer_reasons_exists' => $cashDrawerReasonsExists,
             'config_snapshot_hash' => $configSnapshotHash,
         ];
     }
@@ -167,6 +183,7 @@ class TerminalConfigDriftService
             'payment_methods' => 'Payment Methods',
             'terminal_policy' => 'Terminal Policy',
             'printer_profile' => 'Printer Profile',
+            'cash_drawer_reasons' => 'Cash Drawer Reasons',
         ];
 
         $components = [];
@@ -178,6 +195,8 @@ class TerminalConfigDriftService
             $clientVal = $client[$key] ?? null;
 
             if ($key === 'printer_profile') {
+                $status = 'placeholder';
+            } elseif ($key === 'cash_drawer_reasons' && !($client['cash_drawer_reasons_exists'] ?? false)) {
                 $status = 'placeholder';
             } elseif ($clientVal === null) {
                 $status = 'not_reported';
@@ -209,7 +228,7 @@ class TerminalConfigDriftService
         // If all component values (except printer) are null/not reported, mark status as not_reported
         $reportedCount = 0;
         foreach ($client as $k => $v) {
-            if ($k !== 'printer_profile' && $k !== 'config_snapshot_hash' && $v !== null) {
+            if ($k !== 'printer_profile' && $k !== 'config_snapshot_hash' && $k !== 'cash_drawer_reasons_exists' && $v !== null) {
                 $reportedCount++;
             }
         }

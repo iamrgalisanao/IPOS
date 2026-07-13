@@ -10,7 +10,7 @@ class OpenShiftBlocksClockOutException extends Exception
 {
     public function render(Request $request)
     {
-        if ($request->expectsJson() || $request->header('X-Inertia')) {
+        if ($request->expectsJson() && !$request->header('X-Inertia')) {
             return response()->json([
                 'success' => false,
                 'code' => 'OPEN_SHIFT_BLOCKS_CLOCK_OUT',

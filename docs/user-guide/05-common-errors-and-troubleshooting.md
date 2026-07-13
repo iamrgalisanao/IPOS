@@ -91,19 +91,19 @@ User Roles: All Roles
 
 ### "403 TIMECARD_REQUIRED" / "You must be clocked in before performing this action"
 * **Cause**: You are attempting to open a cashier shift, validate a checkout, create a sale, process a void/refund, or record pay-in/out without having an active clocked-in timecard.
-* **Action**: Lock the terminal console, switch to the **Timecard Clock** tab, input your employee PIN, and submit a clock-in before returning to checkout.
+* **Action**: The terminal will automatically redirect you to the **Shift / Timecard Clock** screen (`/pos/terminal/shift`) and show the clock-in prompt with a clear notification. Input your employee PIN and submit a clock-in before returning to checkout.
 
 ### "429 PIN_RATE_LIMITED" / "PIN verification is temporarily unavailable"
 * **Cause**: An incorrect employee PIN was input 5 times (blocks terminal for 1 minute) or 10 times (blocks terminal for 15 minutes) in a row.
-* **Action**: Wait for the lockout timer to expire, or request a manager override.
+* **Action**: The terminal will automatically redirect you back with a validation error displayed on the PIN input field. Wait for the lockout timer to expire, or request a manager override.
 
 ### "409 OPEN_SHIFT_BLOCKS_CLOCK_OUT" / "Please close your cashier shift before clocking out"
 * **Cause**: You tried to clock out of your HR timecard while you still have an open cash drawer shift.
-* **Action**: Close your cashier shift first (which records blind counts and reconciles deposits) and then clock out, or request a supervisor bypass.
+* **Action**: The terminal will redirect you back to the shift page with a clear error notification. Close your cashier shift first (which records blind counts and reconciles deposits) and then clock out, or request a supervisor bypass.
 
 ### "403 TERMINAL_CONTEXT_INVALID" / "Invalid terminal context"
 * **Cause**: The POS terminal request is missing a valid registered terminal identity, or the `X-Terminal-ID` does not belong to the active tenant and branch.
-* **Action**: Reopen the registered POS terminal URL/session for the correct branch. If this happens on a configured tablet, ask an admin to verify the Sales Machine Profile registration and terminal identifier.
+* **Action**: The terminal will automatically redirect you to the main checkout page (`/pos/terminal/checkout`) where the Activation Modal overlay will display. Re-enter the terminal identifier to bind the device context.
 
 ### "POS Session Needs Attention"
 * **Cause**: The server is reachable, but the browser session is stale or expired. This often appears after reconnecting a terminal that was offline for a while.

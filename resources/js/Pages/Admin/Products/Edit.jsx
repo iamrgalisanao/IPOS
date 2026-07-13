@@ -215,6 +215,7 @@ export default function Edit({ auth, product, categories, taxCategories, branche
             const url = new URL(route('admin.products.recipe.cost', product.id), window.location.origin);
             if (costBranchId) url.searchParams.set('branch_id', costBranchId);
             const res = await fetch(url.toString(), {
+                credentials: 'same-origin',
                 headers: {
                     'Accept': 'application/json',
                     'X-Requested-With': 'XMLHttpRequest',

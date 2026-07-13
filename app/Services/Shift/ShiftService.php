@@ -280,17 +280,37 @@ class ShiftService
         // 6.1 Threshold Guard for Cash Drops
         $resolvedThreshold = $this->getDrawerLimit($shift->branch);
         
-        if ($eventType === CashDrawerEvent::TYPE_CASH_DROP && bccomp($amount, $resolvedThreshold, 4) > 0) {
+        $reason = \App\Models\CashDrawerReason::where('tenant_id', $shift->tenant_id)
+            ->where('event_type', $eventType)
+            ->where('code', $reasonCode)
+            ->active()
+            ->first();
+
+        $reasonsExist = \App\Models\CashDrawerReason::where('tenant_id', $shift->tenant_id)
+            ->where('event_type', $eventType)
+            ->exists();
+
+        if ($reasonsExist && !$reason) {
+            throw new \RuntimeException('Invalid or inactive cash drawer reason code.');
+        }
+
+        $isHighValue = $eventType === CashDrawerEvent::TYPE_CASH_DROP && bccomp($amount, $resolvedThreshold, 4) > 0;
+        $requiresApproval = $isHighValue || ($reason && $reason->requires_manager_approval);
+
+        if ($requiresApproval) {
             if (!$actor->hasPermission('approve_shift')) {
-                throw new \RuntimeException('Unauthorized: high-value cash drop requires manager approval.');
+                $msg = $isHighValue
+                    ? 'Unauthorized: high-value cash drop requires manager approval.'
+                    : 'Unauthorized: this cash drawer event requires manager approval.';
+                throw new \RuntimeException($msg);
             }
             
-            // Self-approval block for high-value drops
-            if ($shift->cashier_id === $actor->id && $actor->hasPermission('approve_shift')) {
-                // If the cashier has permission, they CAN approve, but we should log it as a risk.
-                // However, the rule says "Cashier self-approval for high-value drop must be blocked".
-                // I'll enforce it strictly: if they are the shift owner, they need ANOTHER manager to record it.
-                throw new \RuntimeException('Security Block: Cashiers cannot approve their own high-value cash drop.');
+            // Self-approval block
+            if ($shift->cashier_id === $actor->id) {
+                $msg = $isHighValue
+                    ? 'Security Block: Cashiers cannot approve their own high-value cash drop.'
+                    : 'Security Block: Cashiers cannot approve their own manager-required drawer event.';
+                throw new \RuntimeException($msg);
             }
         }
 

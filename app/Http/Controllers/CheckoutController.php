@@ -121,6 +121,8 @@ class CheckoutController extends Controller
                     'terminal_identifier' => $terminal->terminal_identifier,
                     'machine_identification_number' => $terminal->machine_identification_number,
                     'status' => $terminal->status,
+                    'activation_status' => $terminal->activation_status,
+                    'activated_device_id' => $terminal->activated_device_id,
                 ] : null,
                 'user' => $request->user() ? [
                     'id' => $request->user()->id,

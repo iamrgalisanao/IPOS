@@ -107,10 +107,81 @@ class POSDrawerController extends Controller
         ]);
 
         try {
+            $actor = $request->user();
+
+            $reason = \App\Models\CashDrawerReason::where('tenant_id', $shift->tenant_id)
+                ->where('event_type', $request->event_type)
+                ->where('code', $request->reason_code)
+                ->active()
+                ->first();
+
+            $reasonsExist = \App\Models\CashDrawerReason::where('tenant_id', $shift->tenant_id)
+                ->where('event_type', $request->event_type)
+                ->exists();
+
+            if ($reasonsExist && !$reason) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid or inactive cash drawer reason code.'
+                ], 422);
+            }
+
+            $isHighValueDrop = false;
+            if ($request->event_type === 'cash_drop') {
+                $threshold = $this->cashDropService->resolveThreshold($shift->branch_id);
+                $isHighValueDrop = bccomp($request->amount, (string) $threshold, 4) > 0;
+            }
+
+            $requiresApproval = $isHighValueDrop || ($reason && $reason->requires_manager_approval);
+
+            if ($requiresApproval) {
+                if (!$request->manager_email || !$request->manager_password) {
+                    $msg = $isHighValueDrop 
+                        ? 'Unauthorized: high-value cash drop requires manager approval.'
+                        : 'Unauthorized: this transaction requires manager approval.';
+                    return response()->json([
+                        'success' => false,
+                        'message' => $msg
+                    ], 422);
+                }
+
+                // Verify manager credentials
+                $manager = \App\Models\User::where('tenant_id', $shift->tenant_id)
+                    ->where('email', $request->manager_email)
+                    ->where('status', 'active')
+                    ->first();
+
+                if (!$manager || !\Illuminate\Support\Facades\Hash::check($request->manager_password, $manager->password)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Invalid manager credentials.'
+                    ], 422);
+                }
+
+                if (!$manager->hasPermission('manage_cash_drawer')) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized: manager missing required permissions.'
+                    ], 422);
+                }
+
+                if ($shift->cashier_id === $manager->id) {
+                    $msg = $isHighValueDrop
+                        ? 'Security Block: Cashiers cannot approve their own high-value cash drop.'
+                        : 'Security Block: Cashiers cannot approve their own manager-required drawer event.';
+                    return response()->json([
+                        'success' => false,
+                        'message' => $msg
+                    ], 422);
+                }
+
+                $actor = $manager;
+            }
+
             if ($request->event_type === 'cash_drop') {
                 $event = $this->cashDropService->recordCashDrop(
                     $shift,
-                    $request->user(),
+                    $actor,
                     (string) $request->amount,
                     $request->reason_code,
                     $request->reason_notes,
@@ -118,10 +189,9 @@ class POSDrawerController extends Controller
                     $request->manager_password
                 );
             } else {
-                // Other events (top up, etc.)
                 $event = $this->shiftService->recordDrawerEvent(
                     $shift,
-                    $request->user(),
+                    $actor,
                     $request->event_type,
                     (string) $request->amount,
                     $request->reason_code,

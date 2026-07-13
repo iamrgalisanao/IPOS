@@ -38,13 +38,17 @@ class EnforceSubscriptionGate
      */
     protected function respondForbidden(Request $request): Response
     {
-        // Fail-closed standard JSON response for API or AJAX/Inertia requests
-        if ($request->expectsJson() || $request->header('X-Inertia')) {
+        // Fail-closed standard JSON response for API or AJAX requests
+        if ($request->expectsJson() && !$request->header('X-Inertia')) {
             return response()->json([
                 'status' => 'error',
                 'code' => 'TSMS_SUB_001',
                 'message' => 'This feature requires a premium subscription upgrade.'
             ], 403);
+        }
+
+        if ($request->header('X-Inertia')) {
+            return redirect()->route('pos.terminal.checkout')->with('error', 'This feature requires a premium subscription upgrade.');
         }
 
         // Standard web fallback abort

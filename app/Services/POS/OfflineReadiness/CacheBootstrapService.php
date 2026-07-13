@@ -13,6 +13,7 @@ use App\Models\Product;
 use App\Models\PosLayout;
 use App\Models\PrinterProfile;
 use App\Models\SalesMachineProfile;
+use App\Models\CashDrawerReason;
 use App\Services\CatalogService;
 use App\Services\TenantContext;
 use App\Services\BranchContext;
@@ -125,6 +126,7 @@ class CacheBootstrapService
             $paymentMethodsHash = $this->calculatePaymentMethodsVersionHash($tenant->id, $branch->id);
             $terminalPolicyHash = $this->calculateTerminalPolicyVersionHash($tenant, $branch, $machineProfile);
             $printerProfileHash = $this->calculatePrinterProfileVersionHash($tenant->id, $branch->id, $machineProfile?->id);
+            $cashDrawerReasonsHash = $this->calculateCashDrawerReasonsVersionHash($tenant->id, $branch->id);
 
             // Fetch branch-resolved payment methods list to cache in IndexedDB
             $paymentMethods = PaymentMethod::active()
@@ -147,6 +149,7 @@ class CacheBootstrapService
                 'payment_methods_version_hash' => $paymentMethodsHash,
                 'terminal_policy_version_hash' => $terminalPolicyHash,
                 'printer_profile_version_hash' => $printerProfileHash,
+                'cash_drawer_reasons_version_hash' => $cashDrawerReasonsHash,
             ];
 
             $snapshotHash = $this->hashCanonical($snapshot);
@@ -170,6 +173,7 @@ class CacheBootstrapService
                 'categories' => $categories,
                 'tax_categories' => $taxCategories,
                 'payment_methods' => $paymentMethods,
+                'cash_drawer_reasons' => $this->getResolvedReasonsForBranch($tenant->id, $branch->id),
                 'tenant_context' => $tenantContextData,
                 'branch_context' => $branchContextData,
                 'machine_profile_context' => $machineProfileContext,
@@ -182,6 +186,7 @@ class CacheBootstrapService
                 'payment_methods_version_hash' => $paymentMethodsHash,
                 'terminal_policy_version_hash' => $terminalPolicyHash,
                 'printer_profile_version_hash' => $printerProfileHash,
+                'cash_drawer_reasons_version_hash' => $cashDrawerReasonsHash,
                 'config_snapshot_hash' => $snapshotHash,
                 'config_snapshot' => $snapshot,
                 'generated_at' => now()->toIso8601String(),
@@ -491,7 +496,7 @@ class CacheBootstrapService
         [$printer, $source] = $this->resolvePrinterProfile($tenantId, $branchId, $profileId);
 
         if (!$printer) {
-            return 'no-printer-profile';
+            return hash('sha256', 'no-printer-profile');
         }
 
         return $this->hashCanonical([
@@ -506,6 +511,57 @@ class CacheBootstrapService
             'template_type' => $printer->template_type,
             'is_active' => $printer->is_active,
             'updated_at' => $printer->updated_at ? $printer->updated_at->toIso8601String() : null,
+        ]);
+    }
+
+    public function getResolvedReasonsForBranch(string $tenantId, string $branchId): array
+    {
+        $allReasons = CashDrawerReason::active()
+            ->where('tenant_id', $tenantId)
+            ->where(function ($query) use ($branchId) {
+                $query->whereNull('branch_id')
+                      ->orWhere('branch_id', $branchId);
+            })
+            ->orderBy('sort_order')
+            ->orderBy('code')
+            ->get();
+
+        $grouped = $allReasons->groupBy(fn($r) => $r->event_type . ':' . $r->code);
+
+        $resolved = [];
+        foreach ($grouped as $key => $items) {
+            $item = $items->first(fn($r) => !is_null($r->branch_id)) ?? $items->first();
+            if ($item) {
+                $resolved[] = [
+                    'id' => $item->id,
+                    'event_type' => $item->event_type,
+                    'code' => $item->code,
+                    'name' => $item->name,
+                    'requires_manager_approval' => (bool)$item->requires_manager_approval,
+                    'sort_order' => (int)$item->sort_order,
+                    'updated_at' => $item->updated_at?->toIso8601String(),
+                ];
+            }
+        }
+
+        usort($resolved, function ($a, $b) {
+            if ($a['event_type'] !== $b['event_type']) {
+                return strcmp($a['event_type'], $b['event_type']);
+            }
+            if ($a['sort_order'] !== $b['sort_order']) {
+                return $a['sort_order'] <=> $b['sort_order'];
+            }
+            return strcmp($a['code'], $b['code']);
+        });
+
+        return $resolved;
+    }
+
+    public function calculateCashDrawerReasonsVersionHash(string $tenantId, string $branchId): string
+    {
+        $reasons = $this->getResolvedReasonsForBranch($tenantId, $branchId);
+        return $this->hashCanonical([
+            'cash_drawer_reasons' => $reasons,
         ]);
     }
 

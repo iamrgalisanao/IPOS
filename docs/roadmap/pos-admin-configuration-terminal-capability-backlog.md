@@ -130,14 +130,14 @@ Implementation status as of 2026-07-11:
 - Validation reference:
   `docs/validation/admin-config-snapshot-foundation-2026-07-11.md`.
 
-Remaining backlog after foundation slice:
+Remaining backlog after foundation slice: [All Closed ✅]
 
-- Admin-visible config snapshot/version audit view.
-- Register activation and assigned-terminal snapshot download UX.
-- Payment method offline policy editor.
-- Layout-register assignment hardening and stale-layout warning UX.
-- Printer profile admin schema, still without physical readiness claims until
-  hardware is available.
+- Admin-visible config snapshot/version audit view [Closed ✅ - via Terminal Sync Monitor Dashboard]
+- Register activation and assigned-terminal snapshot download UX [Closed ✅ - via RegisterActivationController]
+- Payment method offline policy editor [Closed ✅ - via PaymentSettings.jsx]
+- Layout-register assignment hardening and stale-layout warning UX [Closed ✅ - via SalesMachineProfileController layout assignment dropdown and Edit.jsx]
+- Printer profile admin schema, still without physical readiness claims until hardware is available [Closed ✅ - via PrinterProfileController]
+- Cash drawer reason configuration [Closed ✅ - via CashDrawerReasonController]
 
 ## Boundaries
 

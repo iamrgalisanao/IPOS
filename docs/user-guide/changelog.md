@@ -4,9 +4,61 @@ All notable changes to the IPOS platform, modules, and user workflows are docume
 
 ---
 
+## [1.5.9] - 2026-07-13
+### Added
+* **Epic 37: Advanced Promotions & Bundling Engine (Admin Gap Closure)**
+  * Wired the promotions admin routes under `manage_promotions` and added the Back Office Inertia management page for supported BOGO, minimum-spend, and combo bundle rules.
+  * Hardened branch scoping and validation for promotion CRUD so branch assignments stay tenant-bound and manager-bound.
+  * Aligned overlapping non-stackable promotion conflict handling so highest customer benefit wins before priority tie-breaks.
+* **Epic 44: Layout-Register Assignment UI & Governance (Remaining Config Gaps Closed)**
+  * Added a "POS Layout Override" dropdown inside terminal profile Edit page allowing admins to override a terminal's layout with any layout published to its branch or revert to branch defaults.
+  * Added a read-only effective layout status panel showing the current active layout name and its resolution source (Override vs. Branch Default).
+  * Displayed the resolved effective layout name and source in the main terminal registry list table.
+  * Implemented backend permission validations so `pos-layouts.manage` is only checked when the layout override changes.
+  * Restricted layout override mapping to ensure only published, tenant-matched, and branch-associated layouts are allowed.
+  * Attached append-only audit logging for layout override assignment and removal.
+
+### Validation Evidence
+- `DB_DATABASE=tsms_db_test php artisan test tests/Feature/POS/PromotionCalculationTest.php tests/Feature/Admin/PromotionManagementTest.php` (all 27 test cases passed)
+- `php artisan test tests/Feature/POS/LayoutRegisterAssignmentTest.php` (all 22 test cases passed)
+- Full regression check `vendor/bin/pest` (all 1,682 test cases passed with zero regressions)
+- Front-end compilation `npm run build` verified successful asset output.
+
+---
+
+## [1.5.8] - 2026-07-12
+### Added
+* **Epic 37: Advanced Promotions & Bundling Engine (Phase A)**
+  * Implemented database migrations and models for promotions configuration (`promotions`, `promotion_rules`, `promotion_branches`) and checkout auditing (`sale_promotions`, `sale_promotion_lines`).
+  * Created robust rules condition and reward validation layers matching BOGO, Tiered Discounts (minimum spend), and Combo packages schemas.
+  * Implemented `PromotionCalculationService` supporting priority-based rule selection, deterministic tie-breakers, quantity-consumption overlaps, and non-stackable item locks.
+  * Integrated calculation service and applied-promotion snapshot serialization inside `SaleCreationService` db transactions.
+  * Created `PromotionController` managing administration CRUD operations with branch scoping and permission checks.
+* **POS Terminal Settings & Diagnostics (Cleanup & Activation Recovery)**
+  * Renamed right-panel diagnostics to `Terminal Profile`, `Activation Status`, and `Machine ID`, and replaced repeated `"Unavailable"` placeholders with dynamic status values.
+  * Integrated `ActivationModal` directly into the Settings aside panel to offer a recovery route on inactive/revoked/mismatched terminals.
+  * Replaced development `"noop"` hardware label with a user-friendly `"Not Configured"` state.
+  * Updated top status bar from `"Refresh Protected"` to `"Refresh Guard Active"` with explicit description tooltips.
+* **POS Terminal Unified HUD & Cart Layout Redesign**
+  * Consolidated separate stale layout, sync warning, and offline config banners into a single amber alert card with actionable `Dismiss` and `Refresh config` triggers.
+  * Demoted the bulky top-bar `ShiftHUD` to a clean, quiet inline row showing shift status, duration clock, active cashier details, and shift actions (Record cash, Spot audit, and Close shift) inside a subtle dark container.
+  * Added a dashed-border `"Add category"` placeholder tile at the end of the categories grid for visual symmetry.
+  * Integrated the pending offline transactions review alert directly inside the cart sidebar above totals, utilizing a clean, red status block with a `Review` link to the sync status page.
+  * Refactored cart footer actions to stack vertically with sentence-case labels, styling `Apply special discount` as an outline button and `Checkout` as the primary solid CTA.
+
+### Changed
+* Refactored `SaleCreationService` to support both `SaleStatutoryDiscount` and `SaleDiscount` models concurrently, ensuring complete backward compatibility and preventing database foreign key constraints failure in tests.
+
+### Validation Evidence
+- `php artisan test tests/Feature/POS/PromotionCalculationTest.php` (all 17 test cases passed)
+- Full regression check `vendor/bin/pest` (all 1,667 test cases passed with zero regressions)
+- Front-end compilation `npm run build` verified successful asset output.
+
+---
+
 ## [1.5.7] - 2026-07-11
 ### Changed
-* **Admin Config Snapshot Foundation**
+* **Epic 44: Admin Config Snapshot Foundation**
   * POS bootstrap cache now emits `config_snapshot_hash`, `config_snapshot`, and version hashes for layout, catalog, tax, statutory discount metadata, payment methods, terminal policy, and printer profile placeholder.
   * POS IndexedDB cache preserves config snapshot metadata for offline use.
   * Offline cash-capture payloads now include the cached snapshot metadata before queueing.
@@ -27,7 +79,7 @@ All notable changes to the IPOS platform, modules, and user workflows are docume
 
 ## [1.5.6] - 2026-07-11
 ### Documentation
-* **POS Admin Configuration & Terminal Capability Planning Reference**
+* **Epic 44: POS Admin Configuration & Terminal Capability Planning Reference**
   * Added the admin-configuration backlog as a roadmap planning artifact.
   * Documented current IPOS coverage across RBAC, terminal profiles, layouts, catalog, payment methods, taxes, discounts, cash drawer operations, sync review, audit logging, printer routing, and config snapshots.
   * Identified **Admin Config Snapshot Foundation** as the recommended next implementation-lock candidate after POS terminal UAT.

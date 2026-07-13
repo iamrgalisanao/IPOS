@@ -81,7 +81,7 @@ class POSCartTest extends TestCase
 
         $response = $this->actingAs($this->user)
             ->withHeader('X-Tenant-ID', $this->tenant->id)
-            ->get(route('pos.index'));
+            ->get(route('pos.terminal.checkout'));
             
         $response->assertStatus(200);
         $response->assertSee('Juan Shop');
@@ -95,11 +95,11 @@ class POSCartTest extends TestCase
 
         $response = $this->actingAs($this->user)
             ->withHeader('X-Tenant-ID', $this->tenant->id)
-            ->get(route('pos.index'));
+            ->get(route('pos.terminal.checkout'));
 
         $response->assertStatus(200);
         $response->assertInertia(fn (Assert $page) => $page
-            ->component('POS/Index')
+            ->component('POS/Terminal/Checkout')
             ->has('payment_methods', 2)
             ->where('payment_methods.0.code', 'CASH')
             ->where('payment_methods.1.code', 'GCASH')
@@ -134,11 +134,11 @@ class POSCartTest extends TestCase
 
         $response = $this->actingAs($this->user)
             ->withHeader('X-Tenant-ID', $this->tenant->id)
-            ->get(route('pos.index'));
+            ->get(route('pos.terminal.checkout'));
 
         $response->assertStatus(200);
         $response->assertInertia(fn (Assert $page) => $page
-            ->component('POS/Index')
+            ->component('POS/Terminal/Checkout')
             ->has('payment_methods', 3)
             ->where('payment_methods.0.code', 'CASH')
             ->where('payment_methods.1.code', 'CARD')

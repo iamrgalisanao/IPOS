@@ -1,8 +1,9 @@
 import React, { useMemo } from 'react';
-import { ShoppingCart, Trash2, Plus, Minus, CreditCard, ChevronRight, Calculator, X, Loader2, AlertTriangle, RefreshCw, WifiOff, ShieldCheck } from 'lucide-react';
+import { ShoppingCart, Trash2, Plus, Minus, CreditCard, ChevronRight, Calculator, X, Loader2, AlertTriangle, RefreshCw, WifiOff, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Link } from '@inertiajs/react';
 import StatusUncertainPanel from './StatusUncertainPanel';
 
-export default function Cart({ items, onUpdateQuantity, onClear, onCheckout, isSubmitting, checkoutError, submissionFailed, onClose, checkoutState = 'draft', isCheckingStatus = false, onCheckStatus, onRetryCheckout, isOffline = false, isStale = false, offlineCaptureAllowed = false, offlineQueueSummary = null, onRetryOfflineSync, onOpenSpecialDiscount, appliedStatutoryDiscount }) {
+export default function Cart({ items, onUpdateQuantity, onClear, onCheckout, isSubmitting, checkoutError, submissionFailed, onClose, checkoutState = 'draft', isCheckingStatus = false, onCheckStatus, onRetryCheckout, isOffline = false, isStale = false, offlineCaptureAllowed = false, offlineQueueSummary = null, onRetryOfflineSync, onOpenSpecialDiscount, appliedStatutoryDiscount, hasActiveShift = true }) {
     const totals = useMemo(() => {
         const subtotal = items.reduce((sum, item) => sum + (Number(item.selling_price || item.unit_price || 0) * item.quantity), 0);
         // VAT included in price for now
@@ -47,6 +48,7 @@ export default function Cart({ items, onUpdateQuantity, onClear, onCheckout, isS
         cancelled: Number(queueSummary.cancelled ?? 0),
     };
     const reviewCount = queueCounts.conflict + queueCounts.acceptedWithWarning;
+    const failedCount = queueCounts.failed;
     const actionableSyncCount = queueCounts.pending + queueCounts.syncing + queueCounts.failed + reviewCount;
     const activeItems = items.filter((item) => Number(item.quantity || 0) > 0);
     const activeItemCount = activeItems.length;
@@ -70,9 +72,11 @@ export default function Cart({ items, onUpdateQuantity, onClear, onCheckout, isS
         || isCheckingStatus
         || checkoutState === 'checking'
         || hasBlockingStockIssue
-        || (isOffline ? !offlineCaptureAllowed : isStale);
+        || (isOffline ? !offlineCaptureAllowed : isStale)
+        || !hasActiveShift;
 
-    const shouldShowSyncPanel = actionableSyncCount > 0;
+
+
     const formatQuantity = (value) => {
         const quantity = Number(value);
         if (!Number.isFinite(quantity)) return '0';
@@ -139,59 +143,8 @@ export default function Cart({ items, onUpdateQuantity, onClear, onCheckout, isS
                     onRetry={onRetryCheckout}
                 />
 
-                {shouldShowSyncPanel && (
-                <div className="mx-4 mt-4 rounded-xl border border-slate-700/70 bg-slate-950/60 p-3 shadow-xl">
-                    <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                            <h3 className="text-sm font-bold text-slate-100">Offline Sync Status</h3>
-                            <p className="mt-1 truncate text-[11px] text-slate-400">Local queue and synchronization state.</p>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={onRetryOfflineSync}
-                            disabled={!onRetryOfflineSync || isOffline || (queueCounts.pending + queueCounts.failed === 0)}
-                            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-600 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-200 transition hover:border-indigo-400 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            <RefreshCw className="h-3.5 w-3.5" />
-                            Retry Sync
-                        </button>
-                    </div>
 
-                    <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
-                        {[
-                            ['Pending', queueCounts.pending],
-                            ['Syncing', queueCounts.syncing],
-                            ['Failed', queueCounts.failed],
-                            ['Review', reviewCount],
-                        ].map(([label, value]) => (
-                            <div key={label} className="rounded-lg border border-slate-800 bg-slate-900/80 px-2 py-2">
-                                <div className="text-[9px] font-semibold uppercase tracking-wider text-slate-500">{label}</div>
-                                <div className="mt-1 text-base font-black text-slate-100">{value}</div>
-                            </div>
-                        ))}
-                    </div>
 
-                    <div className="mt-3 space-y-2 text-[11px] text-slate-400">
-                        <div>Last attempt: {queueSummary.lastSyncAttemptAt ? new Date(queueSummary.lastSyncAttemptAt).toLocaleString() : 'No sync attempt yet'}</div>
-                        <div>Last success: {queueSummary.lastSuccessfulSyncAt ? new Date(queueSummary.lastSuccessfulSyncAt).toLocaleString() : 'No successful sync yet'}</div>
-                        {queueCounts.pending > 0 && (
-                            <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-amber-100">
-                                Pending server synchronization and reconciliation. This is not final ledger posting.
-                            </div>
-                        )}
-                        {queueCounts.failed > 0 && (
-                            <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-rose-100">
-                                Sync failed. Transactions remain safely queued on this terminal. Reconnect and retry synchronization.
-                            </div>
-                        )}
-                        {reviewCount > 0 && (
-                            <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-amber-100">
-                                Some offline transactions require admin review before posting.
-                            </div>
-                        )}
-                    </div>
-                </div>
-                )}
 
                 {/* Error Message */}
                 {checkoutError && (
@@ -218,9 +171,12 @@ export default function Cart({ items, onUpdateQuantity, onClear, onCheckout, isS
                 {/* Cart Items List */}
                 <div className="p-4 space-y-3">
                     {activeItemCount === 0 ? (
-                    <div className="flex min-h-48 flex-col items-center justify-center text-slate-600">
-                        <Calculator className="w-12 h-12 mb-2 opacity-10" />
-                        <p>Cart is currently empty</p>
+                    <div className="flex min-h-48 flex-col items-center justify-center text-slate-650 px-4 text-center">
+                        <ShoppingCart className="w-12 h-12 mb-3 text-slate-800" />
+                        <p className="text-sm font-bold text-slate-500">Cart is currently empty</p>
+                        {!hasActiveShift && (
+                            <p className="text-xs text-slate-600 max-w-[200px] mt-1.5 leading-relaxed font-medium">Open shift to start checkout.</p>
+                        )}
                     </div>
                 ) : (
                     items.map((item, index) => {
@@ -249,7 +205,7 @@ export default function Cart({ items, onUpdateQuantity, onClear, onCheckout, isS
                             <div className="flex items-center gap-1.5 bg-slate-900/50 rounded-xl p-1 border border-slate-700/50 shrink-0">
                                 <button 
                                     onClick={() => onUpdateQuantity(itemId, -1)}
-                                    disabled={isActivelySubmitting}
+                                    disabled={isActivelySubmitting || !hasActiveShift}
                                     className="w-9 h-9 flex items-center justify-center bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-all active:scale-90 disabled:opacity-50 disabled:cursor-not-allowed shadow-inner"
                                     type="button"
                                 >
@@ -258,7 +214,7 @@ export default function Cart({ items, onUpdateQuantity, onClear, onCheckout, isS
                                 <span className="text-sm font-black min-w-[1.75rem] text-center text-slate-200">{item.quantity}</span>
                                 <button 
                                     onClick={() => onUpdateQuantity(itemId, 1)}
-                                    disabled={!canIncrease}
+                                    disabled={!canIncrease || !hasActiveShift}
                                     className="w-9 h-9 flex items-center justify-center bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-all active:scale-90 disabled:opacity-50 disabled:cursor-not-allowed shadow-inner"
                                     type="button"
                                 >
@@ -272,7 +228,7 @@ export default function Cart({ items, onUpdateQuantity, onClear, onCheckout, isS
                                 </p>
                                 <button
                                     onClick={() => onUpdateQuantity(itemId, -Number(item.quantity || 0))}
-                                    disabled={isActivelySubmitting}
+                                    disabled={isActivelySubmitting || !hasActiveShift}
                                     className="mt-2 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-rose-500/20 bg-rose-500/10 text-rose-300 transition-all hover:border-rose-400/40 hover:bg-rose-500/20 hover:text-rose-100 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
                                     type="button"
                                     title={`Remove ${item.name || item.display_name || 'item'}`}
@@ -290,83 +246,7 @@ export default function Cart({ items, onUpdateQuantity, onClear, onCheckout, isS
 
             {/* Cart Footer / Totals */}
             <div className="shrink-0 border-t border-slate-800 bg-slate-900/95 p-3 space-y-3 shadow-[0_-10px_30px_-18px_rgba(0,0,0,0.9)]">
-                {/* Special Discount Trigger */}
-                {onOpenSpecialDiscount && (
-                    <button
-                        onClick={onOpenSpecialDiscount}
-                        disabled={activeItemCount === 0 || isActivelySubmitting}
-                        className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-                            appliedStatutoryDiscount
-                                ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
-                                : 'border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20'
-                        }`}
-                    >
-                        <ShieldCheck className="w-4 h-4 shrink-0" />
-                        {appliedStatutoryDiscount ? (
-                            <span>{appliedStatutoryDiscount.discountType?.name || 'Statutory Discount Applied'}</span>
-                        ) : (
-                            <span>Apply Special Discount</span>
-                        )}
-                    </button>
-                )}
-                <div className="flex gap-2">
-                    <button
-                        onClick={onClear}
-                        disabled={activeItemCount === 0 || isActivelySubmitting}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                    >
-                        <Trash2 className="w-4 h-4 shrink-0" />
-                        <span className="hidden sm:inline">Cancel</span>
-                        <span className="sm:hidden">Clear</span>
-                    </button>
-                    <button
-                        onClick={onCheckout}
-                        disabled={checkoutDisabled}
-                        className={`flex-[2] flex items-center justify-center gap-1.5 py-3 rounded-xl font-bold shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm ${
-                            isOffline && !offlineCaptureAllowed
-                                ? 'bg-rose-950/40 text-rose-400 border border-rose-500/30'
-                                : isOffline && offlineCaptureAllowed
-                                    ? 'bg-amber-950/40 text-amber-300 border border-amber-500/30'
-                                : isStale
-                                    ? 'bg-amber-950/40 text-amber-400 border border-amber-500/30'
-                                    : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/20'
-                        }`}
-                    >
-                        {isActivelySubmitting ? (
-                            <>
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                                <span>{isOffline ? 'Capturing Offline...' : 'Completing Sale...'}</span>
-                            </>
-                        ) : hasBlockingStockIssue ? (
-                            <>
-                                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
-                                <span>Fix Stock Issue</span>
-                            </>
-                        ) : isOffline && !offlineCaptureAllowed ? (
-                            <>
-                                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
-                                <span>Offline Locked</span>
-                            </>
-                        ) : isOffline && offlineCaptureAllowed ? (
-                            <>
-                                <WifiOff className="w-4 h-4 shrink-0 text-amber-300" />
-                                <span>Ready to Complete</span>
-                                <ChevronRight className="w-4 h-4 shrink-0" />
-                            </>
-                        ) : isStale ? (
-                            <>
-                                <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
-                                <span>Sync Required</span>
-                            </>
-                        ) : (
-                            <>
-                                <CreditCard className="w-4 h-4 shrink-0" />
-                                <span>Ready to Complete</span>
-                                <ChevronRight className="w-4 h-4 shrink-0" />
-                            </>
-                        )}
-                    </button>
-                </div>
+                <CartQueueNotice failedCount={failedCount} reviewCount={reviewCount} />
 
                 <div className="space-y-1.5 px-1">
                     <div className="flex justify-between text-sm">
@@ -397,12 +277,114 @@ export default function Cart({ items, onUpdateQuantity, onClear, onCheckout, isS
                     </div>
                 </div>
 
-                {isOffline && offlineCaptureAllowed && (
-                    <div className="mx-1 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
-                        Offline capture is enabled. Transactions will be queued on this terminal and synchronized when connectivity returns.
-                    </div>
-                )}
+                <div className="space-y-2">
+                    {/* Special Discount Trigger */}
+                    {onOpenSpecialDiscount && (
+                        <button
+                            onClick={onOpenSpecialDiscount}
+                            disabled={activeItemCount === 0 || isActivelySubmitting || !hasActiveShift}
+                            className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                                appliedStatutoryDiscount
+                                    ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
+                                    : 'border border-slate-700 bg-slate-800/40 text-slate-300 hover:bg-slate-800 hover:text-white'
+                            }`}
+                        >
+                            <ShieldCheck className="w-4 h-4 shrink-0" />
+                            {appliedStatutoryDiscount ? (
+                                <span>{appliedStatutoryDiscount.discountType?.name || 'Statutory discount applied'}</span>
+                            ) : (
+                                <span>Apply special discount</span>
+                            )}
+                        </button>
+                    )}
+
+                    <button
+                        onClick={onCheckout}
+                        disabled={checkoutDisabled}
+                        className={`w-full flex items-center justify-center gap-1.5 py-3 rounded-xl font-bold shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm ${
+                            checkoutDisabled
+                                ? 'bg-slate-800/50 text-slate-500 border border-slate-800/50'
+                                : isOffline && !offlineCaptureAllowed
+                                    ? 'bg-rose-950/40 text-rose-400 border border-rose-500/30'
+                                : isOffline && offlineCaptureAllowed
+                                    ? 'bg-amber-950/40 text-amber-300 border border-amber-500/30 shadow-amber-500/10'
+                                : isStale
+                                    ? 'bg-amber-950/40 text-amber-400 border border-amber-500/30 shadow-amber-500/10'
+                                    : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/20'
+                        }`}
+                    >
+                        {!hasActiveShift ? (
+                            <span>Open shift to start checkout</span>
+                        ) : isActivelySubmitting ? (
+                            <>
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <span>{isOffline ? 'Capturing offline...' : 'Completing sale...'}</span>
+                            </>
+                        ) : hasBlockingStockIssue ? (
+                            <>
+                                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+                                <span>Fix stock issue</span>
+                            </>
+                        ) : isOffline && !offlineCaptureAllowed ? (
+                            <>
+                                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+                                <span>Offline locked</span>
+                            </>
+                        ) : isOffline && offlineCaptureAllowed ? (
+                            <>
+                                <WifiOff className="w-4 h-4 shrink-0 text-amber-300" />
+                                <span>Ready to complete</span>
+                                <ChevronRight className="w-4 h-4 shrink-0" />
+                            </>
+                        ) : isStale ? (
+                            <>
+                                <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+                                <span>Sync required</span>
+                            </>
+                        ) : (
+                            <span>Checkout</span>
+                        )}
+                    </button>
+
+                    {activeItemCount > 0 && (
+                        <button
+                            onClick={onClear}
+                            disabled={isActivelySubmitting || !hasActiveShift}
+                            className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-slate-800/40 hover:bg-slate-800 text-slate-400 hover:text-slate-200 rounded-xl font-medium transition-all text-xs border border-slate-800"
+                        >
+                            <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                            <span>Clear cart</span>
+                        </button>
+                    )}
+                </div>
+
+                {/* Removed bottom offline info banner to reduce visual clutter on Checkout */}
             </div>
+        </div>
+    );
+}
+
+function CartQueueNotice({ failedCount, reviewCount }) {
+    const totalIssues = failedCount + reviewCount;
+    if (totalIssues === 0) return null;
+
+    return (
+        <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 flex items-center justify-between text-xs text-rose-300 gap-3 animate-in fade-in duration-200">
+            <div className="flex items-start gap-2.5 min-w-0">
+                <AlertCircle className="w-4.5 h-4.5 text-rose-400 shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                    <strong className="font-bold text-slate-200 block truncate">
+                        {totalIssues} offline sale{totalIssues === 1 ? '' : 's'} need admin review
+                    </strong>
+                    <span className="text-[10px] text-slate-500 font-medium">Review before posting to server.</span>
+                </div>
+            </div>
+            <Link
+                href={route('pos.terminal.sync-status')}
+                className="shrink-0 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-rose-300 transition-all border border-rose-500/20 active:scale-95"
+            >
+                Review Queue
+            </Link>
         </div>
     );
 }

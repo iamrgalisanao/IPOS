@@ -7,13 +7,15 @@ use App\Models\SalesMachineProfile;
 use App\Models\Branch;
 use App\Models\PrinterProfile;
 use App\Services\POS\OfflineReadiness\OfflineSettingsValidator;
+use App\Services\POS\TerminalLayoutResolver;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 class SalesMachineProfileController extends Controller
 {
     public function __construct(
-        protected OfflineSettingsValidator $validator
+        protected OfflineSettingsValidator $validator,
+        protected TerminalLayoutResolver $layoutResolver
     ) {}
 
     /**
@@ -40,6 +42,18 @@ class SalesMachineProfileController extends Controller
         }
 
         $profiles = $query->orderBy('profile_code')->paginate(20)->withQueryString();
+
+        $profiles->getCollection()->transform(function ($profile) {
+            $resolvedLayout = $this->layoutResolver->resolveForProfile($profile);
+            $source = $this->layoutResolver->getResolutionSource($profile);
+
+            $profile->effective_layout_name = $resolvedLayout?->name ?? 'None';
+            $profile->effective_layout_source = $source === TerminalLayoutResolver::SOURCE_TERMINAL_OVERRIDE
+                ? 'Override'
+                : ($source === TerminalLayoutResolver::SOURCE_BRANCH_DEFAULT ? 'Branch Default' : 'None');
+
+            return $profile;
+        });
 
         return Inertia::render('Admin/SalesMachineProfiles/Index', [
             'profiles' => $profiles,
@@ -74,10 +88,28 @@ class SalesMachineProfileController extends Controller
             ->orderBy('id')
             ->get();
 
+        $posLayouts = \App\Models\PosLayout::where('tenant_id', $salesMachineProfile->tenant_id)
+            ->where('status', \App\Models\PosLayout::STATUS_PUBLISHED)
+            ->whereHas('branches', function ($query) use ($salesMachineProfile) {
+                $query->where('branches.id', $salesMachineProfile->branch_id);
+            })
+            ->orderBy('name')
+            ->get(['id', 'name', 'version']);
+
+        $resolvedLayout = $this->layoutResolver->resolveForProfile($salesMachineProfile);
+        $source = $this->layoutResolver->getResolutionSource($salesMachineProfile);
+
+        $effectiveLayoutSource = $source === TerminalLayoutResolver::SOURCE_TERMINAL_OVERRIDE
+            ? 'Terminal Override'
+            : ($source === TerminalLayoutResolver::SOURCE_BRANCH_DEFAULT ? 'Branch Default' : 'None');
+
         return Inertia::render('Admin/SalesMachineProfiles/Edit', [
-            'profile'          => $salesMachineProfile,
-            'offlineStatus'    => $validationResult,
-            'printerProfiles'  => $printerProfiles,
+            'profile'                => $salesMachineProfile,
+            'offlineStatus'          => $validationResult,
+            'printerProfiles'        => $printerProfiles,
+            'posLayouts'             => $posLayouts,
+            'effectiveLayoutName'    => $resolvedLayout?->name ?? 'None',
+            'effectiveLayoutSource'  => $effectiveLayoutSource,
         ]);
     }
 
@@ -90,6 +122,19 @@ class SalesMachineProfileController extends Controller
 
         if ($request->exists('printer_profile_id')) {
             abort_unless($request->user()->hasPermission('manage_printer_profiles'), 403);
+        }
+
+        $layoutChanged = false;
+        $newLayoutId = null;
+        if ($request->has('pos_layout_id')) {
+            if (!$request->filled('pos_layout_id')) {
+                $request->merge(['pos_layout_id' => null]);
+            }
+            $newLayoutId = $request->input('pos_layout_id');
+            $layoutChanged = $newLayoutId !== $salesMachineProfile->pos_layout_id;
+            if ($layoutChanged) {
+                abort_unless($request->user()->hasPermission('pos-layouts.manage'), 403, 'Unauthorized to manage terminal layout overrides.');
+            }
         }
 
         $validated = $request->validate([
@@ -141,6 +186,35 @@ class SalesMachineProfileController extends Controller
                     }
                 }
             ],
+            'pos_layout_id' => [
+                'nullable',
+                'uuid',
+                function (string $attribute, mixed $value, \Closure $fail) use ($salesMachineProfile) {
+                    if ($value === null) {
+                        return;
+                    }
+                    $layout = \App\Models\PosLayout::withoutGlobalScopes()->find($value);
+                    if (!$layout) {
+                        $fail('The selected POS layout does not exist.');
+                        return;
+                    }
+                    if ($layout->tenant_id !== $salesMachineProfile->tenant_id) {
+                        $fail('The selected POS layout belongs to a different tenant.');
+                        return;
+                    }
+                    if ($layout->status !== \App\Models\PosLayout::STATUS_PUBLISHED) {
+                        $fail('Only published layouts can be assigned to a terminal.');
+                        return;
+                    }
+                    $branchAssociated = \Illuminate\Support\Facades\DB::table('branch_pos_layout')
+                        ->where('pos_layout_id', $value)
+                        ->where('branch_id', $salesMachineProfile->branch_id)
+                        ->exists();
+                    if (!$branchAssociated) {
+                        $fail('The selected layout is not published to this terminal\'s branch.');
+                    }
+                }
+            ],
         ]);
 
         // Enforce no-decrement guard at controller level as well
@@ -174,7 +248,43 @@ class SalesMachineProfileController extends Controller
             }
         }
 
+        $previousLayoutId = $salesMachineProfile->pos_layout_id;
+        $layoutChanged = array_key_exists('pos_layout_id', $validated) && $validated['pos_layout_id'] !== $previousLayoutId;
+
         $salesMachineProfile->update($validated);
+
+        if ($layoutChanged) {
+            $newLayoutId = $validated['pos_layout_id'] ?? null;
+            if ($newLayoutId) {
+                $layout = \App\Models\PosLayout::withoutGlobalScopes()->find($newLayoutId);
+                $action = 'terminal_layout_override_updated';
+                $message = "Assigned POS layout override: {$layout->name}";
+                $newSource = 'terminal_override';
+            } else {
+                $action = 'terminal_layout_override_removed';
+                $message = "Removed POS layout override (reverted to branch default)";
+                $newSource = 'branch_default';
+            }
+
+            \App\Models\AuditLog::create([
+                'tenant_id'      => $salesMachineProfile->tenant_id,
+                'branch_id'      => $salesMachineProfile->branch_id,
+                'actor_user_id'  => \Illuminate\Support\Facades\Auth::id(),
+                'actor_type'     => 'user',
+                'action'         => $action,
+                'auditable_type' => SalesMachineProfile::class,
+                'auditable_id'   => $salesMachineProfile->id,
+                'metadata'       => [
+                    'sales_machine_profile_id' => $salesMachineProfile->id,
+                    'terminal_code'            => $salesMachineProfile->terminal_identifier ?? $salesMachineProfile->profile_code,
+                    'previous_pos_layout_id'   => $previousLayoutId,
+                    'new_pos_layout_id'        => $newLayoutId,
+                    'previous_layout_source'   => $previousLayoutId ? 'terminal_override' : 'branch_default',
+                    'new_layout_source'        => $newSource,
+                    'changed_by'               => \Illuminate\Support\Facades\Auth::id(),
+                ],
+            ]);
+        }
 
         return redirect()
             ->route('admin.sales-machine-profiles.index')

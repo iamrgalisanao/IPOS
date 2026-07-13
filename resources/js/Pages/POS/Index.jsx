@@ -8,7 +8,7 @@ import SplitPayWizard from './Components/SplitPayWizard';
 import FailureGuardianBanner from './Components/FailureGuardianBanner';
 import { isCashPayment, calculateCashChange } from './helpers/splitPaymentHelper';
 import {
-    ShoppingCart, Package, AlertTriangle, ArrowDownCircle, MonitorSmartphone, LayoutGrid, Settings,
+    ShoppingCart, Package, AlertTriangle, ArrowDownCircle, MonitorSmartphone, LayoutGrid, Settings, Plus, Clock,
     Wine, Cookie, Shirt, Smartphone, Laptop, Pill, Wrench, FolderOpen, Layers, Tag, ChevronRight, X, ArrowLeft, Loader2, Sparkles, Utensils, Coffee, ShoppingBag, LogIn, RefreshCw
 } from 'lucide-react';
 import { useTransactionStore } from './hooks/useTransactionStore';
@@ -81,6 +81,28 @@ export default function Index({ categories, initial_products, payment_methods, d
     const [terminalLocked, setTerminalLocked] = useState(() => {
         return localStorage.getItem(`terminal_locked_${user_id}`) === 'true';
     });
+    const [configBannerDismissed, setConfigBannerDismissed] = useState(false);
+    const [shiftDuration, setShiftDuration] = useState('');
+
+    useEffect(() => {
+        if (!activeShift?.opened_at) return;
+
+        const timer = setInterval(() => {
+            const start = new Date(activeShift.opened_at);
+            const now = new Date();
+            const diff = Math.floor((now - start) / 1000);
+
+            const hours = Math.floor(diff / 3600);
+            const minutes = Math.floor((diff % 3600) / 60);
+            const seconds = diff % 60;
+
+            setShiftDuration(
+                `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+            );
+        }, 1000);
+
+        return () => clearInterval(timer);
+    }, [activeShift?.opened_at]);
     const [lastSelectedCategory, setLastSelectedCategory] = useState(null);
     const [localCategories, setLocalCategories] = useState(categories || []);
     const [offlineInitialProducts] = useState(initial_products || []);
@@ -167,6 +189,101 @@ export default function Index({ categories, initial_products, payment_methods, d
         triggerSync,
         checkConnectivity
     } = useConnectivityStore();
+
+    const reviewCount = Number(offlineQueueSummary.conflict || 0) + Number(offlineQueueSummary.accepted_with_warning || 0);
+    const lastSyncedTime = lastSyncedAt ? new Date(lastSyncedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }).toLowerCase() : 'never';
+
+    const getCheckoutAlertState = () => {
+        if (posAccessIssue?.code === 'TERMINAL_CONTEXT_INVALID' || terminalContextInvalid) {
+            return {
+                type: 'terminal_invalid',
+                severity: 'error',
+                title: 'Terminal activation required',
+                message: 'This device is not bound to an active POS terminal. Activate this terminal before selling.',
+                primaryAction: 'activate_terminal'
+            };
+        }
+
+        if (!activeShift) {
+            return {
+                type: 'shift_required',
+                severity: 'warning',
+                title: 'Open Shift to Start Selling',
+                message: 'Cashier sales are disabled until a shift is opened.',
+                primaryAction: 'open_shift'
+            };
+        }
+
+        // We treat isStale as a blocking configuration refresh
+        if (isStale && !configBannerDismissed) {
+            return {
+                type: 'config_blocking',
+                severity: 'warning',
+                title: 'Checkout paused: configuration refresh required',
+                message: 'This terminal has outdated tax or payment rules. Refresh before checkout.',
+                primaryAction: 'refresh_config'
+            };
+        }
+
+        if (reviewCount > 0 && !configBannerDismissed) {
+            return {
+                type: 'offline_review',
+                severity: 'warning',
+                title: 'Offline transactions need admin review',
+                message: `${reviewCount} offline sale${reviewCount === 1 ? '' : 's'} require review before posting.`,
+                primaryAction: 'review_queue'
+            };
+        }
+
+        if (layoutDrift && !layoutDriftDismissed) {
+            return {
+                type: 'layout_update',
+                severity: 'info',
+                title: 'Updated POS layout available',
+                message: 'Reload the product grid without clearing the cart.',
+                primaryAction: 'reload_layout'
+            };
+        }
+
+        return null;
+    };
+
+    const checkoutAlert = getCheckoutAlertState();
+
+    const [isReloadingLayout, setIsReloadingLayout] = useState(false);
+    const handleReloadLayout = async () => {
+        if (isReloadingLayout) return;
+        setIsReloadingLayout(true);
+        try {
+            const response = await axios.get(route('pos.layout'));
+            if (response.data && !response.data.fallback) {
+                try {
+                    const { catalogCache: cache } = await import('@/POS/offline/catalogCache');
+                    await cache.updateLayoutVersionHash(response.data.layout_version_hash ?? null);
+                } catch (cacheErr) {
+                    console.warn('Failed to persist refreshed layout hash to IndexedDB:', cacheErr);
+                }
+                setActiveLayout(response.data);
+                setLayoutDrift(false);
+                setLayoutDriftName(null);
+            }
+        } catch (err) {
+            console.error('Failed to reload POS layout:', err);
+        } finally {
+            setIsReloadingLayout(false);
+        }
+    };
+
+    const showLayoutEditControls = is_admin_mode && !route().current('pos.terminal.checkout');
+
+    const handleRefreshConfig = async () => {
+        try {
+            await checkConnectivity?.();
+            window.location.reload();
+        } catch (err) {
+            console.error('Failed to refresh config:', err);
+        }
+    };
 
     // Dynamically load categories from cache when sync state updates
     useEffect(() => {
@@ -290,6 +407,7 @@ export default function Index({ categories, initial_products, payment_methods, d
     };
 
     const handleSelectCategory = (cat) => {
+        if (!activeShift && !is_admin_mode) return;
         if (!isProductPanelOpen) {
             setProducts([]); // Clear any previous products instantly to force skeleton load
         }
@@ -607,6 +725,7 @@ export default function Index({ categories, initial_products, payment_methods, d
         try {
             const response = await fetch('/pos/checkout/status', {
                 method: 'POST',
+                credentials: 'same-origin',
                 headers: buildPosHeaders(),
                 body: JSON.stringify({ client_request_uuid: uuid })
             });
@@ -810,16 +929,17 @@ export default function Index({ categories, initial_products, payment_methods, d
                         if (isExpectedStartupFetchFailure(regErr)) {
                             console.info('Local sync broker registration unavailable; using offline local sync state.');
                             setLocalSyncStatus({ status: 'offline', broker: null });
-                            return;
+                        } else {
+                            console.error("Failed to register local sync broker:", regErr);
+                            setLocalSyncStatus({ status: 'offline', broker: null });
                         }
-
-                        console.error("Failed to register as local master:", regErr);
                     }
                 } else if (isExpectedStartupFetchFailure(err)) {
                     console.info('Local sync broker unavailable; using offline local sync state.');
                     setLocalSyncStatus({ status: 'offline', broker: null });
                 } else {
                     console.error("Failed to discover local sync broker:", err);
+                    setLocalSyncStatus({ status: 'offline', broker: null });
                 }
             }
         };
@@ -1003,6 +1123,7 @@ export default function Index({ categories, initial_products, payment_methods, d
                 if (tenant_id) url.searchParams.append('test_tenant_id', tenant_id);
 
                 const response = await fetch(url, {
+                    credentials: 'same-origin',
                     headers: buildPosHeaders(),
                 });
                 if (!response.ok) {
@@ -1077,6 +1198,7 @@ export default function Index({ categories, initial_products, payment_methods, d
     }, [searchQuery, selectedCategory, isOnline, lastSyncedAt, localCategories]);
 
     const addToCart = (product) => {
+        if (!activeShift && !is_admin_mode) return;
         if (isSubmitting && cartActiveLineCount > 0) return;
         if (isSubmitting) {
             setIsSubmitting(false);
@@ -1105,6 +1227,7 @@ export default function Index({ categories, initial_products, payment_methods, d
     };
 
     const updateQuantity = (itemId, delta) => {
+        if (!activeShift && !is_admin_mode) return;
         if (isSubmitting && cartActiveLineCount > 0) return;
         if (isSubmitting) {
             setIsSubmitting(false);
@@ -1134,6 +1257,7 @@ export default function Index({ categories, initial_products, payment_methods, d
     };
 
     const clearCartState = () => {
+        if (!activeShift && !is_admin_mode) return;
         setIsSubmitting(false);
         setCart([]);
         setCheckoutState('draft');
@@ -1148,6 +1272,7 @@ export default function Index({ categories, initial_products, payment_methods, d
     };
 
     const handleRetryCheckout = async () => {
+        if (!activeShift && !is_admin_mode) return;
         setGuardianBanner(null);
         await handleFinalTap();
     };
@@ -1158,6 +1283,7 @@ export default function Index({ categories, initial_products, payment_methods, d
     };
 
     const handleFinalTap = async () => {
+        if (!activeShift && !is_admin_mode) return;
         if (cartActiveLineCount === 0 || isCheckingStatus) {
             if (isSubmitting) {
                 setIsSubmitting(false);
@@ -1247,6 +1373,7 @@ export default function Index({ categories, initial_products, payment_methods, d
             // 1. Validate Draft
             const validateRes = await fetch('/pos/checkout/validate', {
                 method: 'POST',
+                credentials: 'same-origin',
                 headers: buildPosHeaders(taxHash),
                 body: JSON.stringify(payload)
             });
@@ -1423,6 +1550,7 @@ export default function Index({ categories, initial_products, payment_methods, d
         // After successful payment, fetch final receipt
         try {
             const receiptRes = await fetch(`/pos/sales/${activeSale.id}/receipt`, {
+                credentials: 'same-origin',
                 headers: buildPosHeaders(),
             });
             if (receiptRes.ok) {
@@ -1464,6 +1592,11 @@ export default function Index({ categories, initial_products, payment_methods, d
         }
 
         if (posAccessIssue.action === 'open_shift') {
+            if (connOffline) {
+                setErrorMessage("Internet connection required to open or modify cashier shifts.");
+                setTimeout(() => setErrorMessage(null), 5000);
+                return;
+            }
             window.location.href = route('shifts.open');
             return;
         }
@@ -1479,23 +1612,6 @@ export default function Index({ categories, initial_products, payment_methods, d
         <div className="h-[100dvh] w-full bg-slate-950 text-slate-100 flex flex-col overflow-hidden relative">
             <Head title="POS Terminal" />
 
-            <ConnectivityBanner />
-
-            {layoutDrift && !layoutDriftDismissed && (
-                <StaleLayoutBanner
-                    layoutName={layoutDriftName}
-                    onReloaded={(data) => {
-                        // Update activeLayout WITHOUT touching the cart
-                        if (data?.layout) {
-                            setActiveLayout(data);
-                        }
-                        setLayoutDrift(false);
-                        setLayoutDriftName(null);
-                    }}
-                    onDismiss={() => setLayoutDriftDismissed(true)}
-                />
-            )}
-
             {posAccessIssue?.code === 'TERMINAL_CONTEXT_INVALID' ? (
                 <ActivationModal
                     onActivated={(data) => {
@@ -1503,58 +1619,114 @@ export default function Index({ categories, initial_products, payment_methods, d
                         refreshOfflineState();
                     }}
                 />
-            ) : posAccessIssue && (
-                <div className={`shrink-0 z-40 border-b px-4 py-3 ${
-                    posAccessIssue.tone === 'amber'
-                        ? 'border-amber-500/30 bg-amber-950/45 text-amber-100'
-                        : 'border-rose-500/30 bg-rose-950/45 text-rose-100'
+            ) : null}
+
+            {checkoutAlert && (
+                <div className={`shrink-0 z-40 border-b px-6 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in duration-200 ${
+                    checkoutAlert.severity === 'error'
+                        ? 'border-rose-500/30 bg-rose-950/45 text-rose-100'
+                        : checkoutAlert.severity === 'warning'
+                            ? 'border-amber-500/30 bg-amber-950/45 text-amber-100'
+                            : 'border-blue-500/30 bg-blue-950/45 text-blue-100'
                 }`}>
-                    <div className="mx-auto flex max-w-[96rem] flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex min-w-0 items-start gap-3">
-                            <AlertTriangle className={`mt-0.5 h-5 w-5 shrink-0 ${
-                                posAccessIssue.tone === 'amber' ? 'text-amber-300' : 'text-rose-300'
-                            }`} />
-                            <div className="min-w-0">
-                                <p className="text-sm font-black uppercase tracking-[0.12em]">
-                                    {posAccessIssue.title}
-                                </p>
-                                <p className="mt-1 text-sm text-slate-200">
-                                    {posAccessIssue.message}
-                                </p>
-                                {posAccessIssue.source && (
-                                    <p className="mt-1 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                                        Source: {posAccessIssue.source}
-                                    </p>
-                                )}
-                            </div>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                            <button
-                                type="button"
-                                onClick={handlePosAccessIssueAction}
-                                className={`inline-flex h-10 items-center gap-2 rounded-lg border px-4 text-xs font-black uppercase tracking-[0.14em] transition-colors ${
-                                    posAccessIssue.tone === 'amber'
-                                        ? 'border-amber-300/40 bg-amber-400/10 text-amber-100 hover:bg-amber-400/20'
-                                        : 'border-rose-300/40 bg-rose-400/10 text-rose-100 hover:bg-rose-400/20'
-                                }`}
-                            >
-                                {posAccessIssue.action === 'login' || posAccessIssue.action === 'open_shift' ? (
-                                    <LogIn className="h-4 w-4" />
-                                ) : (
-                                    <RefreshCw className="h-4 w-4" />
-                                )}
-                                {posAccessIssue.actionLabel}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setPosAccessIssue(null)}
-                                className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-slate-950/30 text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
-                                aria-label="Dismiss POS access issue"
-                            >
-                                <X className="h-4 w-4" />
-                            </button>
+                    <div className="flex items-start gap-3">
+                        <AlertTriangle className={`mt-0.5 h-5 w-5 shrink-0 ${
+                            checkoutAlert.severity === 'error' ? 'text-rose-400' :
+                            checkoutAlert.severity === 'warning' ? 'text-amber-400' : 'text-blue-400'
+                        }`} />
+                        <div>
+                            <h3 className="font-bold text-sm leading-snug">{checkoutAlert.title}</h3>
+                            <p className="mt-1 text-xs opacity-90 leading-relaxed font-medium">
+                                {checkoutAlert.message}
+                            </p>
                         </div>
                     </div>
+                    <div className="flex items-center gap-3 shrink-0 self-end sm:self-center">
+                        {checkoutAlert.type !== 'terminal_invalid' && checkoutAlert.type !== 'shift_required' && (
+                            <button
+                                type="button"
+                                onClick={() => setConfigBannerDismissed(true)}
+                                className="rounded-lg border border-slate-800 bg-slate-900/50 px-4 py-2 text-xs font-bold text-slate-300 hover:bg-slate-800 transition-all active:scale-95"
+                            >
+                                Dismiss
+                            </button>
+                        )}
+                        {checkoutAlert.primaryAction === 'activate_terminal' && (
+                            <button
+                                type="button"
+                                id="activate-terminal-trigger-btn"
+                                onClick={() => {
+                                    setPosAccessIssue({ code: 'TERMINAL_CONTEXT_INVALID' });
+                                }}
+                                className="rounded-lg bg-rose-500/20 border border-rose-500/30 px-4 py-2 text-xs font-bold text-rose-300 hover:bg-rose-500/30 transition-all active:scale-95"
+                            >
+                                Activate Terminal
+                            </button>
+                        )}
+                        {checkoutAlert.primaryAction === 'open_shift' && (
+                            <Link
+                                href={route('shifts.open')}
+                                onClick={(e) => {
+                                    if (connOffline) {
+                                        e.preventDefault();
+                                        setErrorMessage("Internet connection required to open or modify cashier shifts.");
+                                        setTimeout(() => setErrorMessage(null), 5000);
+                                    }
+                                }}
+                                className="rounded-lg bg-amber-500/20 border border-amber-500/30 px-4 py-2 text-xs font-bold text-amber-300 hover:bg-amber-500/30 transition-all active:scale-95"
+                            >
+                                Open Shift
+                            </Link>
+                        )}
+                        {checkoutAlert.primaryAction === 'refresh_config' && (
+                            <button
+                                type="button"
+                                onClick={handleRefreshConfig}
+                                className="rounded-lg bg-amber-500/20 border border-amber-500/30 px-4 py-2 text-xs font-bold text-amber-300 hover:bg-amber-500/30 transition-all active:scale-95"
+                            >
+                                Refresh Config
+                            </button>
+                        )}
+                        {checkoutAlert.primaryAction === 'review_queue' && (
+                            <Link
+                                href={route('pos.terminal.sync-status')}
+                                className="rounded-lg bg-amber-500/20 border border-amber-500/30 px-4 py-2 text-xs font-bold text-amber-300 hover:bg-amber-500/30 transition-all active:scale-95"
+                            >
+                                Review Queue
+                            </Link>
+                        )}
+                        {checkoutAlert.primaryAction === 'reload_layout' && (
+                            <button
+                                type="button"
+                                onClick={handleReloadLayout}
+                                disabled={isReloadingLayout}
+                                className="rounded-lg bg-blue-500/20 border border-blue-500/30 px-4 py-2 text-xs font-bold text-blue-300 hover:bg-blue-500/30 transition-all active:scale-95 flex items-center gap-1.5"
+                            >
+                                {isReloadingLayout ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                    <RefreshCw className="w-3.5 h-3.5" />
+                                )}
+                                Reload Layout
+                            </button>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Compact Offline Mode strip */}
+            {isOffline && !checkoutAlert && (
+                <div className="mx-6 mt-4 bg-amber-500/10 border border-amber-500/20 text-amber-300 px-4 py-2.5 rounded-xl flex items-center justify-between text-xs animate-in fade-in duration-200">
+                    <div className="flex items-center gap-2">
+                        <WifiOff className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
+                        <span>Offline mode — Cash sales only. {offlineQueueSummary.pending} sale{offlineQueueSummary.pending === 1 ? '' : 's'} pending sync.</span>
+                    </div>
+                    <Link
+                        href={route('pos.terminal.sync-status')}
+                        className="text-xs font-bold underline hover:text-amber-200 transition-colors"
+                    >
+                        View sync status
+                    </Link>
                 </div>
             )}
 
@@ -1617,22 +1789,135 @@ export default function Index({ categories, initial_products, payment_methods, d
                     </div>
                 </div>
             ) : (
-                <ShiftHUD
-                    shift={activeShift}
-                    timecardStatus={timecardStatus}
-                    onRecordEvent={() => setShowCashEvent(true)}
-                    onSpotAudit={() => setShowSpotAudit(true)}
-                    onCloseShift={() => setShowCloseShift(true)}
-                    onLockTerminal={() => {
-                        localStorage.setItem(`terminal_locked_${user_id}`, 'true');
-                        setTerminalLocked(true);
-                    }}
-                />
+                <div className="shrink-0 space-y-3">
+                    {/* Unified Amber Alert Banner */}
+                    {(isStale || reviewCount > 0) && !configBannerDismissed && (
+                        <div className="mx-6 mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in duration-200">
+                            <div className="flex items-start gap-3">
+                                <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-400 shrink-0" />
+                                <div>
+                                    <h3 className="font-bold text-sm">
+                                        {isStale && reviewCount > 0
+                                            ? `Config outdated, ${reviewCount} items need review`
+                                            : isStale
+                                                ? 'Config outdated'
+                                                : `${reviewCount} items need review`}
+                                    </h3>
+                                    <p className="mt-1 text-xs text-amber-200/80 leading-relaxed font-medium">
+                                        Cache last synced {lastSyncedTime}. Refresh config and resolve conflicts before checkout.
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3 shrink-0">
+                                <button
+                                    type="button"
+                                    onClick={() => setConfigBannerDismissed(true)}
+                                    className="rounded-lg border border-slate-800 bg-slate-900/50 px-4 py-2 text-xs font-bold text-slate-300 hover:bg-slate-800 transition-all active:scale-95"
+                                >
+                                    Dismiss
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleRefreshConfig}
+                                    className="rounded-lg bg-amber-500/20 border border-amber-500/30 px-4 py-2 text-xs font-bold text-amber-300 hover:bg-amber-500/30 transition-all active:scale-95"
+                                >
+                                    Refresh config
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Quiet Shift Row */}
+                    {!activeShift ? (
+                        <div className="mx-6 mt-4 flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/30 px-4 py-3 text-slate-400">
+                            <div className="flex items-center gap-2 text-sm font-medium">
+                                <Clock className="w-4 h-4 text-slate-500" />
+                                <span>No active shift</span>
+                            </div>
+                            <Link
+                                href={route('shifts.open')}
+                                onClick={(e) => {
+                                    if (connOffline) {
+                                        e.preventDefault();
+                                        setErrorMessage("Internet connection required to open or modify cashier shifts.");
+                                        setTimeout(() => setErrorMessage(null), 5000);
+                                    }
+                                }}
+                                className="rounded-lg border border-slate-700 bg-slate-800/40 px-3 py-1.5 text-xs font-bold text-slate-200 hover:bg-slate-800 hover:text-white transition-all active:scale-95"
+                            >
+                                Open shift
+                            </Link>
+                        </div>
+                    ) : (
+                        <div className="mx-6 mt-4 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/30 px-4 py-3 text-slate-400">
+                            <div className="flex items-center gap-6">
+                                <div className="flex items-center gap-2 text-sm text-slate-300 font-medium">
+                                    <Clock className="w-4 h-4 text-slate-500" />
+                                    <span>Active shift: {activeShift.cashier_name}</span>
+                                    {timecardStatus && (
+                                        <span
+                                            className={`inline-block w-2 h-2 rounded-full ${timecardStatus.clocked_in ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}
+                                            title={timecardStatus.clocked_in ? 'Timecard clocked in' : 'Timecard clocked out'}
+                                        />
+                                    )}
+                                </div>
+                                {shiftDuration && (
+                                    <span className="text-xs font-mono text-slate-500 font-medium">Duration: {shiftDuration}</span>
+                                )}
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <button
+                                    onClick={() => setShowCashEvent(true)}
+                                    className="rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-all active:scale-95"
+                                >
+                                    Record cash
+                                </button>
+                                <button
+                                    onClick={() => setShowSpotAudit(true)}
+                                    className="rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-all active:scale-95"
+                                >
+                                    Spot audit
+                                </button>
+                                <button
+                                    onClick={() => setShowCloseShift(true)}
+                                    className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-1.5 text-xs font-bold text-rose-300 hover:bg-rose-500/20 transition-all active:scale-95"
+                                >
+                                    Close shift
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
             )}
 
             <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0">
                 {/* Product Catalog Column */}
                 <div className="flex-1 flex flex-col overflow-hidden min-h-0 relative">
+                    {!activeShift && !showLayoutEditControls && (
+                        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md z-20 flex flex-col items-center justify-center text-center p-6 animate-in fade-in duration-200">
+                            <div className="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500 mb-4">
+                                <Clock className="w-8 h-8 animate-pulse text-indigo-400" />
+                            </div>
+                            <h2 className="text-lg font-bold text-slate-200">Open Shift to Start Selling</h2>
+                            <p className="text-sm text-slate-500 max-w-sm mt-2 leading-relaxed">
+                                Cashier sales are disabled until a shift is opened.
+                            </p>
+                            <Link
+                                href={route('shifts.open')}
+                                onClick={(e) => {
+                                    if (connOffline) {
+                                        e.preventDefault();
+                                        setErrorMessage("Internet connection required to open or modify cashier shifts.");
+                                        setTimeout(() => setErrorMessage(null), 5000);
+                                    }
+                                }}
+                                className="mt-6 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-3 shadow-lg shadow-indigo-600/20 transition-all active:scale-95 text-sm"
+                            >
+                                Open Shift
+                            </Link>
+                        </div>
+                    )}
+
                     {/* Header / Search Bar Area */}
                     <header className="p-4 border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-10 shrink-0">
                         <div className="flex flex-col gap-4 sm:flex-row sm:items-center justify-between">
@@ -1643,41 +1928,20 @@ export default function Index({ categories, initial_products, payment_methods, d
                                     </div>
                                     <h1 className="text-xl font-bold tracking-tight">Abbadev IPOS Terminal</h1>
 
-                                    {/* Cache Status Badge */}
+                                    {/* Config Status Badge */}
                                     <div className="flex items-center gap-1.5 ml-2">
                                         <span className={`w-2 h-2 rounded-full ${
-                                            connOffline ? 'bg-amber-500 animate-pulse' :
                                             isChecking ? 'bg-indigo-500 animate-pulse' :
-                                            isStale ? 'bg-rose-500 animate-pulse' :
+                                            isStale ? 'bg-amber-500 animate-pulse' :
                                             lastSyncedAt ? 'bg-emerald-500' : 'bg-slate-500'
                                         }`} />
                                         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                                            {connOffline ? 'Offline (Cached Mode)' :
-                                             isChecking ? 'Syncing...' :
-                                             isStale ? 'Cache Outdated' :
-                                             lastSyncedAt ? 'Cache Sync\'d' : 'Cache Empty'}
-                                        </span>
-                                    </div>
-
-                                    {/* Local Sync Broker Status */}
-                                    <div className="flex items-center gap-1.5 ml-2 border-l border-slate-800 pl-3">
-                                        <span className={`w-2 h-2 rounded-full ${
-                                            localSyncStatus.status === 'master' ? 'bg-indigo-400 animate-pulse' :
-                                            localSyncStatus.status === 'slave' ? 'bg-teal-400 animate-pulse' :
-                                            'bg-slate-600'
-                                        }`} />
-                                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                                            {localSyncStatus.status === 'master' ? `LAN Master (${localSyncStatus.broker?.local_ip_address || 'local'})` :
-                                             localSyncStatus.status === 'slave' ? `LAN Slave (${localSyncStatus.broker?.local_ip_address || 'local'})` :
-                                             'Local Sync Offline'}
+                                            {isChecking ? 'Syncing...' :
+                                             isStale ? 'Config update available' :
+                                             lastSyncedAt ? 'Synchronized' : 'Sync not available'}
                                         </span>
                                     </div>
                                 </div>
-                                {lastSyncedAt && (
-                                    <p className="text-[10px] text-slate-500 ml-12">
-                                        Last synchronized: {new Date(lastSyncedAt).toLocaleTimeString()} ({isStale ? 'Expired' : 'Active'})
-                                    </p>
-                                )}
                             </div>
                             <div className="flex items-center gap-3 flex-1 sm:max-w-xl">
                                 {/* Table Selector */}
@@ -1701,6 +1965,7 @@ export default function Index({ categories, initial_products, payment_methods, d
                                     onChange={setSearchQuery}
                                     onScan={(barcode) => setSearchQuery(barcode)}
                                     loading={loading}
+                                    disabled={!activeShift && !showLayoutEditControls}
                                 />
                             </div>
                         </div>
@@ -1731,6 +1996,34 @@ export default function Index({ categories, initial_products, payment_methods, d
                                     </div>
                                 </button>
                             ))}
+                            {showLayoutEditControls && (
+                                <button
+                                    onClick={() => window.location.href = route('admin.pos-layouts.index')}
+                                    className="group flex flex-col items-center justify-between p-6 rounded-2xl bg-slate-900/30 border border-dashed border-slate-800 hover:border-indigo-500/50 hover:bg-slate-900/60 hover:shadow-[0_0_30px_rgba(99,102,241,0.08)] transition-all duration-300 transform active:scale-95 text-center h-44 relative overflow-hidden"
+                                >
+                                    <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+
+                                    <div className="w-16 h-16 rounded-2xl bg-slate-950/40 border border-slate-800/80 group-hover:border-indigo-500/30 text-slate-600 group-hover:text-indigo-400 flex items-center justify-center transition-all duration-300 shrink-0">
+                                        <Plus className="w-6 h-6" />
+                                    </div>
+
+                                    <div className="flex-1 flex flex-col justify-center mt-4">
+                                        <span className="font-bold text-sm text-slate-400 group-hover:text-white tracking-wide transition-colors leading-tight">
+                                            Add category
+                                        </span>
+                                        <span className="text-[10px] text-slate-500 group-hover:text-indigo-400/80 font-semibold uppercase tracking-widest mt-1">
+                                            Manage in settings
+                                        </span>
+                                    </div>
+                                </button>
+                            )}
+                            {localCategories.length === 0 && !showLayoutEditControls && (
+                                <div className="col-span-full py-16 text-center text-slate-650">
+                                    <Layers className="w-12 h-12 text-slate-800 mx-auto mb-3" />
+                                    <p className="font-bold text-slate-400 text-sm">Layout not configured</p>
+                                    <p className="text-xs text-slate-600 mt-1.5 max-w-xs mx-auto font-medium">Ask an admin to configure the POS terminal layout.</p>
+                                </div>
+                            )}
                         </div>
                     </section>
 
@@ -1845,6 +2138,7 @@ export default function Index({ categories, initial_products, payment_methods, d
                         onRetryOfflineSync={handleRetryOfflineSync}
                         onOpenSpecialDiscount={() => setShowSpecialDiscount(true)}
                         appliedStatutoryDiscount={appliedStatutoryDiscount}
+                        hasActiveShift={Boolean(activeShift)}
                     />
                 </aside>
             </div>

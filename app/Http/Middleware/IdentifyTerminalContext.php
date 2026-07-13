@@ -79,12 +79,19 @@ class IdentifyTerminalContext
 
     protected function respondForbidden(Request $request, string $message): Response
     {
-        if ($request->expectsJson() || $request->header('X-Inertia')) {
+        if ($request->expectsJson() && !$request->header('X-Inertia')) {
             return response()->json([
                 'success' => false,
                 'code' => 'TERMINAL_CONTEXT_INVALID',
                 'message' => $message,
             ], 403);
+        }
+
+        if ($request->header('X-Inertia')) {
+            if ($request->routeIs('pos.terminal.checkout')) {
+                abort(403, $message);
+            }
+            return redirect()->route('pos.terminal.checkout')->with('error', $message);
         }
 
         abort(403, $message);

@@ -23,6 +23,7 @@ export interface CacheBootstrapPayload {
     categories: any[];
     tax_categories: any[];
     payment_methods?: any[];
+    cash_drawer_reasons?: any[];
     tenant_context: TenantContext | null;
     branch_context: BranchContext | null;
     machine_profile_context: MachineProfileContext | null;
@@ -34,6 +35,7 @@ export interface CacheBootstrapPayload {
     payment_methods_version_hash?: string | null;
     terminal_policy_version_hash?: string | null;
     printer_profile_version_hash?: string | null;
+    cash_drawer_reasons_version_hash?: string | null;
     config_snapshot_hash?: string | null;
     config_snapshot?: Record<string, any> | null;
     generated_at: string;
@@ -49,6 +51,7 @@ export interface ConfigSnapshotMetadata {
     payment_methods_version_hash: string | null;
     terminal_policy_version_hash: string | null;
     printer_profile_version_hash: string | null;
+    cash_drawer_reasons_version_hash: string | null;
     config_snapshot: Record<string, any> | null;
     generated_at: string | null;
     cache_ttl_seconds: number;
@@ -59,7 +62,10 @@ export function validateBootstrapPayload(payload: any): asserts payload is Cache
         ? Date.parse(payload.generated_at)
         : Number.NaN;
 
-    const contexts = [payload?.tenant_context, payload?.branch_context, payload?.machine_profile_context];
+    const contexts = [payload?.tenant_context, payload?.branch_context];
+    if (payload?.machine_profile_context !== null && payload?.machine_profile_context !== undefined) {
+        contexts.push(payload.machine_profile_context);
+    }
     const objectArrays = [payload?.products, payload?.categories, payload?.tax_categories, payload?.payment_methods];
 
     if (
@@ -69,6 +75,7 @@ export function validateBootstrapPayload(payload: any): asserts payload is Cache
         || !Array.isArray(payload.categories)
         || !Array.isArray(payload.tax_categories)
         || !Array.isArray(payload.payment_methods)
+        || (payload.cash_drawer_reasons !== undefined && !Array.isArray(payload.cash_drawer_reasons))
         || !Array.isArray(payload.permissions)
         || !payload.permissions.every((permission: any) => typeof permission === 'string')
         || !contexts.every((context) => context && typeof context === 'object' && !Array.isArray(context))
@@ -241,6 +248,8 @@ export class CatalogCacheService {
              metadataStore.put(payload.payment_methods_version_hash || null, 'payment_methods_version_hash');
              metadataStore.put(payload.terminal_policy_version_hash || null, 'terminal_policy_version_hash');
              metadataStore.put(payload.printer_profile_version_hash || null, 'printer_profile_version_hash');
+             metadataStore.put(payload.cash_drawer_reasons_version_hash || null, 'cash_drawer_reasons_version_hash');
+             metadataStore.put(payload.cash_drawer_reasons || [], 'cash_drawer_reasons');
              metadataStore.put(payload.config_snapshot_hash || null, 'config_snapshot_hash');
              metadataStore.put(payload.config_snapshot || null, 'config_snapshot');
              metadataStore.put(payload.tenant_context, 'tenant_context');
@@ -300,6 +309,8 @@ export class CatalogCacheService {
             const paymentMethodsHashReq = metadataStore.get('payment_methods_version_hash');
             const terminalPolicyHashReq = metadataStore.get('terminal_policy_version_hash');
             const printerProfileHashReq = metadataStore.get('printer_profile_version_hash');
+            const cashDrawerReasonsHashReq = metadataStore.get('cash_drawer_reasons_version_hash');
+            const cashDrawerReasonsReq = metadataStore.get('cash_drawer_reasons');
             const configSnapshotHashReq = metadataStore.get('config_snapshot_hash');
             const configSnapshotReq = metadataStore.get('config_snapshot');
             const tenantReq = metadataStore.get('tenant_context');
@@ -315,6 +326,7 @@ export class CatalogCacheService {
                     categories: categoriesRequest.result || [],
                     tax_categories: taxCategoriesRequest.result || [],
                     payment_methods: paymentMethodsRequest.result || [],
+                    cash_drawer_reasons: cashDrawerReasonsReq.result || [],
                     tenant_context: tenantReq.result || null,
                     branch_context: branchReq.result || null,
                     machine_profile_context: machineReq.result || null,
@@ -326,6 +338,7 @@ export class CatalogCacheService {
                     payment_methods_version_hash: paymentMethodsHashReq.result || null,
                     terminal_policy_version_hash: terminalPolicyHashReq.result || null,
                     printer_profile_version_hash: printerProfileHashReq.result || null,
+                    cash_drawer_reasons_version_hash: cashDrawerReasonsHashReq.result || null,
                     config_snapshot_hash: configSnapshotHashReq.result || null,
                     config_snapshot: configSnapshotReq.result || null,
                     generated_at: generatedAtReq.result || '',
@@ -370,6 +383,7 @@ export class CatalogCacheService {
             const paymentMethodsHashReq = store.get('payment_methods_version_hash');
             const terminalPolicyHashReq = store.get('terminal_policy_version_hash');
             const printerProfileHashReq = store.get('printer_profile_version_hash');
+            const cashDrawerReasonsHashReq = store.get('cash_drawer_reasons_version_hash');
             const configSnapshotReq = store.get('config_snapshot');
             const generatedAtReq = store.get('generated_at');
             const ttlReq = store.get('cache_ttl_seconds');
@@ -383,6 +397,7 @@ export class CatalogCacheService {
                 payment_methods_version_hash: paymentMethodsHashReq.result || null,
                 terminal_policy_version_hash: terminalPolicyHashReq.result || null,
                 printer_profile_version_hash: printerProfileHashReq.result || null,
+                cash_drawer_reasons_version_hash: cashDrawerReasonsHashReq.result || null,
                 config_snapshot: configSnapshotReq.result || null,
                 generated_at: generatedAtReq.result || null,
                 cache_ttl_seconds: ttlReq.result || 0,

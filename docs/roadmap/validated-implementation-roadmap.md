@@ -53,7 +53,7 @@ For long-term production readiness, the POS Terminal will be hardened as a table
 | **Epic 41** | POS Terminal Production Hardening for Android Tablet | **[Implemented & Locally Validated / UAT Release Gate Pending / Hardware Validation Deferred]** |
 | **Epic 42** | Windows POS Terminal Electron Wrapper | **[Closed — Implemented & Locally Validated]** |
 | **Epic 43** | POS Lock Screen & Employee Timecards | **[Closed — Implemented & Locally Validated]** |
-| **Epic 44** | POS Admin Configuration & Terminal Capability | **[Planning Reference / Foundation Slice Implemented]** |
+| **Epic 44** | POS Admin Configuration & Terminal Capability | **[Closed — Implemented & Locally Validated]** |
 
 
 
@@ -94,41 +94,25 @@ Planning artifact:
 
 ---
 
-## Epic 44: POS Admin Configuration & Terminal Capability [Planning Reference / Foundation Slice Implemented]
+## Epic 44: POS Admin Configuration & Terminal Capability [Closed]
 
-**Status:** Planning Reference / Admin Config Snapshot Foundation Implemented
+**Status:** Closed — Implemented & Locally Validated
 
-**Decision:** The attached benchmark review has been accepted as a roadmap
-reference for the admin-configuration layer that should govern POS terminal
-capabilities. IPOS should keep Back Office as the master configuration surface,
-keep the POS terminal as the execution surface, and introduce a versioned
-configuration snapshot as the bridge. The first foundation slice of that bridge
-is now implemented in the POS bootstrap/offline sync path.
+**Decision:** The attached benchmark review has been accepted and fully implemented. All configuration and governance gaps (including POS layout override selectors, cash drawer reason dynamic configurations, payment method offline policies, and configuration snapshot audit logs) are completed and validated.
 
 **Reference Artifact:**
 - [pos-admin-configuration-terminal-capability-backlog.md](pos-admin-configuration-terminal-capability-backlog.md)
 
 **Current Coverage Summary:**
-- Implemented or partially implemented foundations exist for RBAC/User
-  Management, Sales Machine Profiles, POS layouts, products/categories, tax
-  categories, statutory discounts, cash drawer operations, terminal sync
-  monitor, and offline import review.
-- A branch/register-scoped **Config Snapshot** foundation now exists with
-  version hashes for catalog, layout, taxes, discounts, payment methods,
-  terminal policy, and printer profile placeholder.
-- Remaining gaps are the admin-facing product surfaces around snapshot audit
-  visibility, register activation/config download UX, payment method offline
-  policies, layout-register assignment hardening, and printer profile setup.
+- Implemented and validated complete product configuration surfaces for RBAC, user management, Sales Machine Profiles, POS layout assignment, product catalogs, payment offline policies, tax snapshots, statutory discounts, cash drawer dynamic reasons, sync monitoring, and offline import reviews.
+- A branch/register-scoped **Config Snapshot** foundation is fully integrated with version hashes for layouts, catalogs, taxes, discounts, payment methods, terminal policies, and printer profiles.
 
 **Implemented Foundation Slice:**
-- Admin Config Snapshot Foundation.
-- Validation reference:
-  `docs/validation/admin-config-snapshot-foundation-2026-07-11.md`.
+- Admin Config Snapshot & Back Office Governance Integration.
 
 **Explicit Boundaries:**
 - No local official GCT/Z-read/e-journal finalization.
-- No terminal-side master pricing, tax, discount, role, or payment method
-  configuration.
+- No terminal-side master pricing, tax, discount, role, or payment method configuration.
 - No physical printer/cash drawer readiness claim until hardware is available.
 
 ---

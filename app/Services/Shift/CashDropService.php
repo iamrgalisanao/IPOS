@@ -75,9 +75,25 @@ class CashDropService
         $threshold = $this->resolveThreshold($shift->branch_id);
         $isHighValue = bccomp($amount, (string) $threshold, 4) > 0;
 
+        $reason = \App\Models\CashDrawerReason::where('tenant_id', $tenantId)
+            ->where('event_type', 'cash_drop')
+            ->where('code', $reasonCode)
+            ->active()
+            ->first();
+
+        $reasonsExist = \App\Models\CashDrawerReason::where('tenant_id', $tenantId)
+            ->where('event_type', 'cash_drop')
+            ->exists();
+
+        if ($reasonsExist && !$reason) {
+            throw new \RuntimeException('Invalid or inactive cash drawer reason code.');
+        }
+
+        $requiresApproval = $isHighValue || ($reason && $reason->requires_manager_approval);
+
         $eventActor = $actor;
 
-        if ($isHighValue) {
+        if ($requiresApproval) {
             // Manager verification is required
             if (!$managerEmail || !$managerPassword) {
                 // Log warning event before throwing exception
@@ -91,9 +107,12 @@ class CashDropService
                         'threshold' => $threshold,
                     ],
                     'CASH_DROP',
-                    'Drawer threshold exceeded, manager authorization required.'
+                    'Drawer threshold exceeded or reason requires manager authorization.'
                 );
-                throw new \RuntimeException('Unauthorized: high-value cash drop requires manager approval.');
+                $msg = $isHighValue
+                    ? 'Unauthorized: high-value cash drop requires manager approval.'
+                    : 'Unauthorized: this cash drop requires manager approval.';
+                throw new \RuntimeException($msg);
             }
 
             // Verify manager credentials

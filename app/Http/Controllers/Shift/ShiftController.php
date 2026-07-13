@@ -211,10 +211,60 @@ class ShiftController extends Controller
         $shift = Shift::findOrFail($request->shift_id);
 
         try {
+            $actor = $request->user();
+
+            $reason = \App\Models\CashDrawerReason::where('tenant_id', $shift->tenant_id)
+                ->where('event_type', $request->event_type)
+                ->where('code', $request->reason_code)
+                ->active()
+                ->first();
+
+            $reasonsExist = \App\Models\CashDrawerReason::where('tenant_id', $shift->tenant_id)
+                ->where('event_type', $request->event_type)
+                ->exists();
+
+            if ($reasonsExist && !$reason) {
+                return back()->withErrors(['reason_code' => 'Invalid or inactive cash drawer reason code.']);
+            }
+
+            $isHighValueDrop = false;
+            if ($request->event_type === \App\Models\CashDrawerEvent::TYPE_CASH_DROP) {
+                $threshold = $cashDropService->resolveThreshold($shift->branch_id);
+                $isHighValueDrop = bccomp($request->amount, (string) $threshold, 4) > 0;
+            }
+
+            $requiresApproval = $isHighValueDrop || ($reason && $reason->requires_manager_approval);
+
+            if ($requiresApproval) {
+                if (!$request->manager_email || !$request->manager_password) {
+                    return back()->withErrors(['manager_email' => 'Unauthorized: this transaction requires manager approval.']);
+                }
+
+                // Verify manager credentials
+                $manager = \App\Models\User::where('tenant_id', $shift->tenant_id)
+                    ->where('email', $request->manager_email)
+                    ->where('status', 'active')
+                    ->first();
+
+                if (!$manager || !\Illuminate\Support\Facades\Hash::check($request->manager_password, $manager->password)) {
+                    return back()->withErrors(['manager_email' => 'Invalid manager credentials.']);
+                }
+
+                if (!$manager->hasPermission('manage_cash_drawer')) {
+                    return back()->withErrors(['manager_email' => 'Unauthorized: manager missing required permissions.']);
+                }
+
+                if ($shift->cashier_id === $manager->id) {
+                    return back()->withErrors(['manager_email' => 'Security Block: Cashiers cannot approve their own manager-required drawer event.']);
+                }
+
+                $actor = $manager;
+            }
+
             if ($request->event_type === \App\Models\CashDrawerEvent::TYPE_CASH_DROP) {
                 $cashDropService->recordCashDrop(
                     $shift,
-                    $request->user(),
+                    $actor,
                     (string) $request->amount,
                     $request->reason_code,
                     $request->reason_notes,
@@ -224,7 +274,7 @@ class ShiftController extends Controller
             } else {
                 $shiftService->recordDrawerEvent(
                     $shift,
-                    $request->user(),
+                    $actor,
                     $request->event_type,
                     (string) $request->amount,
                     $request->reason_code,

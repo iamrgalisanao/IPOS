@@ -16,7 +16,7 @@ import {
     HelpCircle
 } from 'lucide-react';
 
-export default function Edit({ auth, profile, offlineStatus, printerProfiles = [] }) {
+export default function Edit({ auth, profile, offlineStatus, printerProfiles = [], posLayouts = [], effectiveLayoutName, effectiveLayoutSource }) {
     const latestHb = profile.latest_heartbeat;
     const hasUnsyncedSales = latestHb && latestHb.queue_count > 0;
     const [showOverride, setShowOverride] = useState(false);
@@ -27,6 +27,7 @@ export default function Edit({ auth, profile, offlineStatus, printerProfiles = [
         offline_sequence_next_value: profile.offline_sequence_next_value ?? 1,
         offline_sequence_status: profile.offline_sequence_status ?? 'active',
         printer_profile_id: profile.printer_profile_id ?? '',
+        pos_layout_id: profile.pos_layout_id ?? '',
         admin_override: false,
     });
 
@@ -175,6 +176,32 @@ export default function Edit({ auth, profile, offlineStatus, printerProfiles = [
                                     </select>
                                     <p className="text-xs text-slate-400 mt-1.5 font-medium">Selects a configured receipt-printer endpoint for this register. Physical device readiness is validated separately.</p>
                                     <InputError message={errors.printer_profile_id} className="mt-1" />
+                                </div>
+
+                                {/* POS Layout Override */}
+                                <div>
+                                    <InputLabel htmlFor="pos_layout_id" value="POS Layout Override" />
+                                    <select
+                                        id="pos_layout_id"
+                                        value={data.pos_layout_id}
+                                        onChange={(e) => setData('pos_layout_id', e.target.value)}
+                                        className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 font-bold focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:ring-offset-0 cursor-pointer"
+                                    >
+                                        <option value="">Branch Default Layout</option>
+                                        {posLayouts.map((layout) => (
+                                            <option key={layout.id} value={layout.id}>
+                                                {layout.name} (v{layout.version})
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <p className="text-xs text-slate-400 mt-1.5 font-medium">
+                                        Leave this set to Branch Default Layout to inherit the active layout assigned to this branch. Select a layout only when this terminal needs a different product grid.
+                                    </p>
+                                    <InputError message={errors.pos_layout_id} className="mt-1" />
+                                    <div className="mt-2.5 p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between text-xs text-slate-600 font-medium">
+                                        <span>Current effective layout: <strong className="text-slate-800 font-extrabold">{effectiveLayoutName}</strong></span>
+                                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wider bg-slate-200 text-slate-700">Source: {effectiveLayoutSource}</span>
+                                    </div>
                                 </div>
 
                                 {/* Unsynced warning & override checkbox */}

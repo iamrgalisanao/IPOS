@@ -2,6 +2,7 @@
 
 use App\Models\AuditLog;
 use App\Models\Branch;
+use App\Models\Permission;
 use App\Models\PosLayout;
 use App\Models\Role;
 use App\Models\SalesMachineProfile;
@@ -54,6 +55,10 @@ function makeTenantBranchProfile(): array
 function publishLayoutToBranch(PosLayout $layout, Branch $branch, Tenant $tenant): void
 {
     $layout->update(['status' => PosLayout::STATUS_PUBLISHED]);
+
+    DB::table('branch_pos_layout')
+        ->where('branch_id', $branch->id)
+        ->update(['is_active' => false]);
 
     DB::table('branch_pos_layout')->insert([
         'id'            => Str::uuid(),
@@ -456,4 +461,127 @@ it('pos layout endpoint uses terminal override layout when set', function () {
         ->assertOk()
         ->assertJsonPath('layout.id', $overrideLayout->id)
         ->assertJsonPath('layout_resolution.source', TerminalLayoutResolver::SOURCE_TERMINAL_OVERRIDE);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. Profile Update Layout Assignment
+// ─────────────────────────────────────────────────────────────────────────────
+
+it('normalizes empty string pos_layout_id to null on profile update', function () {
+    ['tenant' => $tenant, 'branch' => $branch, 'profile' => $profile, 'admin' => $admin] = makeTenantBranchProfile();
+    $layout = PosLayout::factory()->create(['tenant_id' => $tenant->id, 'status' => PosLayout::STATUS_PUBLISHED]);
+    publishLayoutToBranch($layout, $branch, $tenant);
+    $profile->update(['pos_layout_id' => $layout->id]);
+
+    $this->actingAs($admin)
+        ->put("/admin/sales-machine-profiles/{$profile->id}", [
+            'pos_layout_id' => '',
+            'offline_sales_enabled' => true,
+        ])
+        ->assertRedirect();
+
+    expect($profile->fresh()->pos_layout_id)->toBeNull();
+});
+
+it('does not require pos-layouts.manage permission when layout is not changed', function () {
+    ['tenant' => $tenant, 'branch' => $branch, 'profile' => $profile] = makeTenantBranchProfile();
+    
+    // Create user with branch association
+    $user = User::factory()->create(['tenant_id' => $tenant->id, 'status' => 'active']);
+    $user->assignToBranch($branch);
+
+    // Create a custom role with only manage_offline_sales_settings permission
+    $role = Role::create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Custom Offline Sales Manager',
+        'description' => 'Test Role without layout manage permission',
+    ]);
+    $permission = Permission::where('name', 'manage_offline_sales_settings')->firstOrFail();
+    $role->permissions()->sync([$permission->id]);
+    $user->assignRole($role);
+
+    // Update unrelated fields
+    $this->actingAs($user)
+        ->put("/admin/sales-machine-profiles/{$profile->id}", [
+            'offline_sales_enabled' => false,
+            'pos_layout_id' => $profile->pos_layout_id, // unchanged
+        ])
+        ->assertRedirect();
+});
+
+it('removes layout override and reverts to branch default via profile update', function () {
+    ['tenant' => $tenant, 'branch' => $branch, 'profile' => $profile, 'admin' => $admin] = makeTenantBranchProfile();
+    $layout = PosLayout::factory()->create(['tenant_id' => $tenant->id, 'status' => PosLayout::STATUS_PUBLISHED]);
+    publishLayoutToBranch($layout, $branch, $tenant);
+    $profile->update(['pos_layout_id' => $layout->id]);
+
+    $this->actingAs($admin)
+        ->put("/admin/sales-machine-profiles/{$profile->id}", [
+            'pos_layout_id' => null,
+        ])
+        ->assertRedirect();
+
+    expect($profile->fresh()->pos_layout_id)->toBeNull();
+    $this->assertDatabaseHas('audit_logs', [
+        'action' => 'terminal_layout_override_removed',
+        'auditable_id' => $profile->id,
+    ]);
+});
+
+it('assigns layout override via profile update and logs it', function () {
+    ['tenant' => $tenant, 'branch' => $branch, 'profile' => $profile, 'admin' => $admin] = makeTenantBranchProfile();
+    $layout = PosLayout::factory()->create(['tenant_id' => $tenant->id, 'status' => PosLayout::STATUS_PUBLISHED]);
+    publishLayoutToBranch($layout, $branch, $tenant);
+
+    $this->actingAs($admin)
+        ->put("/admin/sales-machine-profiles/{$profile->id}", [
+            'pos_layout_id' => $layout->id,
+        ])
+        ->assertRedirect();
+
+    expect($profile->fresh()->pos_layout_id)->toBe($layout->id);
+    $this->assertDatabaseHas('audit_logs', [
+        'action' => 'terminal_layout_override_updated',
+        'auditable_id' => $profile->id,
+    ]);
+});
+
+it('profile update layout assignment change alters layout hash and triggers heartbeat drift', function () {
+    ['tenant' => $tenant, 'branch' => $branch, 'profile' => $profile, 'admin' => $admin] = makeTenantBranchProfile();
+    $branchLayout = PosLayout::factory()->create(['tenant_id' => $tenant->id, 'status' => PosLayout::STATUS_PUBLISHED]);
+    $overrideLayout = PosLayout::factory()->create(['tenant_id' => $tenant->id, 'status' => PosLayout::STATUS_PUBLISHED]);
+    publishLayoutToBranch($branchLayout, $branch, $tenant);
+    publishLayoutToBranch($overrideLayout, $branch, $tenant);
+
+    $bootstrap = app(CacheBootstrapService::class);
+    $resolver = app(TerminalLayoutResolver::class);
+
+    $oldHash = $resolver->resolveHashForProfile($profile, $bootstrap);
+
+    // Update layout override
+    $this->actingAs($admin)
+        ->put("/admin/sales-machine-profiles/{$profile->id}", [
+            'pos_layout_id' => $overrideLayout->id,
+        ])
+        ->assertRedirect();
+
+    $newHash = $resolver->resolveHashForProfile($profile->fresh(), $bootstrap);
+    expect($newHash)->not->toBe($oldHash);
+
+    // Heartbeat with old layout hash should now drift
+    $this->actingAs($admin)
+        ->withHeaders([
+            'X-Tenant-ID'   => $tenant->id,
+            'X-Branch-ID'   => $branch->id,
+            'X-Terminal-ID' => $profile->id,
+        ])
+        ->postJson('/api/pos/heartbeat', [
+            'app_version'      => '1.0.0',
+            'connection_state' => 'online',
+            'queue_count'      => 0,
+            'reported_at'      => now()->toIso8601String(),
+            'config_snapshot'  => ['layout_version_hash' => $oldHash],
+        ])
+        ->assertOk()
+        ->assertJsonFragment(['layout_drift' => true]);
 });
