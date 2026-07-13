@@ -203,7 +203,7 @@ All notable changes to the IPOS platform, modules, and user workflows are docume
   * Hardened the POS checkout UI for Android tablet devices (`TabletPOSLayout.jsx`).
   * Configured PWA Manifest and Service Worker for offline availability (`manifest.json`, `sw.js`).
   * Implemented hardware integration adapter (`PosHardwareAdapter.js`) for Bluetooth, USB, and network receipt printers.
-  * Added the [Android Kiosk Deployment Guide](file:///Users/teamsolo/Documents/Dev/IPOS/docs/deployment/android-kiosk-deployment.md) for locking down tablet terminals in production.
+  * Added the [Android Kiosk Deployment Guide](../deployment/android-kiosk-deployment.md) for locking down tablet terminals in production.
 * **Epic 36: Local Register Sync & Store-Level Coordination** (Validated)
   * Implemented master register discovery and automated registration over local LAN segments.
   * Added single-owner table lock leases with automatic lock expiry to prevent split-brain cart mutations.
