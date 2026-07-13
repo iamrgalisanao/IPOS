@@ -33,6 +33,7 @@ return new class extends Migration
             $table->decimal('statutory_discount_total', 19, 4)->default(0)->after('vat_amount');
             $table->decimal('commercial_discount_total', 19, 4)->default(0)->after('statutory_discount_total');
             $table->decimal('other_adjustment_total', 19, 4)->default(0)->after('commercial_discount_total');
+            $table->json('discount_policy_snapshot')->nullable()->after('other_adjustment_total');
             $table->boolean('contains_statutory_discount')->default(false)->after('other_adjustment_total');
             $table->string('compliance_version', 32)->nullable()->after('contains_statutory_discount');
 
@@ -69,6 +70,7 @@ return new class extends Migration
                 'statutory_discount_total',
                 'commercial_discount_total',
                 'other_adjustment_total',
+                'discount_policy_snapshot',
                 'contains_statutory_discount',
                 'compliance_version',
             ]);

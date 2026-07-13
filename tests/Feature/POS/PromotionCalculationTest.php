@@ -575,7 +575,7 @@ class PromotionCalculationTest extends TestCase
     }
 
     /** @test */
-    public function test_statutory_and_promotions_interact_correctly(): void
+    public function test_commercial_promotion_wins_over_smaller_statutory_package(): void
     {
         // 1. Setup BOGO Espresso (Buy 2 Get 1 Free)
         $promo = Promotion::create([
@@ -634,17 +634,98 @@ class PromotionCalculationTest extends TestCase
         $this->assertEquals('created', $response['status']);
         $sale = $response['sale'];
 
-        // Original Subtotal: 30.00
-        // Promotion discount (1 Espresso free): 10.00
-        // Promotion adjusted subtotal: 20.00
-        // Statutory Senior Citizen discount (20% of promotion adjusted 20.00): 4.00
-        // Total discount: 14.00
-        // Net due: 16.00
+        $sale = $sale->fresh();
+
         $this->assertEquals(30.00, (float) $sale->subtotal);
-        $this->assertEquals(14.00, (float) $sale->discount_total);
-        $this->assertEquals(16.00, (float) $sale->total);
-        $this->assertEquals(4.00, (float) $sale->statutory_discount_total);
+        $this->assertEquals(10.00, (float) $sale->discount_total);
+        $this->assertEquals(20.00, (float) $sale->total);
+        $this->assertEquals(0.00, (float) $sale->statutory_discount_total);
         $this->assertEquals(10.00, (float) $sale->commercial_discount_total);
+        $this->assertFalse($sale->contains_statutory_discount);
+        $this->assertSame('commercial_promotion', $sale->discount_policy_snapshot['selected_discount_type']);
+        $this->assertSame('statutory', $sale->discount_policy_snapshot['suppressed_discount_type']);
+        $this->assertSame('STATUTORY_NO_DOUBLE_DISCOUNT', $sale->discount_policy_snapshot['suppression_reason']);
+        $this->assertSame(1000, $sale->discount_policy_snapshot['selected_discount_amount_centavos']);
+        $this->assertSame(600, $sale->discount_policy_snapshot['suppressed_discount_amount_centavos']);
+
+        $salePromotion = SalePromotion::where('sale_id', $sale->id)->firstOrFail();
+        $this->assertFalse($salePromotion->is_suppressed);
+        $this->assertEquals(1000, $salePromotion->discount_amount_centavos);
+    }
+
+    /** @test */
+    public function test_statutory_package_suppresses_smaller_commercial_promotion(): void
+    {
+        $promo = Promotion::create([
+            'tenant_id' => $this->tenant->id,
+            'name' => '10% Off Espresso',
+            'rule_type' => 'discount_tier',
+            'priority' => 10,
+            'starts_at' => now()->subDay(),
+            'ends_at' => now()->addDay(),
+            'is_active' => true,
+        ]);
+
+        PromotionRule::create([
+            'promotion_id' => $promo->id,
+            'condition_type' => 'minimum_spend',
+            'reward_type' => 'percent_off',
+            'conditions' => [
+                'min_spend_centavos' => 1000,
+                'eligible_product_ids' => [$this->espresso->id],
+                'eligible_category_ids' => [],
+            ],
+            'rewards' => [
+                'percent' => 10,
+            ],
+            'stackable' => false,
+            'min_spend_centavos' => 1000,
+        ]);
+
+        $response = app(SaleCreationService::class)->createFromPayload(
+            $this->tenant->id,
+            $this->branchA->id,
+            $this->cashier->id,
+            Str::uuid()->toString(),
+            [
+                ['product_id' => $this->espresso->id, 'quantity' => 3],
+            ],
+            [
+                'discount_type_id' => $this->seniorDiscount->id,
+                'options' => [
+                    'eligible_person_count' => 1,
+                    'total_pax_count' => 1,
+                    'beneficiaries' => [
+                        ['beneficiary_name' => 'Juan Dela Cruz', 'id_number' => 'SR-12345'],
+                    ],
+                ],
+            ],
+            false,
+            $this->terminal->id
+        );
+
+        $this->assertEquals('created', $response['status']);
+
+        $sale = $response['sale']->fresh();
+        $this->assertEquals(30.00, (float) $sale->subtotal);
+        $this->assertEquals(6.00, (float) $sale->discount_total);
+        $this->assertEquals(24.00, (float) $sale->total);
+        $this->assertEquals(6.00, (float) $sale->statutory_discount_total);
+        $this->assertEquals(0.00, (float) $sale->commercial_discount_total);
+        $this->assertTrue($sale->contains_statutory_discount);
+        $this->assertSame('statutory', $sale->discount_policy_snapshot['selected_discount_type']);
+        $this->assertSame('commercial_promotion', $sale->discount_policy_snapshot['suppressed_discount_type']);
+        $this->assertSame('STATUTORY_NO_DOUBLE_DISCOUNT', $sale->discount_policy_snapshot['suppression_reason']);
+        $this->assertSame(600, $sale->discount_policy_snapshot['selected_discount_amount_centavos']);
+        $this->assertSame(300, $sale->discount_policy_snapshot['suppressed_discount_amount_centavos']);
+
+        $suppressedPromotion = SalePromotion::where('sale_id', $sale->id)->firstOrFail();
+        $this->assertTrue($suppressedPromotion->is_suppressed);
+        $this->assertSame('STATUTORY_NO_DOUBLE_DISCOUNT', $suppressedPromotion->suppression_reason);
+        $this->assertSame('statutory', $suppressedPromotion->selected_discount_type);
+        $this->assertEquals(0, $suppressedPromotion->discount_amount_centavos);
+        $this->assertEquals(300, $suppressedPromotion->suppressed_discount_amount_centavos);
+        $this->assertSame(0, SalePromotionLine::where('sale_promotion_id', $suppressedPromotion->id)->count());
     }
 
     /** @test */

@@ -26,6 +26,11 @@ class SalePromotion extends Model
         'exclusive_group',
         'base_amount_centavos',
         'discount_amount_centavos',
+        'is_suppressed',
+        'suppression_reason',
+        'selected_discount_type',
+        'comparison_basis_amount_centavos',
+        'suppressed_discount_amount_centavos',
         'rule_snapshot_json',
         'condition_snapshot_json',
         'reward_snapshot_json',
@@ -42,6 +47,9 @@ class SalePromotion extends Model
         'priority' => 'integer',
         'base_amount_centavos' => 'integer',
         'discount_amount_centavos' => 'integer',
+        'is_suppressed' => 'boolean',
+        'comparison_basis_amount_centavos' => 'integer',
+        'suppressed_discount_amount_centavos' => 'integer',
     ];
 
     public function sale()

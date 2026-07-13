@@ -115,7 +115,10 @@ class SaleCreationService
             ];
         })->all();
 
-        $promoResult = $this->promotionService->calculate($tenantId, $branchId, $promoItems);
+        $calculatedPromoResult = $this->promotionService->calculate($tenantId, $branchId, $promoItems);
+        $promoResult = $calculatedPromoResult;
+        $suppressedPromotions = [];
+        $discountPolicySnapshot = null;
 
         $saleItemsData = [];
         $saleItemIdsByLineIndex = [];
@@ -131,12 +134,14 @@ class SaleCreationService
 
         // Handle Statutory Discount Calculation
         $statutoryResult = null;
+        $statutorySelected = false;
+        $commercialSelected = $calculatedPromoResult->promotionDiscountCentavos > 0;
         $discountType = null;
         $approvalRequired = false;
         if (!empty($statutoryDiscount)) {
             $discountType = \App\Models\DiscountType::active()->findOrFail($statutoryDiscount['discount_type_id']);
             $statutoryResult = $this->discountService->calculate(
-                collect($rawItems)->map(function ($item, $i) use ($products, $promoResult) {
+                collect($rawItems)->map(function ($item) use ($products) {
                     $snapshot = $products[$item['product_id']]->getSaleSnapshotBase();
                     $taxType = strtolower((string) ($snapshot['tax_type'] ?? 'non-vat'));
                     $taxBucket = match ($taxType) {
@@ -145,10 +150,9 @@ class SaleCreationService
                         'zero-rated', 'zero_rated', 'zro' => \App\Models\SaleItem::TAX_BUCKET_ZERO_RATED,
                         default => \App\Models\SaleItem::TAX_BUCKET_NON_VAT,
                     };
-                    $promoAdjustedAmount = (float) ($promoResult->adjustedLines[$i]['final_amount_centavos'] / 100);
                     return [
                         'product_id' => $item['product_id'],
-                        'line_subtotal' => $promoAdjustedAmount,
+                        'line_subtotal' => (float) ($snapshot['selling_price'] * (float) ($item['quantity'] ?? 0)),
                         'tax_bucket' => $taxBucket,
                     ];
                 }),
@@ -158,9 +162,43 @@ class SaleCreationService
             if (!$statutoryResult['is_valid']) {
                 throw new \RuntimeException(implode(' ', $statutoryResult['errors']));
             }
+
+            $statutoryBenefitCentavos = $this->statutoryPackageBenefitCentavos($statutoryResult);
+            $commercialBenefitCentavos = $calculatedPromoResult->promotionDiscountCentavos;
+
+            if ($commercialBenefitCentavos > 0 || $statutoryBenefitCentavos > 0) {
+                $statutorySelected = $statutoryBenefitCentavos >= $commercialBenefitCentavos;
+                $commercialSelected = !$statutorySelected && $commercialBenefitCentavos > 0;
+
+                $discountPolicySnapshot = [
+                    'policy' => 'STATUTORY_NO_DOUBLE_DISCOUNT',
+                    'selected_discount_type' => $statutorySelected ? 'statutory' : 'commercial_promotion',
+                    'selected_discount_id' => $statutorySelected ? $discountType->id : ($calculatedPromoResult->appliedPromotions[0]['promotion_id'] ?? null),
+                    'suppressed_discount_type' => $statutorySelected && $commercialBenefitCentavos > 0
+                        ? 'commercial_promotion'
+                        : ($commercialSelected ? 'statutory' : null),
+                    'suppressed_discount_id' => $statutorySelected && $commercialBenefitCentavos > 0
+                        ? ($calculatedPromoResult->appliedPromotions[0]['promotion_id'] ?? null)
+                        : ($commercialSelected ? $discountType->id : null),
+                    'suppression_reason' => 'STATUTORY_NO_DOUBLE_DISCOUNT',
+                    'comparison_basis_amount_centavos' => max($statutoryBenefitCentavos, $commercialBenefitCentavos),
+                    'selected_discount_amount_centavos' => $statutorySelected ? $statutoryBenefitCentavos : $commercialBenefitCentavos,
+                    'suppressed_discount_amount_centavos' => $statutorySelected ? $commercialBenefitCentavos : $statutoryBenefitCentavos,
+                    'statutory_package_benefit_centavos' => $statutoryBenefitCentavos,
+                    'commercial_promotion_benefit_centavos' => $commercialBenefitCentavos,
+                ];
+            }
+
+            if ($statutorySelected) {
+                $suppressedPromotions = $calculatedPromoResult->appliedPromotions;
+                $promoResult = $this->withoutCommercialPromotions($calculatedPromoResult);
+            } else {
+                $statutoryResult = null;
+            }
+
             $approvalRequired = $this->approvalRuleResolver
                 ->resolve($tenantId, $branchId, $discountType)['required'];
-            if ($approvalRequired && empty($statutoryDiscount['manager_approval_id'])) {
+            if ($statutorySelected && $approvalRequired && empty($statutoryDiscount['manager_approval_id'])) {
                 throw new \RuntimeException('Manager approval is required for this statutory discount.');
             }
         }
@@ -173,8 +211,6 @@ class SaleCreationService
             $promoAdjustedLine = $promoResult->adjustedLines[$i];
             $originalUnitPrice = (float) ($promoAdjustedLine['original_unit_price_centavos'] / 100);
             $promotionDiscount = (float) ($promoAdjustedLine['discount_amount_centavos'] / 100);
-            $promotionAdjustedPrice = (float) ($promoAdjustedLine['final_unit_price_centavos'] / 100);
-
             $lineSubtotal = (float) ($promoAdjustedLine['final_amount_centavos'] / 100);
             $discountAmt  = 0.0; 
 
@@ -335,7 +371,8 @@ class SaleCreationService
             $machineProfile, $profileSnapshot, $saleItemsData,
             $rawItems, $products, $isTrainingMode,
             $statutoryResult, $statutoryDiscount, $discountType, $approvalRequired,
-            $promoResult, $terminalId, $saleItemIdsByLineIndex
+            $promoResult, $terminalId, $saleItemIdsByLineIndex, $suppressedPromotions,
+            $discountPolicySnapshot
         ) {
             $principalInvoiceNumber = null;
             if ($machineProfile) {
@@ -375,6 +412,7 @@ class SaleCreationService
                 'statutory_discount_total'     => number_format($discountTotal, 4, '.', ''),
                 'commercial_discount_total'    => number_format($commercialDiscountTotal, 4, '.', ''),
                 'other_adjustment_total'       => '0.0000',
+                'discount_policy_snapshot'     => $discountPolicySnapshot,
                 'contains_statutory_discount'  => $statutoryResult && $statutoryResult['is_valid'],
                 'compliance_version'           => 'EPIC14_V1',
                 'tax_source_version'           => 'BIR_VAT_2026_BASELINE',
@@ -494,6 +532,40 @@ class SaleCreationService
                 }
             }
 
+            foreach ($suppressedPromotions as $suppressed) {
+                \App\Models\SalePromotion::create([
+                    'id' => $suppressed['id'],
+                    'tenant_id' => $tenantId,
+                    'branch_id' => $branchId,
+                    'terminal_id' => $terminalId,
+                    'sale_id' => $sale->id,
+                    'promotion_id' => $suppressed['promotion_id'],
+                    'promotion_rule_id' => $suppressed['promotion_rule_id'],
+                    'promotion_name' => $suppressed['promotion_name'],
+                    'rule_type' => $suppressed['rule_type'],
+                    'condition_type' => $suppressed['condition_type'],
+                    'reward_type' => $suppressed['reward_type'],
+                    'priority' => $suppressed['priority'],
+                    'stackable' => $suppressed['stackable'],
+                    'exclusive_group' => $suppressed['exclusive_group'],
+                    'base_amount_centavos' => $suppressed['base_amount_centavos'],
+                    'discount_amount_centavos' => 0,
+                    'is_suppressed' => true,
+                    'suppression_reason' => 'STATUTORY_NO_DOUBLE_DISCOUNT',
+                    'selected_discount_type' => 'statutory',
+                    'comparison_basis_amount_centavos' => $discountPolicySnapshot['comparison_basis_amount_centavos'] ?? null,
+                    'suppressed_discount_amount_centavos' => $suppressed['discount_amount_centavos'],
+                    'rule_snapshot_json' => $suppressed['rule_snapshot_json'],
+                    'condition_snapshot_json' => $suppressed['condition_snapshot_json'],
+                    'reward_snapshot_json' => $suppressed['reward_snapshot_json'],
+                    'calculation_snapshot_json' => array_merge($suppressed['calculation_snapshot_json'], [
+                        'suppression_reason' => 'STATUTORY_NO_DOUBLE_DISCOUNT',
+                        'selected_discount_type' => 'statutory',
+                    ]),
+                    'promotion_rules_version_hash' => $promoResult->promotionRulesVersionHash,
+                ]);
+            }
+
             if ($isTrainingMode) {
                 app(\App\Services\AuditLogger::class)->log('training_sale_created', $sale);
             }
@@ -537,6 +609,32 @@ class SaleCreationService
         }
 
         return ['status' => 'created', 'sale' => $sale->load('items')];
+    }
+
+    private function statutoryPackageBenefitCentavos(array $statutoryResult): int
+    {
+        return (int) round(((float) ($statutoryResult['discount_amount'] ?? 0) + (float) ($statutoryResult['vat_amount_removed'] ?? 0)) * 100);
+    }
+
+    private function withoutCommercialPromotions(PromotionCalculationResult $result): PromotionCalculationResult
+    {
+        $adjustedLines = array_map(function (array $line) {
+            return array_merge($line, [
+                'discount_amount_centavos' => 0,
+                'final_amount_centavos' => $line['original_amount_centavos'],
+                'final_unit_price_centavos' => $line['original_unit_price_centavos'],
+                'applied_promotions' => [],
+            ]);
+        }, $result->adjustedLines);
+
+        return new PromotionCalculationResult(
+            $result->originalSubtotalCentavos,
+            0,
+            $result->originalSubtotalCentavos,
+            [],
+            $adjustedLines,
+            $result->promotionRulesVersionHash
+        );
     }
 
     /**

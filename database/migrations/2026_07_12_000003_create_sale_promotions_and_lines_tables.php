@@ -28,6 +28,11 @@ return new class extends Migration
             $table->string('exclusive_group')->nullable();
             $table->bigInteger('base_amount_centavos')->default(0);
             $table->bigInteger('discount_amount_centavos')->default(0);
+            $table->boolean('is_suppressed')->default(false);
+            $table->string('suppression_reason')->nullable();
+            $table->string('selected_discount_type')->nullable();
+            $table->bigInteger('comparison_basis_amount_centavos')->nullable();
+            $table->bigInteger('suppressed_discount_amount_centavos')->nullable();
             $table->jsonb('rule_snapshot_json');
             $table->jsonb('condition_snapshot_json');
             $table->jsonb('reward_snapshot_json');

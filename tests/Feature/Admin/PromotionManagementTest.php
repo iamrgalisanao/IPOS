@@ -91,6 +91,60 @@ class PromotionManagementTest extends TestCase
         );
     }
 
+    public function test_branch_scoped_manager_can_view_global_promotion_but_cannot_manage_it(): void
+    {
+        Promotion::create([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Tenant Wide Promo',
+            'rule_type' => 'discount_tier',
+            'priority' => 10,
+            'starts_at' => now()->subDay(),
+            'ends_at' => now()->addDay(),
+            'is_active' => true,
+        ]);
+
+        $response = $this->actingAs($this->admin)
+            ->get(route('admin.promotions.index'));
+
+        $response->assertOk();
+        $response->assertInertia(fn ($page) => $page
+            ->component('Admin/Promotions/Index')
+            ->has('promotions', 1)
+            ->where('promotions.0.is_global', true)
+            ->where('promotions.0.can_manage', false)
+        );
+    }
+
+    public function test_system_admin_can_manage_global_promotions(): void
+    {
+        Promotion::create([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Tenant Wide Promo',
+            'rule_type' => 'discount_tier',
+            'priority' => 10,
+            'starts_at' => now()->subDay(),
+            'ends_at' => now()->addDay(),
+            'is_active' => true,
+        ]);
+
+        $systemAdmin = $this->createTenantUser('system_admin', [
+            'actor_type' => 'system_admin',
+            'email' => 'promo-system-admin@example.com',
+        ]);
+        $this->givePermissionTo($systemAdmin, 'manage_promotions');
+
+        $response = $this->actingAs($systemAdmin)
+            ->get(route('admin.promotions.index'));
+
+        $response->assertOk();
+        $response->assertInertia(fn ($page) => $page
+            ->component('Admin/Promotions/Index')
+            ->has('promotions', 1)
+            ->where('promotions.0.is_global', true)
+            ->where('promotions.0.can_manage', true)
+        );
+    }
+
     public function test_admin_can_store_minimum_spend_promotion(): void
     {
         $response = $this->actingAs($this->admin)

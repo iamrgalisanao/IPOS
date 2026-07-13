@@ -425,23 +425,31 @@ export default function Index({ auth, promotions, branches, products, categories
                                             </td>
                                             <td className="px-5 py-4">
                                                 <div className="flex justify-end gap-2">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => openEdit(promotion)}
-                                                        className="rounded-lg p-2 text-slate-500 transition hover:bg-emerald-50 hover:text-emerald-700"
-                                                        title="Edit promotion"
-                                                    >
-                                                        <Edit2 size={16} />
-                                                    </button>
-                                                    {promotion.is_active && (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => deactivatePromotion(promotion)}
-                                                            className="rounded-lg p-2 text-slate-500 transition hover:bg-rose-50 hover:text-rose-700"
-                                                            title="Deactivate promotion"
-                                                        >
-                                                            <Trash2 size={16} />
-                                                        </button>
+                                                    {promotion.can_manage ? (
+                                                        <>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => openEdit(promotion)}
+                                                                className="rounded-lg p-2 text-slate-500 transition hover:bg-emerald-50 hover:text-emerald-700"
+                                                                title="Edit promotion"
+                                                            >
+                                                                <Edit2 size={16} />
+                                                            </button>
+                                                            {promotion.is_active && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => deactivatePromotion(promotion)}
+                                                                    className="rounded-lg p-2 text-slate-500 transition hover:bg-rose-50 hover:text-rose-700"
+                                                                    title="Deactivate promotion"
+                                                                >
+                                                                    <Trash2 size={16} />
+                                                                </button>
+                                                            )}
+                                                        </>
+                                                    ) : (
+                                                        <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-500">
+                                                            View only
+                                                        </span>
                                                     )}
                                                 </div>
                                             </td>

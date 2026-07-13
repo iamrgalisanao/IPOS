@@ -41,7 +41,13 @@ class PromotionController extends Controller
             $branches = Branch::where('tenant_id', $tenantId)->orderBy('name')->get();
         }
 
-        $promotions = $query->orderBy('priority', 'desc')->get();
+        $canManageGlobalPromotions = $this->canManageGlobalPromotions($user);
+        $promotions = $query->orderBy('priority', 'desc')->get()->map(function (Promotion $promotion) use ($canManageGlobalPromotions) {
+            $promotion->is_global = $promotion->branches->isEmpty();
+            $promotion->can_manage = $canManageGlobalPromotions || !$promotion->is_global;
+
+            return $promotion;
+        });
 
         return Inertia::render('Admin/Promotions/Index', [
             'promotions' => $promotions,
@@ -289,7 +295,7 @@ class PromotionController extends Controller
 
     protected function authorizeBranchScope($user, array $branchIds): void
     {
-        if ($user->actor_type === 'system_admin' || $user->hasRole('Owner/Admin')) {
+        if ($this->canManageGlobalPromotions($user)) {
             return;
         }
 
@@ -319,6 +325,11 @@ class PromotionController extends Controller
                 'condition_type' => "The {$conditionType} condition is not valid for {$ruleType} promotions.",
             ]);
         }
+    }
+
+    protected function canManageGlobalPromotions($user): bool
+    {
+        return $user->actor_type === 'system_admin' || $user->hasRole('Owner/Admin');
     }
 
     protected function validateConditionRewardPairing(string $conditionType, string $rewardType): void
