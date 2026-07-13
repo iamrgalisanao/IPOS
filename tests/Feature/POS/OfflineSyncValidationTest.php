@@ -6,10 +6,13 @@ use App\Models\Branch;
 use App\Models\OfflineSalesImport;
 use App\Models\OfflineSyncBatch;
 use App\Models\OfflineTerminalJournal;
+use App\Models\Promotion;
+use App\Models\PromotionRule;
 use App\Models\Role;
 use App\Models\SalesMachineProfile;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Services\POS\OfflineReadiness\CacheBootstrapService;
 use App\Services\POS\OfflineSync\OfflineReconciliationService;
 use App\Services\RbacSeeder;
 use App\Services\TenantContext;
@@ -160,6 +163,32 @@ class OfflineSyncValidationTest extends TestCase
             ->postJson('/api/pos/offline-sync', $payload);
     }
 
+    private function createActivePromotion(array $rewardOverrides = []): Promotion
+    {
+        $promotion = Promotion::create([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Offline Promo',
+            'rule_type' => 'discount_tier',
+            'priority' => 10,
+            'starts_at' => now()->subDay(),
+            'ends_at' => now()->addDay(),
+            'is_active' => true,
+        ]);
+
+        $promotion->branches()->attach($this->branch->id);
+
+        PromotionRule::create([
+            'promotion_id' => $promotion->id,
+            'condition_type' => 'minimum_spend',
+            'reward_type' => 'amount_off',
+            'conditions' => ['min_spend_centavos' => 10000],
+            'rewards' => array_merge(['amount_centavos' => 300], $rewardOverrides),
+            'stackable' => false,
+        ]);
+
+        return $promotion;
+    }
+
     // =========================================================================
     // TC-28.7-01: Valid batch with 3 valid imports returns 202
     // =========================================================================
@@ -255,6 +284,69 @@ class OfflineSyncValidationTest extends TestCase
             ->count();
 
         $this->assertEquals(1, $count);
+    }
+
+    /** @test */
+    public function test_stale_promotion_hash_without_preview_is_accepted_with_warning(): void
+    {
+        $staleHash = app(CacheBootstrapService::class)
+            ->calculateDiscountRulesVersionHash($this->tenant->id, $this->branch->id);
+
+        $this->createActivePromotion(['amount_centavos' => 500]);
+
+        $response = $this->postSync([
+            'batch_reference' => 'BATCH-PROMO-WARN',
+            'imports' => [
+                $this->validImport('0001', [
+                    'discount_rules_version_hash' => $staleHash,
+                ]),
+            ],
+        ]);
+
+        $response->assertStatus(202);
+        $this->assertSame('accepted_with_warning', $response->json('imports.0.status'));
+
+        $import = OfflineSalesImport::withoutGlobalScopes()
+            ->where('offline_sequence_number', self::PREFIX . '0001')
+            ->firstOrFail();
+
+        $this->assertSame(OfflineSalesImport::STATUS_ACCEPTED_WITH_WARNING, $import->status);
+        $this->assertStringContainsString('PROMOTION_RULE_HASH_STALE_NO_PREVIEW', $import->rejection_reason);
+    }
+
+    /** @test */
+    public function test_stale_promotion_hash_with_preview_is_classified_as_conflict(): void
+    {
+        $staleHash = app(CacheBootstrapService::class)
+            ->calculateDiscountRulesVersionHash($this->tenant->id, $this->branch->id);
+
+        $promotion = $this->createActivePromotion(['amount_centavos' => 500]);
+
+        $response = $this->postSync([
+            'batch_reference' => 'BATCH-PROMO-CONFLICT',
+            'imports' => [
+                $this->validImport('0001', [
+                    'discount_rules_version_hash' => $staleHash,
+                    'promotion_discount_centavos' => 500,
+                    'promotion_preview' => [
+                        [
+                            'promotion_id' => $promotion->id,
+                            'discount_amount_centavos' => 500,
+                        ],
+                    ],
+                ]),
+            ],
+        ]);
+
+        $response->assertStatus(202);
+        $this->assertSame('conflict', $response->json('imports.0.status'));
+
+        $import = OfflineSalesImport::withoutGlobalScopes()
+            ->where('offline_sequence_number', self::PREFIX . '0001')
+            ->firstOrFail();
+
+        $this->assertSame(OfflineSalesImport::STATUS_CONFLICT, $import->status);
+        $this->assertStringContainsString('PROMOTION_RULE_HASH_STALE_WITH_PREVIEW', $import->conflict_notes);
     }
 
     // =========================================================================

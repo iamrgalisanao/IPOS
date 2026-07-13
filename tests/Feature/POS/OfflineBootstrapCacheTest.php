@@ -8,6 +8,8 @@ use App\Models\PaymentMethod;
 use App\Models\PosLayout;
 use App\Models\Product;
 use App\Models\ProductCategory;
+use App\Models\Promotion;
+use App\Models\PromotionRule;
 use App\Models\Role;
 use App\Models\SalesMachineProfile;
 use App\Models\TaxCategory;
@@ -149,6 +151,7 @@ class OfflineBootstrapCacheTest extends TestCase
         $this->assertArrayHasKey('products', $data);
         $this->assertArrayHasKey('categories', $data);
         $this->assertArrayHasKey('tax_categories', $data);
+        $this->assertArrayHasKey('promotion_rules', $data);
         $this->assertArrayHasKey('tenant_context', $data);
         $this->assertArrayHasKey('branch_context', $data);
         $this->assertArrayHasKey('machine_profile_context', $data);
@@ -167,6 +170,7 @@ class OfflineBootstrapCacheTest extends TestCase
 
         // Validate values
         $this->assertCount(1, $data['products']);
+        $this->assertCount(0, $data['promotion_rules']);
         $this->assertEquals('Americano (VAT)', $data['products'][0]['display_name']);
         $this->assertCount(1, $data['categories']);
         $this->assertEquals('Coffee', $data['categories'][0]['name']);
@@ -180,6 +184,79 @@ class OfflineBootstrapCacheTest extends TestCase
         $this->assertSame($data['catalog_version_hash'], $data['config_snapshot']['catalog_version_hash']);
         $this->assertSame($data['tax_configuration_version_hash'], $data['config_snapshot']['tax_configuration_version_hash']);
         $this->assertSame($this->machineProfile->id, $data['config_snapshot']['sales_machine_profile_id']);
+    }
+
+    public function test_bootstrap_cache_includes_branch_applicable_promotion_rules(): void
+    {
+        $promotion = Promotion::create([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Coffee Saver',
+            'rule_type' => 'discount_tier',
+            'priority' => 5,
+            'starts_at' => now()->subDay(),
+            'ends_at' => now()->addDay(),
+            'is_active' => true,
+        ]);
+
+        $promotion->branches()->attach($this->branch->id);
+
+        PromotionRule::create([
+            'promotion_id' => $promotion->id,
+            'condition_type' => 'minimum_spend',
+            'reward_type' => 'amount_off',
+            'conditions' => ['min_spend_centavos' => 10000],
+            'rewards' => ['amount_centavos' => 500],
+            'stackable' => false,
+        ]);
+
+        $payload = app(CacheBootstrapService::class)->generatePayload(
+            $this->tenant->fresh(),
+            $this->branch->fresh(),
+            $this->cashier,
+            $this->machineProfile->fresh()
+        );
+
+        $this->assertCount(1, $payload['promotion_rules']);
+        $this->assertSame('Coffee Saver', $payload['promotion_rules'][0]['name']);
+        $this->assertSame($this->branch->id, $payload['promotion_rules'][0]['branch_ids'][0]);
+        $this->assertSame('minimum_spend', $payload['promotion_rules'][0]['rules'][0]['condition_type']);
+        $this->assertMatchesRegularExpression('/^[a-f0-9]{64}$/', $payload['discount_rules_version_hash']);
+        $this->assertSame($payload['discount_rules_version_hash'], $payload['config_snapshot']['discount_rules_version_hash']);
+    }
+
+    public function test_discount_rules_hash_changes_when_branch_applicable_promotion_changes(): void
+    {
+        $service = app(CacheBootstrapService::class);
+        $initialHash = $service->calculateDiscountRulesVersionHash($this->tenant->id, $this->branch->id);
+
+        $promotion = Promotion::create([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Amount Off Coffee',
+            'rule_type' => 'discount_tier',
+            'priority' => 1,
+            'starts_at' => now()->subDay(),
+            'ends_at' => now()->addDay(),
+            'is_active' => true,
+        ]);
+
+        $promotion->branches()->attach($this->branch->id);
+
+        $rule = PromotionRule::create([
+            'promotion_id' => $promotion->id,
+            'condition_type' => 'minimum_spend',
+            'reward_type' => 'amount_off',
+            'conditions' => ['min_spend_centavos' => 10000],
+            'rewards' => ['amount_centavos' => 500],
+            'stackable' => false,
+        ]);
+
+        $afterCreateHash = $service->calculateDiscountRulesVersionHash($this->tenant->id, $this->branch->id);
+        $this->assertNotSame($initialHash, $afterCreateHash);
+
+        $rule->update(['rewards' => ['amount_centavos' => 700]]);
+
+        $afterUpdateHash = $service->calculateDiscountRulesVersionHash($this->tenant->id, $this->branch->id);
+        $this->assertNotSame($afterCreateHash, $afterUpdateHash);
     }
 
     public function test_config_snapshot_hash_is_deterministic_and_changes_when_payment_configuration_changes(): void

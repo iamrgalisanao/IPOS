@@ -167,6 +167,26 @@ class OfflineReconciliationService
                 }
             }
 
+            $promotionReason = null;
+            $promotionContext = null;
+            if (!$this->validatePromotionPolicy($import, $promotionReason, $promotionContext)) {
+                if (in_array($promotionReason, ['PROMOTION_RULE_HASH_STALE_NO_PREVIEW', 'PROMOTION_RULE_HASH_MISSING_NO_PREVIEW'], true)) {
+                    $import->update([
+                        'status' => OfflineSalesImport::STATUS_ACCEPTED_WITH_WARNING,
+                        'rejection_reason' => "{$promotionReason}: client={$promotionContext['client_hash']} current={$promotionContext['current_hash']}",
+                    ]);
+                } else {
+                    $import->update([
+                        'status' => OfflineSalesImport::STATUS_CONFLICT,
+                        'conflict_notes' => $this->mergeConflictNotes($import->conflict_notes, [
+                            'sync_status' => 'review_required',
+                            'review_reason' => $promotionReason,
+                            'review_context' => $promotionContext,
+                        ]),
+                    ]);
+                }
+            }
+
             // Perform server-side recalculation and total validation
             $recalcResult = $this->recalculationService->recalculate($import);
 
@@ -282,7 +302,7 @@ class OfflineReconciliationService
                 'layout_version_hash' => $bootstrapService->calculateLayoutVersionHash($import->tenant_id, $import->branch_id, $profile),
                 'catalog_version_hash' => $bootstrapService->calculateCatalogVersionHash($import->tenant_id, $import->branch_id),
                 'tax_configuration_version_hash' => $bootstrapService->calculateTaxConfigHash($import->tenant_id, $import->branch_id),
-                'discount_rules_version_hash' => $bootstrapService->calculateDiscountRulesVersionHash($import->tenant_id),
+                'discount_rules_version_hash' => $bootstrapService->calculateDiscountRulesVersionHash($import->tenant_id, $import->branch_id),
                 'payment_methods_version_hash' => $bootstrapService->calculatePaymentMethodsVersionHash($import->tenant_id, $import->branch_id),
                 'terminal_policy_version_hash' => ($tenant && $branch)
                     ? $bootstrapService->calculateTerminalPolicyVersionHash($tenant, $branch, $profile)
@@ -960,5 +980,88 @@ class OfflineReconciliationService
         }
 
         return true;
+    }
+
+    /**
+     * Validate commercial promotion cache assumptions for an offline import.
+     *
+     * Server-side rules remain authoritative. A stale/missing hash is only a
+     * warning when no promotion preview was submitted; otherwise the import needs
+     * manager review because the cashier-visible total may differ from current
+     * server promotion rules.
+     */
+    public function validatePromotionPolicy(OfflineSalesImport $import, ?string &$reason = null, ?array &$context = null): bool
+    {
+        $payload = $import->raw_payload;
+        $clientHash = $payload['discount_rules_version_hash'] ?? null;
+
+        $bootstrapService = app(\App\Services\POS\OfflineReadiness\CacheBootstrapService::class);
+        $currentHash = $bootstrapService->calculateDiscountRulesVersionHash($import->tenant_id, $import->branch_id);
+        $hasPromotionPreview = $this->payloadIncludesPromotionPreview($payload);
+
+        $context = [
+            'client_hash' => $clientHash,
+            'current_hash' => $currentHash,
+            'has_promotion_preview' => $hasPromotionPreview,
+            'promotion_discount_centavos' => $this->extractPromotionDiscountCentavos($payload),
+        ];
+
+        if (!$clientHash) {
+            $reason = $hasPromotionPreview
+                ? 'PROMOTION_RULE_HASH_MISSING_WITH_PREVIEW'
+                : 'PROMOTION_RULE_HASH_MISSING_NO_PREVIEW';
+
+            return !$hasPromotionPreview;
+        }
+
+        if ($clientHash === $currentHash) {
+            return true;
+        }
+
+        $reason = $hasPromotionPreview
+            ? 'PROMOTION_RULE_HASH_STALE_WITH_PREVIEW'
+            : 'PROMOTION_RULE_HASH_STALE_NO_PREVIEW';
+
+        return false;
+    }
+
+    private function payloadIncludesPromotionPreview(array $payload): bool
+    {
+        if (!empty($payload['promotion_preview']) || !empty($payload['applied_promotions'])) {
+            return true;
+        }
+
+        return $this->extractPromotionDiscountCentavos($payload) > 0;
+    }
+
+    private function extractPromotionDiscountCentavos(array $payload): int
+    {
+        foreach (['promotion_discount_centavos', 'commercial_discount_centavos'] as $key) {
+            if (isset($payload[$key]) && is_numeric($payload[$key])) {
+                return max(0, (int) $payload[$key]);
+            }
+        }
+
+        if (isset($payload['promotion_discount_amount']) && is_numeric($payload['promotion_discount_amount'])) {
+            return max(0, (int) round(((float) $payload['promotion_discount_amount']) * 100));
+        }
+
+        return 0;
+    }
+
+    private function mergeConflictNotes(?string $existingNotes, array $newNote): string
+    {
+        $notes = [];
+
+        if ($existingNotes) {
+            $decoded = json_decode($existingNotes, true);
+            $notes = json_last_error() === JSON_ERROR_NONE
+                ? (array) $decoded
+                : ['previous_note' => $existingNotes];
+        }
+
+        $notes['promotion_policy'] = $newNote;
+
+        return json_encode($notes);
     }
 }

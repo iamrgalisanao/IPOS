@@ -5,6 +5,8 @@ namespace App\Services\POS\OfflineReadiness;
 use App\Models\Branch;
 use App\Models\DiscountType;
 use App\Models\PaymentMethod;
+use App\Models\Promotion;
+use App\Models\PromotionRule;
 use App\Models\Tenant;
 use App\Models\TaxCategory;
 use App\Models\ProductCategory;
@@ -122,7 +124,7 @@ class CacheBootstrapService
             $taxHash = $this->calculateTaxConfigHash($tenant->id, $branch->id);
             $catalogHash = $this->calculateCatalogVersionHash($tenant->id, $branch->id);
             $layoutHash = $this->calculateLayoutVersionHash($tenant->id, $branch->id, $machineProfile);
-            $discountRulesHash = $this->calculateDiscountRulesVersionHash($tenant->id);
+            $discountRulesHash = $this->calculateDiscountRulesVersionHash($tenant->id, $branch->id);
             $paymentMethodsHash = $this->calculatePaymentMethodsVersionHash($tenant->id, $branch->id);
             $terminalPolicyHash = $this->calculateTerminalPolicyVersionHash($tenant, $branch, $machineProfile);
             $printerProfileHash = $this->calculatePrinterProfileVersionHash($tenant->id, $branch->id, $machineProfile?->id);
@@ -173,6 +175,7 @@ class CacheBootstrapService
                 'categories' => $categories,
                 'tax_categories' => $taxCategories,
                 'payment_methods' => $paymentMethods,
+                'promotion_rules' => $this->getPromotionRulesCachePayload($tenant->id, $branch->id),
                 'cash_drawer_reasons' => $this->getResolvedReasonsForBranch($tenant->id, $branch->id),
                 'tenant_context' => $tenantContextData,
                 'branch_context' => $branchContextData,
@@ -371,7 +374,7 @@ class CacheBootstrapService
         ]);
     }
 
-    public function calculateDiscountRulesVersionHash(string $tenantId): string
+    public function calculateDiscountRulesVersionHash(string $tenantId, ?string $branchId = null): string
     {
         $discountTypes = DiscountType::query()
             ->where('is_active', true)
@@ -409,7 +412,72 @@ class CacheBootstrapService
 
         return $this->hashCanonical([
             'discount_types' => $discountTypes,
+            'commercial_promotions' => $this->getPromotionRulesCachePayload($tenantId, $branchId),
         ]);
+    }
+
+    public function getPromotionRulesCachePayload(string $tenantId, ?string $branchId = null): array
+    {
+        $query = Promotion::query()
+            ->where('tenant_id', $tenantId)
+            ->active()
+            ->with([
+                'branches:id',
+                'rules' => fn ($rules) => $rules->active()->orderBy('id'),
+            ])
+            ->orderByDesc('priority')
+            ->orderBy('created_at')
+            ->orderBy('id');
+
+        if ($branchId) {
+            $query->forBranch($branchId);
+        }
+
+        return $query
+            ->get()
+            ->map(fn (Promotion $promotion) => [
+                'id' => $promotion->id,
+                'name' => $promotion->name,
+                'description' => $promotion->description,
+                'rule_type' => $promotion->rule_type,
+                'priority' => (int) $promotion->priority,
+                'starts_at' => $this->isoDate($promotion->starts_at),
+                'ends_at' => $this->isoDate($promotion->ends_at),
+                'is_active' => (bool) $promotion->is_active,
+                'currency' => $promotion->currency,
+                'timezone' => $promotion->timezone,
+                'branch_ids' => $promotion->branches
+                    ->pluck('id')
+                    ->map(fn ($id) => (string) $id)
+                    ->sort()
+                    ->values()
+                    ->all(),
+                'updated_at' => $this->isoDate($promotion->updated_at),
+                'rules' => $promotion->rules
+                    ->map(fn (PromotionRule $rule) => [
+                        'id' => $rule->id,
+                        'schema_version' => $rule->schema_version,
+                        'condition_type' => $rule->condition_type,
+                        'reward_type' => $rule->reward_type,
+                        'conditions' => $this->decodeJsonValue($rule->conditions),
+                        'rewards' => $this->decodeJsonValue($rule->rewards),
+                        'stackable' => (bool) $rule->stackable,
+                        'min_spend_centavos' => (int) $rule->min_spend_centavos,
+                        'max_applications_per_sale' => $rule->max_applications_per_sale !== null
+                            ? (int) $rule->max_applications_per_sale
+                            : null,
+                        'max_discount_centavos' => $rule->max_discount_centavos !== null
+                            ? (int) $rule->max_discount_centavos
+                            : null,
+                        'exclusive_group' => $rule->exclusive_group,
+                        'is_active' => (bool) $rule->is_active,
+                        'updated_at' => $this->isoDate($rule->updated_at),
+                    ])
+                    ->values()
+                    ->all(),
+            ])
+            ->values()
+            ->toArray();
     }
 
     public function calculatePaymentMethodsVersionHash(string $tenantId, string $branchId): string

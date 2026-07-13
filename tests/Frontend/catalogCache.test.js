@@ -67,6 +67,7 @@ class MockIDBDatabase {
             products: new MockIDBObjectStore(),
             categories: new MockIDBObjectStore(),
             tax_categories: new MockIDBObjectStore(),
+            promotion_rules: new MockIDBObjectStore(),
             payment_methods: new MockIDBObjectStore()
         };
     }
@@ -115,6 +116,24 @@ const mockPayload = {
     tax_categories: [
         { id: 1, name: 'VAT 12%' }
     ],
+    promotion_rules: [
+        {
+            id: 'promo-1',
+            name: 'Coffee Saver',
+            rule_type: 'discount_tier',
+            priority: 5,
+            branch_ids: ['branch-1'],
+            rules: [
+                {
+                    id: 'rule-1',
+                    condition_type: 'minimum_spend',
+                    reward_type: 'amount_off',
+                    conditions: { min_spend_centavos: 10000 },
+                    rewards: { amount_centavos: 500 },
+                },
+            ],
+        },
+    ],
     payment_methods: [],
     tenant_context: { id: 'tenant-1', tax_mode: 'inclusive', offline_sales_enabled: true },
     branch_context: { id: 'branch-1', status: 'active', offline_sales_enabled: true },
@@ -156,6 +175,8 @@ test('Frontend catalogCache functionality', async (t) => {
         assert.strictEqual(cached.tenant_context.id, 'tenant-1');
         assert.strictEqual(cached.products.length, 1);
         assert.strictEqual(cached.products[0].name, 'Product A');
+        assert.strictEqual(cached.promotion_rules.length, 1);
+        assert.strictEqual(cached.promotion_rules[0].name, 'Coffee Saver');
     });
 
     await t.test('cache reads stored products/categories', async () => {
@@ -166,6 +187,7 @@ test('Frontend catalogCache functionality', async (t) => {
         assert.strictEqual(cached.products[0].name, 'Product A');
         assert.strictEqual(cached.categories.length, 1);
         assert.strictEqual(cached.categories[0].name, 'Category X');
+        assert.strictEqual(cached.promotion_rules[0].rules[0].reward_type, 'amount_off');
     });
 
     await t.test('cached POS products filter by UUID category and display name', async () => {
