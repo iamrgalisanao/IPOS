@@ -29,7 +29,7 @@ jobs:
       BROADCAST_CONNECTION: 'null'
       CACHE_STORE: array
       DB_CONNECTION: sqlite
-      DB_DATABASE: database/ci.sqlite
+      ENFORCE_TERMINAL_BINDING: 'false'
       ENFORCE_TIMECARDS: 'false'
       MAIL_MAILER: array
       NIGHTWATCH_ENABLED: 'false'
@@ -60,12 +60,18 @@ jobs:
           touch database/ci.sqlite
 
       - name: Run migrations
+        env:
+          DB_DATABASE: database/ci.sqlite
         run: php artisan migrate:fresh --force --no-interaction
 
       - name: Validate route registration
+        env:
+          DB_DATABASE: database/ci.sqlite
         run: php artisan route:list
 
       - name: Run Pest suite
+        env:
+          DB_DATABASE: ':memory:'
         run: php -d memory_limit=-1 ./vendor/bin/pest
 
   frontend-build:
