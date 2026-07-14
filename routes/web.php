@@ -326,6 +326,9 @@ Route::middleware(['auth', 'tenant'])->group(function () {
 
     // Checkout Validation: requires branch context + create_sale permission + sales.pos entitlement + terminal + timecard.clocked_in
     Route::middleware(['branch', 'permission:create_sale', 'subscription.feature:sales.pos', 'terminal', 'timecard.clocked_in'])->group(function () {
+        Route::post('/pos/dining/tickets', [\App\Http\Controllers\POS\DiningTicketController::class, 'store'])
+            ->name('pos.dining.tickets.store');
+
         Route::post('/pos/checkout/validate', [\App\Http\Controllers\CheckoutController::class, 'validateDraft'])
              ->name('pos.checkout.validate');
 

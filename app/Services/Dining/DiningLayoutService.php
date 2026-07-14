@@ -331,16 +331,26 @@ class DiningLayoutService
 
     private function serviceAreaHasActiveTicket(ServiceArea $area): bool
     {
-        return false;
+        return $area->tables()
+            ->whereHas('ticketMappings', function ($query) {
+                $query->whereNull('detached_at')
+                    ->where('role', \App\Models\DiningTicketTable::ROLE_PRIMARY)
+                    ->whereHas('ticket', fn ($ticketQuery) => $ticketQuery->whereIn('status', \App\Models\DiningTicket::ACTIVE_STATUSES));
+            })
+            ->exists();
     }
 
     private function tableHasActiveTicket(DiningTable $table): bool
     {
-        return false;
+        return $table->ticketMappings()
+            ->whereNull('detached_at')
+            ->where('role', \App\Models\DiningTicketTable::ROLE_PRIMARY)
+            ->whereHas('ticket', fn ($query) => $query->whereIn('status', \App\Models\DiningTicket::ACTIVE_STATUSES))
+            ->exists();
     }
 
     private function tableHasHistoricalReference(DiningTable $table): bool
     {
-        return false;
+        return $table->ticketMappings()->exists();
     }
 }

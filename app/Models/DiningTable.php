@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class DiningTable extends Model
@@ -64,5 +65,18 @@ class DiningTable extends Model
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);
+    }
+
+    public function ticketMappings(): HasMany
+    {
+        return $this->hasMany(DiningTicketTable::class);
+    }
+
+    public function activeTicketMappings(): HasMany
+    {
+        return $this->ticketMappings()
+            ->whereNull('detached_at')
+            ->where('role', DiningTicketTable::ROLE_PRIMARY)
+            ->whereHas('ticket', fn ($query) => $query->whereIn('status', DiningTicket::ACTIVE_STATUSES));
     }
 }
