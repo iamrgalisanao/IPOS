@@ -3,16 +3,23 @@
 namespace App\Services\Dining;
 
 use App\Models\DiningTicket;
+use App\Models\DiningTicketItem;
 use App\Models\SalesMachineProfile;
 use App\Models\User;
 use App\Services\AuditLogger;
 use App\Values\Dining\DiningAuditPayload;
+use App\Values\Dining\DiningTicketItemPayload;
 
 class DiningOperationAuditService
 {
     public const TICKET_OPENED = 'DINING_TICKET_OPENED';
     public const TICKET_STATUS_CHANGED = 'DINING_TICKET_STATUS_CHANGED';
     public const GUEST_COUNT_CHANGED = 'DINING_GUEST_COUNT_CHANGED';
+    public const ITEM_ADDED = 'DINING_ITEM_ADDED';
+    public const ITEM_QUANTITY_CHANGED = 'DINING_ITEM_QUANTITY_CHANGED';
+    public const ITEM_SEAT_ASSIGNED = 'DINING_ITEM_SEAT_ASSIGNED';
+    public const ITEM_MOVED = 'DINING_ITEM_MOVED';
+    public const ITEM_VOIDED = 'DINING_ITEM_VOIDED';
 
     public function __construct(private readonly AuditLogger $auditLogger)
     {
@@ -80,8 +87,8 @@ class DiningOperationAuditService
     public function recordOperation(
         string $action,
         DiningTicket $ticket,
-        ?DiningAuditPayload $before,
-        ?DiningAuditPayload $after,
+        DiningAuditPayload|DiningTicketItemPayload|null $before,
+        DiningAuditPayload|DiningTicketItemPayload|null $after,
         User $actor,
         ?SalesMachineProfile $terminal,
         ?string $reason = null,
@@ -110,5 +117,10 @@ class DiningOperationAuditService
     public function payloadForTicket(DiningTicket $ticket, array $extra = []): DiningAuditPayload
     {
         return DiningAuditPayload::fromTicket($ticket, $extra);
+    }
+
+    public function payloadForItem(DiningTicket $ticket, DiningTicketItem $item, array $extra = []): DiningTicketItemPayload
+    {
+        return DiningTicketItemPayload::fromItem($ticket, $item, $extra);
     }
 }

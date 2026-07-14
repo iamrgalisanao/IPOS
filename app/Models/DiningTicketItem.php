@@ -74,4 +74,12 @@ class DiningTicketItem extends Model
     {
         return $this->belongsTo(Branch::class);
     }
+
+    public function scopeActiveForTotals($query)
+    {
+        return $query->whereNotIn('status', [
+            self::STATUS_VOIDED,
+            self::STATUS_MOVED,
+        ]);
+    }
 }

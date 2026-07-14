@@ -333,6 +333,19 @@ Route::middleware(['auth', 'tenant'])->group(function () {
     Route::middleware(['branch', 'permission:create_sale', 'subscription.feature:sales.pos', 'terminal', 'timecard.clocked_in'])->group(function () {
         Route::post('/pos/dining/tickets', [\App\Http\Controllers\POS\DiningTicketController::class, 'store'])
             ->name('pos.dining.tickets.store');
+        Route::get('/pos/dining/tickets/{ticket}', [\App\Http\Controllers\POS\DiningTicketController::class, 'show'])
+            ->name('pos.dining.tickets.show');
+
+        Route::post('/pos/dining/tickets/{ticket}/items', [\App\Http\Controllers\POS\DiningTicketItemController::class, 'store'])
+            ->name('pos.dining.tickets.items.store');
+        Route::patch('/pos/dining/tickets/{ticket}/items/{item}/quantity', [\App\Http\Controllers\POS\DiningTicketItemController::class, 'quantity'])
+            ->name('pos.dining.tickets.items.quantity');
+        Route::patch('/pos/dining/tickets/{ticket}/items/{item}/seat', [\App\Http\Controllers\POS\DiningTicketItemController::class, 'seat'])
+            ->name('pos.dining.tickets.items.seat');
+        Route::post('/pos/dining/tickets/{ticket}/items/{item}/move-seat', [\App\Http\Controllers\POS\DiningTicketItemController::class, 'moveSeat'])
+            ->name('pos.dining.tickets.items.move-seat');
+        Route::post('/pos/dining/tickets/{ticket}/items/{item}/void', [\App\Http\Controllers\POS\DiningTicketItemController::class, 'void'])
+            ->name('pos.dining.tickets.items.void');
 
         Route::post('/pos/checkout/validate', [\App\Http\Controllers\CheckoutController::class, 'validateDraft'])
              ->name('pos.checkout.validate');

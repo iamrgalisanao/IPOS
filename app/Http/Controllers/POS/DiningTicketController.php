@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Dining\OpenDiningTicketRequest;
 use App\Models\DiningTable;
 use App\Models\DiningTicket;
+use App\Models\DiningTicketItem;
 use App\Models\SalesMachineProfile;
 use App\Services\BranchContext;
 use App\Services\Dining\DiningTicketService;
@@ -45,6 +46,25 @@ class DiningTicketController extends Controller
         ], $ticket->getAttribute('idempotent_replay') ? 200 : 201);
     }
 
+    public function show(DiningTicket $ticket): JsonResponse
+    {
+        $ticket = DiningTicket::query()
+            ->with(['items.product', 'primaryTableMapping.table'])
+            ->where('branch_id', $this->branchContext->getBranchId())
+            ->whereKey($ticket->id)
+            ->firstOrFail();
+
+        return response()->json([
+            'dining_ticket' => array_merge($this->ticketPayload($ticket), [
+                'items' => $ticket->items
+                    ->sortBy('created_at')
+                    ->values()
+                    ->map(fn (DiningTicketItem $item) => $this->itemPayload($item))
+                    ->all(),
+            ]),
+        ]);
+    }
+
     private function ticketPayload(DiningTicket $ticket): array
     {
         $primaryTable = $ticket->primaryTableMapping?->table;
@@ -68,5 +88,24 @@ class DiningTicketController extends Controller
                 'service_area_id' => $primaryTable->service_area_id,
             ] : null,
         ], fn ($value) => $value !== null);
+    }
+
+    private function itemPayload(DiningTicketItem $item): array
+    {
+        return [
+            'id' => $item->id,
+            'product_id' => $item->product_id,
+            'product_name' => $item->product?->name,
+            'seat_number' => $item->seat_number,
+            'quantity' => (string) $item->quantity,
+            'unit_price_centavos' => $item->unit_price_centavos,
+            'line_total_centavos' => $item->line_total_centavos,
+            'status' => $item->status,
+            'source_item_id' => $item->source_item_id,
+            'course_no' => $item->course_no,
+            'fire_group' => $item->fire_group,
+            'hold_until' => optional($item->hold_until)->toIso8601String(),
+            'preparation_station_id' => $item->preparation_station_id,
+        ];
     }
 }

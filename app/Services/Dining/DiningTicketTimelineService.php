@@ -15,6 +15,11 @@ class DiningTicketTimelineService
     public const STATUS_CHANGED = 'status_changed';
     public const GUEST_COUNT_CHANGED = 'guest_count_changed';
     public const TICKET_CLOSED = 'ticket_closed';
+    public const ITEM_ADDED = 'item_added';
+    public const ITEM_QUANTITY_CHANGED = 'item_quantity_changed';
+    public const SEAT_ASSIGNED = 'seat_assigned';
+    public const ITEM_MOVED = 'item_moved';
+    public const ITEM_VOIDED = 'item_voided';
 
     public function recordOpened(
         DiningTicket $ticket,
@@ -93,6 +98,29 @@ class DiningTicketTimelineService
                 $payload->get('after_guest_count')
             ),
             self::TICKET_CLOSED => 'Ticket closed.',
+            self::ITEM_ADDED => sprintf(
+                'Item %s added to ticket.',
+                $payload->get('product_name', $payload->get('product_id', 'unknown'))
+            ),
+            self::ITEM_QUANTITY_CHANGED => sprintf(
+                'Item quantity changed from %s to %s.',
+                $payload->get('before_quantity'),
+                $payload->get('after_quantity')
+            ),
+            self::SEAT_ASSIGNED => sprintf(
+                'Item seat changed from %s to %s.',
+                $payload->get('before_seat_number', 'unassigned'),
+                $payload->get('after_seat_number', 'unassigned')
+            ),
+            self::ITEM_MOVED => sprintf(
+                'Item moved from seat %s to seat %s.',
+                $payload->get('before_seat_number', 'unassigned'),
+                $payload->get('after_seat_number', 'unassigned')
+            ),
+            self::ITEM_VOIDED => sprintf(
+                'Item %s voided.',
+                $payload->get('product_name', $payload->get('item_id', 'unknown'))
+            ),
             self::STATUS_CHANGED => sprintf(
                 'Ticket status changed from %s to %s.',
                 $payload->get('from_status'),
