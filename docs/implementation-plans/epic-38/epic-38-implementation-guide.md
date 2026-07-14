@@ -2,11 +2,11 @@
 
 ## 1. Status
 
-Approved for Story Implementation
+Complete
 
 Date: 2026-07-14
 
-This guide contains the story execution slices for Epic 38. It must follow the architectural contract in:
+Epic 38 implementation is complete. This guide contains the story execution slices for Epic 38 and remains the execution record for the architectural contract in:
 
 ```text
 docs/implementation-plans/epic-38/epic-38-architecture-lock.md
@@ -45,7 +45,7 @@ Reason:
 | 38.4 | Done | - | - |
 | 38.6 | Done | - | - |
 | 38.8 | Done | - | - |
-| 38.7 | Implemented - Pending Review | - | - |
+| 38.7 | Done | - | - |
 
 ## 4. Story Dependencies and Complexity
 
