@@ -97,6 +97,9 @@ export default function AuthenticatedLayout({ header, children }) {
     if ((permissions.includes('pos-layouts.view') || permissions.includes('pos-layouts.manage')) && hasFeature('layout.custom')) {
         operationsItems.push({ name: 'POS Layouts', href: route('admin.pos-layouts.index'), icon: LayoutGrid, active: route().current('admin.pos-layouts.*') });
     }
+    if (permissions.includes('pos-layouts.manage') && hasFeature('layout.custom')) {
+        operationsItems.push({ name: 'Dining Layouts', href: route('admin.service-areas.index'), icon: LayoutGrid, active: route().current('admin.service-areas.*') });
+    }
     if (permissions.includes('review_offline_sync_conflicts')) {
         operationsItems.push({ name: 'Terminal Sync Monitor', href: route('admin.terminal-sync-monitor.index'), icon: Monitor, active: route().current('admin.terminal-sync-monitor.*') });
         operationsItems.push({ name: 'Prior Period Adjustments', href: route('admin.prior-period-adjustments.index'), icon: RefreshCw, active: route().current('admin.prior-period-adjustments.*') });

@@ -11,6 +11,7 @@ use App\Models\ExpiryLot;
 use App\Models\TaxCategory;
 use App\Models\PaymentMethod;
 use App\Models\CashDrawerReason;
+use App\Models\SalesMachineProfile;
 use App\Models\User;
 use App\Models\Role;
 use App\Services\RbacSeeder;
@@ -77,6 +78,36 @@ class DatabaseSeeder extends Seeder
             'name' => 'Express Branch',
             'branch_code' => 'EXPR',
             'status' => 'active',
+        ]);
+
+        // Seed active development terminals so local POS smoke tests have an
+        // explicit terminal context instead of failing closed at checkout.
+        SalesMachineProfile::create([
+            'tenant_id' => $tenant->id,
+            'branch_id' => $branchMain->id,
+            'profile_code' => 'MAIN-REG-01',
+            'terminal_identifier' => 'MAIN-REG-01',
+            'machine_identification_number' => 'MIN-MAIN-REG-01',
+            'status' => 'active',
+            'activation_status' => SalesMachineProfile::STATUS_ACTIVE,
+            'offline_sales_enabled' => true,
+            'offline_sequence_prefix' => 'MAIN01',
+            'offline_sequence_next_value' => 1,
+            'offline_sequence_status' => 'active',
+        ]);
+
+        SalesMachineProfile::create([
+            'tenant_id' => $tenant->id,
+            'branch_id' => $branchExpress->id,
+            'profile_code' => 'EXPR-REG-01',
+            'terminal_identifier' => 'EXPR-REG-01',
+            'machine_identification_number' => 'MIN-EXPR-REG-01',
+            'status' => 'active',
+            'activation_status' => SalesMachineProfile::STATUS_ACTIVE,
+            'offline_sales_enabled' => true,
+            'offline_sequence_prefix' => 'EXPR01',
+            'offline_sequence_next_value' => 1,
+            'offline_sequence_status' => 'active',
         ]);
 
         // 4. Create Users

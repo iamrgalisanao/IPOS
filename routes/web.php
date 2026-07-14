@@ -603,6 +603,43 @@ Route::middleware(['auth', 'tenant'])->group(function () {
                 ->name('rollback');
         });
 
+        Route::prefix('admin/service-areas')->name('admin.service-areas.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Admin\ServiceAreaController::class, 'index'])
+                ->middleware('permission:pos-layouts.manage')
+                ->name('index');
+            Route::post('/', [\App\Http\Controllers\Admin\ServiceAreaController::class, 'store'])
+                ->middleware('permission:pos-layouts.manage')
+                ->name('store');
+            Route::get('/{serviceArea}', [\App\Http\Controllers\Admin\ServiceAreaController::class, 'show'])
+                ->middleware('permission:pos-layouts.manage')
+                ->name('show');
+            Route::put('/{serviceArea}', [\App\Http\Controllers\Admin\ServiceAreaController::class, 'update'])
+                ->middleware('permission:pos-layouts.manage')
+                ->name('update');
+            Route::delete('/{serviceArea}', [\App\Http\Controllers\Admin\ServiceAreaController::class, 'destroy'])
+                ->middleware('permission:pos-layouts.manage')
+                ->name('destroy');
+            Route::patch('/{serviceArea}/activation', [\App\Http\Controllers\Admin\ServiceAreaController::class, 'activation'])
+                ->middleware('permission:pos-layouts.manage')
+                ->name('activation');
+            Route::put('/{serviceArea}/layout', [\App\Http\Controllers\Admin\ServiceAreaController::class, 'layout'])
+                ->middleware('permission:pos-layouts.manage')
+                ->name('layout.update');
+
+            Route::post('/{serviceArea}/tables', [\App\Http\Controllers\Admin\ServiceAreaController::class, 'storeTable'])
+                ->middleware('permission:pos-layouts.manage')
+                ->name('tables.store');
+            Route::put('/{serviceArea}/tables/{diningTable}', [\App\Http\Controllers\Admin\ServiceAreaController::class, 'updateTable'])
+                ->middleware('permission:pos-layouts.manage')
+                ->name('tables.update');
+            Route::delete('/{serviceArea}/tables/{diningTable}', [\App\Http\Controllers\Admin\ServiceAreaController::class, 'destroyTable'])
+                ->middleware('permission:pos-layouts.manage')
+                ->name('tables.destroy');
+            Route::patch('/{serviceArea}/tables/{diningTable}/activation', [\App\Http\Controllers\Admin\ServiceAreaController::class, 'tableActivation'])
+                ->middleware('permission:pos-layouts.manage')
+                ->name('tables.activation');
+        });
+
         // Terminal Layout Assignment (per-register override)
         Route::prefix('admin/sales-machine-profiles')
             ->name('admin.sales-machine-profiles.')
