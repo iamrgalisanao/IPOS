@@ -51,8 +51,9 @@ class PaymentController extends Controller
             $payments = $this->paymentService->recordSplit($saleId, $request->validated()['payments'], Auth::user());
 
             $totalAmount = $payments->sum('amount');
+            $diningFinalization = $payments->first()?->sale?->getAttribute('dining_finalization');
 
-            return response()->json([
+            return response()->json(array_filter([
                 'status' => 'recorded',
                 'sale_id' => $saleId,
                 'sale_status' => 'paid',
@@ -67,7 +68,9 @@ class PaymentController extends Controller
                         'reference_number' => $p->reference_number,
                     ];
                 }),
-            ]);
+                'dining_ticket' => $diningFinalization['dining_ticket'] ?? null,
+                'parent_settlement' => $diningFinalization['parent_settlement'] ?? null,
+            ], fn ($value) => $value !== null));
         } catch (ValidationException $e) {
             return $this->handleValidationException($e);
         } catch (\RuntimeException $e) {

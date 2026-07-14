@@ -10,6 +10,7 @@ use App\Models\DiningTicket;
 use App\Models\DiningTicketItem;
 use App\Models\SalesMachineProfile;
 use App\Services\BranchContext;
+use App\Services\Dining\DiningTicketCheckoutService;
 use App\Services\Dining\DiningTicketService;
 use Illuminate\Http\JsonResponse;
 
@@ -17,6 +18,7 @@ class DiningTicketController extends Controller
 {
     public function __construct(
         private readonly DiningTicketService $ticketService,
+        private readonly DiningTicketCheckoutService $checkoutService,
         private readonly BranchContext $branchContext,
     ) {
     }
@@ -50,6 +52,7 @@ class DiningTicketController extends Controller
     {
         $ticket = DiningTicket::query()
             ->with(['items.product', 'primaryTableMapping.table'])
+            ->with(['childTickets.sourceSale'])
             ->where('branch_id', $this->branchContext->getBranchId())
             ->whereKey($ticket->id)
             ->firstOrFail();
@@ -87,6 +90,7 @@ class DiningTicketController extends Controller
                 'table_number' => $primaryTable->table_number,
                 'service_area_id' => $primaryTable->service_area_id,
             ] : null,
+            'settlement' => $this->checkoutService->settlementPayload($ticket),
         ], fn ($value) => $value !== null);
     }
 
