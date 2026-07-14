@@ -20,6 +20,7 @@ Welcome to the **IPOS User Guide**. This documentation provides store staff, bra
 * **[Sales History & Prior-Period Reports](04-module-guides/sales-report.md)**: Search transactions, reprint receipts with reasons, and handle late offline sales prior-period adjustments.
 * **[Product Catalog & Unit Conversions](04-module-guides/product-management.md)**: Dynamic pricing, product categories, and tenant unit conversion controls.
 * **[Inventory Stocktake & Adjustments](04-module-guides/inventory.md)**: Initializing counts, recording physical stock, posting adjustments, and tracking WAC valuations.
+* **[Dining Table & Bill Operations](04-module-guides/dining-table-and-bill-operations.md)**: Configure service areas and tables, manage dining tickets, split bills, and complete online dining checkout through the existing POS sale flow.
 * **[Terminal Sync Diagnostics & Reliability](04-module-guides/terminal-sync-monitor.md)**: Monitoring POS terminal synchronization payload diagnostics, sequence verification, session/terminal recovery states, and sync status checks.
 * **[Cash Drawer Audit & Shift Reconciliation](04-module-guides/cash-drawer-audit-shift-reconciliation.md)**: Open/close cashier shifts, record surprise spot audits, monitor warning limits, verify high-value drops, and approve bank deposits.
 

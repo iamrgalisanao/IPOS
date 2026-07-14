@@ -1,7 +1,7 @@
 # 02. Login and Access Control
 
 Status: Validated
-Last Updated: 2026-07-10
+Last Updated: 2026-07-14
 System Area: Identity, Security, Access Settings
 User Roles: All Roles
 
@@ -36,6 +36,7 @@ The IPOS system enforces strict capability gating. The table below outlines what
 | Feature / Capability | Cashier | Branch Manager | Accountant | Owner/Admin |
 | :--- | :---: | :---: | :---: | :---: |
 | Access POS Terminal & Sales | ✅ | ✅ | ❌ | ✅ |
+| Manage Dining Tickets & Tables at POS | ✅ | ✅ | ❌ | ✅ |
 | Manage Own Cash Drawer | ✅ | ✅ | ❌ | ✅ |
 | Record Surprise Spot Audits | ❌ | ✅ | ❌ | ✅ |
 | Approve Shifts & Reconcile Deposits | ❌ | ✅ | ❌ | ✅ |
@@ -45,6 +46,9 @@ The IPOS system enforces strict capability gating. The table below outlines what
 | Seal Daily Settlement Periods | ❌ | ❌ | ✅ | ✅ |
 | Match AP Invoices (3-Way AP) | ❌ | ❌ | ✅ | ✅ |
 | Manage QuickBooks Integration | ❌ | ❌ | ✅ | ✅ |
+| Manage Promotions | ❌ | ❌ | ❌ | ✅ |
+| Configure Service Areas & Dining Layouts | ❌ | ✅ | ❌ | ✅ |
+| Configure Terminal Profiles & Config Snapshots | ❌ | ❌ | ❌ | ✅ |
 | Configure Products & Suppliers | ❌ | ❌ | ❌ | ✅ |
 | Provision Tenant Users & RBAC | ❌ | ❌ | ❌ | ✅ |
 
@@ -72,6 +76,7 @@ To ensure strict labor compliance and cash drawer accountability, cashier regist
 * **Enforced Clock-In**: A cashier must have an active, clocked-in timecard before they can perform cashier-controlled operations:
   - Opening a cashier shift
   - Validating checkouts or completing sales
+  - Opening or mutating dining tickets
   - Voiding items or issuing refunds
   - Recording cash drawer pay-in/out events
 * **Security Lockouts**: To prevent brute-force attacks, entering an incorrect PIN repeatedly triggers a temporary lockout block:

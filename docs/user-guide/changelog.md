@@ -4,6 +4,25 @@ All notable changes to the IPOS platform, modules, and user workflows are docume
 
 ---
 
+## [1.6.0] - 2026-07-14
+### Added
+* **Epic 38: F&B Table and Bill Operations**
+  * Added service area and dining table layout management for branch-specific F&B floor plans.
+  * Added POS dining floor map, dining ticket opening, ticket item mutation, seat assignment, item voiding, and ticket revision protection.
+  * Added bill split allocation by seat and item/quantity while preserving allocated item, promotion, and rounding snapshots.
+  * Added online-only enforcement for dining ticket, item, split, and checkout mutations. Cached dining floor-map data remains read-only offline.
+  * Integrated dining checkout with the existing POS sale and split-payment flow so sales, sale items, inventory effects, receipt data, tax/compliance records, and accounting behavior remain owned by the existing sale/payment pipeline.
+  * Added Epic 38 Architecture Decision Records and reconciled the validated roadmap, task ledger, and current-focus notes to mark Epic 38 closed.
+
+### Documentation
+* Added the Dining Table and Bill Operations user guide.
+* Refreshed Getting Started, Login and Access Control, and Troubleshooting guidance for dining operations and online-only dining behavior.
+
+### Validation Evidence
+- `git diff --check`
+
+---
+
 ## [1.5.9] - 2026-07-13
 ### Added
 * **Epic 37: Advanced Promotions & Bundling Engine (Admin Gap Closure)**
@@ -204,6 +223,7 @@ All notable changes to the IPOS platform, modules, and user workflows are docume
   * Configured PWA Manifest and Service Worker for offline availability (`manifest.json`, `sw.js`).
   * Implemented hardware integration adapter (`PosHardwareAdapter.js`) for Bluetooth, USB, and network receipt printers.
   * Added the [Android Kiosk Deployment Guide](../deployment/android-kiosk-deployment.md) for locking down tablet terminals in production.
+  * Note: physical receipt printer and cash drawer readiness remains subject to later hardware-backed UAT evidence.
 * **Epic 36: Local Register Sync & Store-Level Coordination** (Validated)
   * Implemented master register discovery and automated registration over local LAN segments.
   * Added single-owner table lock leases with automatic lock expiry to prevent split-brain cart mutations.
@@ -212,6 +232,7 @@ All notable changes to the IPOS platform, modules, and user workflows are docume
   * Wrapped POS terminal client inside an Electron wrapper for Windows desktop installations.
   * Configured local offline file assets loading and fallback local SQLite storage engine.
   * Enabled direct hardware communication with native Windows drivers for printer and drawer support.
+  * Note: physical printer/drawer readiness remains deferred until hardware-backed UAT evidence is captured.
 
 ---
 

@@ -1,7 +1,7 @@
 # 05. Common Errors and Troubleshooting
 
 Status: Validated
-Last Updated: 2026-07-11
+Last Updated: 2026-07-14
 System Area: System Administration & Diagnostics
 User Roles: All Roles
 
@@ -128,3 +128,27 @@ User Roles: All Roles
 ### Printer or cash drawer is unavailable
 * **Cause**: Physical receipt printer and cash drawer hardware are not attached or not yet validated for the current terminal environment.
 * **Action**: Continue eligible cash-only offline capture if the terminal allows it and the sale does not require hardware output. Do not mark printer/drawer behavior as validated until physical hardware UAT is completed.
+
+---
+
+## 8. Dining Table and Bill Operations
+
+### "Dining actions require an online connection"
+* **Cause**: The terminal is offline or cannot verify online state. Dining ticket, item, split, and checkout mutations are online-only.
+* **Action**: Reconnect the terminal before opening tickets, changing ticket items, splitting a bill, or starting dining checkout. Cached floor-map data can be viewed as read-only when available.
+
+### "Dining layout conflict" / "The layout was updated by another user"
+* **Cause**: Another admin saved the service-area layout before your pending layout save was submitted.
+* **Action**: Refresh the Dining Layouts page, review the current layout revision, then reapply your changes.
+
+### "Table already has an active ticket"
+* **Cause**: A cashier attempted to open a new primary ticket on a table that already has an active dining ticket.
+* **Action**: Open the existing ticket from the floor map, or choose another available table.
+
+### "Ticket revision conflict"
+* **Cause**: Another terminal changed the same dining ticket before your action was submitted.
+* **Action**: Refresh the ticket, confirm the latest items and totals, then retry the action if it is still needed.
+
+### "Split parent ticket cannot be checked out directly"
+* **Cause**: The original parent ticket was split into child tickets. The parent is now a settlement progress container.
+* **Action**: Checkout each payable child ticket. The parent closes only after all payable child tickets are closed.
