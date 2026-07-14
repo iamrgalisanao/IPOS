@@ -39,8 +39,8 @@ Reason:
 | Story | Status | Owner | Sprint |
 | --- | --- | --- | --- |
 | 38.1 | Done | - | - |
-| 38.2 | Approved for Implementation | - | - |
-| 38.5 | Blocked by 38.2 | - | - |
+| 38.2 | Done | - | - |
+| 38.5 | Implemented - Pending Review | - | - |
 | 38.3 | Blocked by 38.1, 38.2, 38.5 | - | - |
 | 38.4 | Blocked by 38.2, 38.5 | - | - |
 | 38.6 | Blocked by 38.2, 38.4, 38.5 | - | - |

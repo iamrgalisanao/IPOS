@@ -2,56 +2,696 @@
 
 ## Status
 
-Draft for Story Specification
+Implemented - Pending Review
+
+Implementation has been completed locally and is pending local PR/code review.
 
 ## References
 
 1. `docs/implementation-plans/epic-38/epic-38-architecture-lock.md`
 2. `docs/implementation-plans/epic-38/epic-38-implementation-guide.md`
+3. `docs/implementation-plans/epic-38/stories/story-38.2.md`
+4. Merged Story 38.2 implementation:
+   - `DiningTicket`
+   - `DiningTicketTable`
+   - `DiningTicketItem`
+   - `DiningTicketService`
+   - `DiningTicketNumberService`
+   - `DINING_TICKET_OPENED` audit payload
 
 ## Objective
 
-Make structural dining operations reviewable.
+Introduce the shared dining audit, revision history, and operational timeline foundation for Epic 38 so every successful dining aggregate mutation can be reviewed, diagnosed, and safely consumed by later read models.
+
+This story creates the reusable infrastructure that later stories must call when they move tables, change guests, add or move items, split bills, start checkout, cancel checkout, or close tickets.
 
 ## Dependencies
 
-1. Story 38.2.
+1. Story 38.2 merged dining ticket foundation.
+2. Existing `audit_logs` table and `AuditLogger`.
+3. Existing tenant, branch, actor, terminal, and timecard context from POS routes.
+4. Existing `DiningTicketService` row-lock and `ticket_revision` behavior.
+
+## Out of Scope
+
+1. New audit UI.
+2. Timeline UI.
+3. POS floor-map read model.
+4. Item mutation endpoints.
+5. Table move, merge, or unmerge implementation.
+6. Bill split implementation.
+7. Checkout or payment implementation.
+8. Domain event publishing.
+9. Reporting exports.
+10. Offline dining mutation queue.
+
+## Locked Decisions
+
+1. `AuditLogger` remains the formal audit record writer.
+2. `dining_ticket_events` is an operational timeline, not a compliance audit replacement.
+3. `dining_ticket_versions` is append-only revision history for support diagnostics and optimistic concurrency.
+4. Timeline does not replace audit.
+5. Audit does not replace domain events.
+6. Domain events remain future integration notifications and are not implemented in this story.
+7. Revision records must be created only after a successful aggregate mutation.
+8. Failed mutations and idempotent replays must not create duplicate timeline, version, or audit records.
+9. Existing `ticket_revision` on `dining_tickets` remains the authoritative current revision.
+10. `dining_ticket_versions.version` must match the resulting `dining_tickets.ticket_revision` for the mutation.
+11. Opening a ticket stays at revision `1`; Story 38.5 records a version/timeline event for opening without changing the initial revision contract.
+12. Sensitive payment details must not be copied into timeline payloads.
+13. Timeline payloads must be compact, deterministic, and UI-friendly.
+14. Formal audit payloads may include before/after structural state but must avoid storing secrets, tokens, raw card data, or complete payment metadata.
+15. No controller or future story may write directly to `dining_ticket_events` or `dining_ticket_versions`; writes go through dining audit/revision/timeline services inside the aggregate mutation transaction.
+16. Audit, revision, and timeline JSON must be generated through immutable payload/snapshot value objects before being serialized to arrays for storage.
+
+## User Stories
+
+1. As a manager, I can review the important structural changes on a dining ticket so I can explain what happened during service.
+2. As support, I can inspect monotonic ticket versions so I can diagnose stale terminal mutations and concurrency conflicts.
+3. As a cashier, I am protected from stale UI updates because every accepted mutation advances the ticket revision consistently.
+4. As an engineering team, we have one reusable audit/timeline/revision writer for all later dining stories.
+
+## Event Naming
+
+### Formal Audit Actions
+
+Formal audit actions should use existing uppercase dining action style:
+
+```text
+DINING_TICKET_OPENED
+DINING_TICKET_STATUS_CHANGED
+DINING_GUEST_COUNT_CHANGED
+DINING_TABLE_ASSIGNED
+DINING_TABLE_MOVED
+DINING_TABLE_MERGED
+DINING_TABLE_UNMERGED
+DINING_ITEM_ADDED
+DINING_ITEM_MOVED
+DINING_ITEM_VOIDED
+DINING_SEAT_ASSIGNED
+DINING_BILL_SPLIT_CREATED
+DINING_BILL_SPLIT_REVERSED
+DINING_PARTIAL_PAYMENT_APPLIED
+DINING_TICKET_CLOSED
+```
+
+Story 38.5 must implement the shared naming constants and support `DINING_TICKET_OPENED`, `DINING_TICKET_STATUS_CHANGED`, and `DINING_GUEST_COUNT_CHANGED` as executable examples. Later stories add the operation-specific callers.
+
+### Timeline Event Types
+
+Timeline event types should use lowercase stable identifiers:
+
+```text
+opened
+status_changed
+guest_count_changed
+table_assigned
+table_moved
+table_merged
+table_unmerged
+item_added
+item_moved
+item_voided
+seat_assigned
+bill_split_created
+bill_split_reversed
+partial_payment_applied
+ticket_closed
+payment_started
+payment_failed
+```
+
+Timeline summaries should be generated by `DiningTicketTimelineService`, not supplied as arbitrary caller text. They must be manager-readable and stable enough for tests. Examples:
+
+```text
+Ticket DT-20260714-000001 opened for Table A1.
+Guest count changed from 2 to 4.
+Ticket moved from Table A1 to Table A4.
+Bill split created.
+Ticket closed.
+```
 
 ## Technical Approach
 
-TBD during story specification.
+1. Add append-only `dining_ticket_versions` table.
+2. Add append-only `dining_ticket_events` table.
+3. Add Eloquent models and factories for both tables.
+4. Add `DiningOperationAuditService` as the single dining-facing adapter around `AuditLogger`.
+5. Add `DiningTicketRevisionService` for version snapshots and stale revision response helpers.
+6. Add `DiningTicketTimelineService` for compact operational timeline events.
+7. Add immutable value objects for `DiningTicketSnapshot`, `DiningTimelinePayload`, and `DiningAuditPayload`.
+8. Refactor `DiningTicketService` to call the new services for ticket open and status transition records.
+9. Add a narrow guest-count mutation method to prove the reusable mutation pipeline without implementing item, split, checkout, or floor-map scope.
+10. Ensure all audit, revision, and timeline writes happen in the same database transaction as the aggregate mutation.
+11. Preserve idempotent open-ticket replay behavior: replay returns the original ticket and does not append new audit/version/timeline rows.
+12. Keep current `AuditLogger` append-only behavior intact.
+
+## Payload and Snapshot Value Objects
+
+Story 38.5 should not hand-build audit payloads, revision snapshots, or timeline payloads in multiple services.
+
+Add immutable value objects:
+
+```text
+DiningTicketSnapshot
+DiningTimelinePayload
+DiningAuditPayload
+```
+
+Responsibilities:
+
+1. Provide one serializer for each JSON shape.
+2. Include `schema_version` in every serialized payload or snapshot.
+3. Keep schema evolution explicit and testable.
+4. Normalize scalar values, IDs, timestamps, and nested references consistently.
+5. Prevent accidental inclusion of secrets, raw payment data, approval tokens, or oversized free-form text.
+6. Keep database storage as JSON arrays; the value objects are internal generation boundaries only.
+
+Recommended first schema version:
+
+```json
+{
+  "schema_version": 1,
+  "ticket_id": "ticket-uuid",
+  "ticket_number": "DT-20260714-000001",
+  "status": "open",
+  "guest_count": 2,
+  "ticket_revision": 1
+}
+```
 
 ## Database Migrations
 
-TBD during story specification.
+### `dining_ticket_versions`
+
+Purpose:
+
+Append-only revision history for concurrency, support diagnostics, and later read-model consistency.
+
+Recommended columns:
+
+```text
+id UUID primary
+tenant_id UUID foreign key -> tenants.id cascade on delete
+branch_id UUID foreign key -> branches.id restrict on delete
+dining_ticket_id UUID foreign key -> dining_tickets.id cascade on delete
+version unsigned integer
+operation string
+actor_user_id UUID nullable foreign key -> users.id null on delete
+terminal_id UUID nullable foreign key -> sales_machine_profiles.id null on delete
+source string nullable
+reason string nullable
+before_snapshot JSON nullable
+after_snapshot JSON nullable
+metadata JSON nullable
+created_at timestamp
+```
+
+Indexes and constraints:
+
+```text
+INDEX tenant_id, branch_id
+INDEX dining_ticket_id
+INDEX dining_ticket_id, version
+INDEX operation
+INDEX actor_user_id
+INDEX terminal_id
+UNIQUE dining_ticket_id, version
+```
+
+Implementation notes:
+
+1. `version` equals the ticket revision after the mutation.
+2. The open-ticket version row uses `version = 1`.
+3. Later mutation rows use the incremented revision.
+4. `before_snapshot` and `after_snapshot` should be bounded structural snapshots generated from `DiningTicketSnapshot`, not full aggregate dumps.
+5. `metadata` should include compact IDs needed for diagnostics, such as service area, table, item, split, or approval references.
+6. The model must block update/delete in the same style as `AuditLog`.
+7. Both snapshots must include `schema_version`.
+
+### `dining_ticket_events`
+
+Purpose:
+
+Operational timeline for cashier, manager, and support views. It is readable state history, not a compliance audit log.
+
+Recommended columns:
+
+```text
+id UUID primary
+tenant_id UUID foreign key -> tenants.id cascade on delete
+branch_id UUID foreign key -> branches.id restrict on delete
+dining_ticket_id UUID foreign key -> dining_tickets.id cascade on delete
+event_uuid UUID unique
+event_sequence unsigned integer
+event_type string
+summary string
+payload JSON nullable
+actor_user_id UUID nullable foreign key -> users.id null on delete
+terminal_id UUID nullable foreign key -> sales_machine_profiles.id null on delete
+occurred_at timestamp
+created_at timestamp
+```
+
+Indexes and constraints:
+
+```text
+INDEX tenant_id, branch_id
+INDEX dining_ticket_id
+INDEX dining_ticket_id, event_sequence
+INDEX event_type
+INDEX actor_user_id
+INDEX terminal_id
+UNIQUE dining_ticket_id, event_sequence
+UNIQUE event_uuid
+```
+
+Implementation notes:
+
+1. `event_sequence` increases monotonically per ticket.
+2. Sequence allocation must occur under the same transaction and ticket row lock already held by the calling aggregate service.
+3. The timeline service, not the caller, generates `summary`.
+4. `summary` should be short, deterministic, and manager-readable.
+5. `payload` should be generated from `DiningTimelinePayload` and contain compact fields needed by UI/support, such as table number, old/new guest counts, old/new status, and revision.
+6. Sensitive payment data must not be stored in `payload`.
+7. Timeline payloads must include `schema_version`.
+8. The model must block update/delete.
+
+## Model Requirements
+
+### New models
+
+1. `App\Models\DiningTicketVersion`
+2. `App\Models\DiningTicketEvent`
+
+Each model should use:
+
+1. `HasFactory`
+2. `HasUuids`
+3. `BelongsToTenant`
+4. Existing fillable and cast conventions
+
+### Required relationships
+
+`DiningTicket`:
+
+```text
+versions
+timelineEvents
+latestVersion
+latestTimelineEvent
+```
+
+`DiningTicketVersion`:
+
+```text
+ticket
+tenant
+branch
+actor
+terminal
+```
+
+`DiningTicketEvent`:
+
+```text
+ticket
+tenant
+branch
+actor
+terminal
+```
+
+## Service Requirements
+
+### `DiningOperationAuditService`
+
+Purpose:
+
+Provide a dining-specific audit facade so aggregate services do not hand-build inconsistent `AuditLogger` payloads.
+
+Required methods:
+
+```php
+recordTicketOpened(DiningTicket $ticket, User $actor, ?SalesMachineProfile $terminal, array $metadata = []): void
+recordStatusChanged(DiningTicket $ticket, DiningAuditPayload $before, DiningAuditPayload $after, User $actor, ?SalesMachineProfile $terminal, ?string $reason = null, array $metadata = []): void
+recordGuestCountChanged(DiningTicket $ticket, int $beforeCount, int $afterCount, User $actor, ?SalesMachineProfile $terminal, ?string $reason = null, array $metadata = []): void
+recordOperation(string $action, DiningTicket $ticket, ?DiningAuditPayload $before, ?DiningAuditPayload $after, User $actor, ?SalesMachineProfile $terminal, ?string $reason = null, array $metadata = []): void
+payloadForTicket(DiningTicket $ticket, array $extra = []): DiningAuditPayload
+```
+
+Payload requirements:
+
+1. Include `schema_version`.
+2. Include tenant, branch, ticket ID, ticket number, status, and revision.
+3. Include actor, terminal, table, and service-area references when known.
+4. Include before/after structural fields for mutations.
+5. Exclude sensitive payment data.
+6. Use `DiningAuditPayload` for serialization.
+7. Keep payload shape deterministic for tests.
+8. Stored `before_values` and `after_values` arrays must come from `DiningAuditPayload::toArray()`.
+
+### `DiningTicketRevisionService`
+
+Purpose:
+
+Create monotonic append-only version rows and centralize revision conflict response shape for later controllers.
+
+Required methods:
+
+```php
+recordInitialVersion(DiningTicket $ticket, User $actor, ?SalesMachineProfile $terminal, string $operation, DiningTicketSnapshot $afterSnapshot, array $metadata = []): DiningTicketVersion
+recordMutationVersion(DiningTicket $ticket, User $actor, ?SalesMachineProfile $terminal, string $operation, DiningTicketSnapshot $beforeSnapshot, DiningTicketSnapshot $afterSnapshot, ?string $reason = null, array $metadata = []): DiningTicketVersion
+assertExpectedRevision(DiningTicket $ticket, ?int $expectedRevision): void
+conflictPayload(DiningTicket $ticket): array
+snapshot(DiningTicket $ticket, array $extra = []): DiningTicketSnapshot
+```
+
+Behavior:
+
+1. `recordInitialVersion` writes version `1` and does not increment the ticket.
+2. `recordMutationVersion` assumes the caller has already incremented and saved the ticket revision.
+3. `assertExpectedRevision` throws the existing `DiningTicketRevisionConflictException` when stale.
+4. `conflictPayload` should support the existing error shape:
+
+```json
+{
+  "code": "DINING_TICKET_REVISION_CONFLICT",
+  "message": "The dining ticket was updated by another terminal.",
+  "current_ticket_revision": 5
+}
+```
+
+5. Version rows are never written for failed mutations.
+6. Version rows are never duplicated for idempotent replays.
+7. Stored `before_snapshot` and `after_snapshot` arrays must come from `DiningTicketSnapshot::toArray()`.
+
+### `DiningTicketTimelineService`
+
+Purpose:
+
+Create compact manager/support timeline rows for successful dining operations.
+
+Required methods:
+
+```php
+recordOpened(DiningTicket $ticket, User $actor, ?SalesMachineProfile $terminal, DiningTimelinePayload $payload): DiningTicketEvent
+recordStatusChanged(DiningTicket $ticket, string $fromStatus, string $toStatus, User $actor, ?SalesMachineProfile $terminal, DiningTimelinePayload $payload): DiningTicketEvent
+recordGuestCountChanged(DiningTicket $ticket, int $beforeCount, int $afterCount, User $actor, ?SalesMachineProfile $terminal, DiningTimelinePayload $payload): DiningTicketEvent
+recordEvent(DiningTicket $ticket, string $eventType, User $actor, ?SalesMachineProfile $terminal, DiningTimelinePayload $payload): DiningTicketEvent
+nextSequenceForTicket(DiningTicket $ticket): int
+```
+
+Behavior:
+
+1. Allocate `event_sequence` monotonically per ticket under the caller-held ticket row lock.
+2. Generate stable `event_uuid`.
+3. Use `occurred_at = now()` unless an explicit timestamp is passed for tests.
+4. Store payload arrays generated from `DiningTimelinePayload`.
+5. Generate summaries from event type and payload data.
+6. Ensure summaries do not include secrets or long free-form text.
+7. Keep timeline writes inside the same transaction as the mutation.
+8. Do not issue an independent ticket lock inside `nextSequenceForTicket`; the aggregate service is responsible for locking the ticket before calling timeline writers.
+
+## `DiningTicketService` Integration Requirements
+
+Story 38.5 should refactor, not expand, the Story 38.2 aggregate boundary.
+
+### Open ticket
+
+Current behavior:
+
+1. Creates `dining_tickets`.
+2. Creates active primary `dining_ticket_tables`.
+3. Writes `DINING_TICKET_OPENED` through `AuditLogger`.
+
+Required behavior after Story 38.5:
+
+1. Keep idempotency replay and drift behavior unchanged.
+2. Keep ticket revision starting at `1`.
+3. Write formal audit through `DiningOperationAuditService`.
+4. Write `dining_ticket_versions` initial row with `version = 1`.
+5. Write `dining_ticket_events` row with `event_type = opened` and `event_sequence = 1`.
+6. Do not create duplicate audit/version/timeline rows for idempotent replay.
+
+### Status transition
+
+Required behavior after Story 38.5:
+
+1. Lock the ticket.
+2. Authorize scope.
+3. Check expected revision if provided.
+4. Validate legal transition.
+5. Capture before snapshot.
+6. Mutate status and increment `ticket_revision`.
+7. Save ticket.
+8. Write formal audit through `DiningOperationAuditService`.
+9. Write mutation version row with `version = ticket_revision`.
+10. Write timeline event with `event_type = status_changed` or `ticket_closed` when target status is `closed`.
+11. Commit all records atomically.
+
+### Guest count mutation proof
+
+Add a narrow service method to validate the shared audit/revision/timeline pipeline:
+
+```php
+changeGuestCount(
+    DiningTicket $ticket,
+    int $guestCount,
+    User $actor,
+    ?SalesMachineProfile $terminal,
+    ?int $expectedRevision = null,
+    ?string $reason = null
+): DiningTicket
+```
+
+Behavior:
+
+1. Lock the ticket.
+2. Validate tenant and branch scope.
+3. Require active ticket status.
+4. Require guest count between `1` and `99`.
+5. Reject stale expected revision.
+6. If the guest count is unchanged, return the ticket without incrementing revision or writing audit/version/timeline rows.
+7. Capture before snapshot.
+8. Update `guest_count`.
+9. Increment `ticket_revision`.
+10. Write audit action `DINING_GUEST_COUNT_CHANGED`.
+11. Write version operation `guest_count_changed`.
+12. Write timeline event `guest_count_changed`.
+13. Commit atomically.
+
+No API endpoint or UI is required for guest count in this story unless the implementation team decides a test-only service method is insufficient. If an endpoint is added, it must use the same POS middleware stack and online-only constraints as Story 38.2.
 
 ## API Contracts
 
-TBD during story specification.
+No new public API endpoint is required for Story 38.5.
+
+If the team elects to expose guest-count mutation in this story, use:
+
+```text
+PATCH /pos/dining/tickets/{diningTicket}/guest-count
+```
+
+Required middleware:
+
+```text
+auth
+tenant
+branch
+terminal
+permission:create_sale
+subscription.feature:sales.pos
+timecard.clocked_in
+```
+
+Request body:
+
+```json
+{
+  "guest_count": 4,
+  "expected_ticket_revision": 2,
+  "reason": "Guests joined table"
+}
+```
+
+Success response:
+
+```json
+{
+  "data": {
+    "id": "ticket-uuid",
+    "ticket_number": "DT-20260714-000001",
+    "status": "open",
+    "guest_count": 4,
+    "ticket_revision": 3
+  }
+}
+```
+
+Revision conflict response:
+
+```json
+{
+  "code": "DINING_TICKET_REVISION_CONFLICT",
+  "message": "The dining ticket was updated by another terminal.",
+  "current_ticket_revision": 5
+}
+```
+
+Recommended response codes:
+
+| Condition | HTTP status |
+| --- | ---: |
+| Successful mutation | `200` |
+| No-op unchanged mutation | `200` |
+| Validation failure | `422` |
+| Unauthorized | `403` |
+| Cross-tenant/branch hidden resource | `404` |
+| Stale `ticket_revision` | `409` |
+| Closed/voided ticket mutation | `409` |
+| Missing terminal/timecard context | `403` |
 
 ## UI Notes
 
-TBD during story specification.
+1. No new UI is required.
+2. Later manager/support timeline views should consume `dining_ticket_events`.
+3. Later POS floor-map and ticket-detail views may show current `ticket_revision`.
+4. Timeline summaries should be designed now so they can be displayed without rewriting historical rows later.
 
 ## Test Cases
 
-TBD during story specification.
+### Migration/model tests
+
+1. `dining_ticket_versions` rows can be created with tenant, branch, ticket, version, snapshots, actor, and terminal.
+2. `dining_ticket_events` rows can be created with tenant, branch, ticket, event UUID, sequence, type, summary, payload, actor, and terminal.
+3. Version rows are append-only and reject update/delete.
+4. Timeline rows are append-only and reject update/delete.
+5. Unique `(dining_ticket_id, version)` is enforced.
+6. Unique `(dining_ticket_id, event_sequence)` is enforced.
+7. Unique `event_uuid` is enforced.
+
+### Payload/value-object tests
+
+1. `DiningTicketSnapshot` serializes with `schema_version`.
+2. `DiningAuditPayload` serializes with `schema_version`.
+3. `DiningTimelinePayload` serializes with `schema_version`.
+4. Value objects produce deterministic arrays for the same input.
+5. Value objects exclude raw payment data, secrets, approval tokens, and oversized free-form text.
+
+### Open-ticket integration tests
+
+1. Opening a ticket creates one formal audit log, one version row, and one timeline event.
+2. Open-ticket version row uses version `1`.
+3. Open-ticket timeline event uses sequence `1` and event type `opened`.
+4. Idempotent replay returns the original ticket and does not create duplicate audit/version/timeline rows.
+5. Idempotency drift fails and does not create additional audit/version/timeline rows.
+
+### Status transition tests
+
+1. Successful status transition increments `ticket_revision`.
+2. Successful status transition creates one audit log, one version row, and one timeline event.
+3. Version row version equals the resulting `ticket_revision`.
+4. Stale expected revision rejects with `409` and writes no audit/version/timeline rows.
+5. Illegal transition rejects and writes no audit/version/timeline rows.
+6. `settling -> open` requires checkout failure/cancel context and writes correct before/after snapshots.
+
+### Guest count pipeline tests
+
+1. Guest count change increments revision and writes audit/version/timeline rows.
+2. Guest count change requires active ticket status.
+3. Guest count validation rejects `0`, negative values, and values greater than `99`.
+4. Same guest count is a no-op and writes no audit/version/timeline rows.
+5. Stale revision rejects without partial writes.
+6. Timeline summary is deterministic.
+
+### Isolation and security tests
+
+1. Cross-tenant or cross-branch ticket mutation is hidden or rejected consistently with Story 38.2.
+2. Terminal mismatch is rejected before audit/version/timeline rows are written.
+3. Timeline payload does not include sensitive payment fields.
+4. Audit payload includes actor, terminal, tenant, branch, ticket, status, and revision context.
+
+### Transaction tests
+
+1. If timeline write fails, the ticket mutation rolls back.
+2. If version write fails, the ticket mutation rolls back.
+3. If formal audit write fails, the ticket mutation rolls back.
+4. Failed mutations do not leave orphaned event/version rows.
 
 ## Rollout Plan
 
-TBD during story specification.
+1. Add migrations and models for versions and timeline events.
+2. Add factories and append-only model protections.
+3. Add `DiningOperationAuditService`.
+4. Add `DiningTicketRevisionService`.
+5. Add `DiningTicketTimelineService`.
+6. Refactor `DiningTicketService` open/status transition audit calls to use the new services.
+7. Add guest-count service mutation as the first non-open proof of the pipeline.
+8. Add focused feature tests.
+9. Run Story 38.1 and Story 38.2 dining regression tests.
+10. Run full backend test suite and frontend build.
 
 ## Rollback Considerations
 
-TBD during story specification.
+1. The migration is additive.
+2. Rolling back drops `dining_ticket_events` and `dining_ticket_versions`.
+3. No existing sale, payment, receipt, or Z-read data is changed.
+4. If rollback occurs after production usage, timeline/version history would be lost, so production rollback must be paired with a data export or formal approval.
+5. Existing `audit_logs` remain intact because formal audit uses the existing audit system.
+
+## Acceptance Criteria
+
+1. Opening a dining ticket creates formal audit, version, and timeline records atomically.
+2. Successful post-open dining mutations create formal audit, version, and timeline records atomically.
+3. Failed mutations create no partial audit/version/timeline records.
+4. Idempotent replays create no duplicate audit/version/timeline records.
+5. Version numbers are append-only, unique per ticket, and match resulting `ticket_revision`.
+6. Timeline event sequences are append-only, unique per ticket, and readable in order.
+7. Audit payloads include tenant, branch, terminal, user, target references, before/after payloads, and reason when required.
+8. Timeline events produce manager-readable summaries without duplicating sensitive payment data.
+9. Revision conflict responses expose the current ticket revision for safe refresh.
+10. No direct writes to versions or timeline records are introduced outside dining aggregate services.
 
 ## Definition of Done Checklist
 
-1. Acceptance checks pass.
+1. Acceptance criteria pass.
 2. Required backend feature tests pass.
-3. Audit payloads are verified.
-4. Timeline/revision behavior is verified.
-5. No architecture constraints are violated.
-6. Code review is approved.
-7. Relevant documentation or story notes are updated.
+3. Story 38.1 and Story 38.2 dining regressions pass.
+4. Audit payloads are verified.
+5. Timeline payloads and summaries are verified.
+6. Revision records are verified.
+7. Append-only protections are tested.
+8. No architecture constraints are violated.
+9. No checkout, payment, split, read-model, or offline mutation behavior is introduced.
+10. Code review is approved.
+11. Relevant documentation or story notes are updated.
 
+## Implementation Record
+
+Implemented on branch:
+
+```text
+feat/38.5-audit-revisions-planning
+```
+
+Implemented artifacts:
+
+1. `dining_ticket_versions` append-only revision history table.
+2. `dining_ticket_events` append-only operational timeline table.
+3. `DiningTicketVersion` and `DiningTicketEvent` models and factories.
+4. `DiningTicketSnapshot`, `DiningAuditPayload`, and `DiningTimelinePayload` immutable value objects.
+5. `DiningOperationAuditService`.
+6. `DiningTicketRevisionService`.
+7. `DiningTicketTimelineService`.
+8. `DiningTicketService` integration for open-ticket, status-transition, and guest-count mutation proof.
+9. Focused feature tests in `DiningTicketAuditRevisionTest`.
+
+Local verification:
+
+```text
+php artisan test tests/Feature/Dining/DiningTicketAuditRevisionTest.php tests/Feature/Dining/DiningTicketFoundationTest.php tests/Feature/Dining/ServiceAreaLayoutTest.php
+php artisan test tests/Feature/POS/TerminalIdentityBindingTest.php tests/Feature/POS/TimecardControllerTest.php
+php artisan test
+npm run build
+```

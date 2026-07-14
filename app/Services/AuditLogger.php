@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\AuditLog;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Request;
 
@@ -23,7 +24,8 @@ class AuditLogger
         ?array $afterValues = null,
         ?string $reason = null,
         ?string $remarks = null,
-        array $metadata = []
+        array $metadata = [],
+        ?User $actor = null
     ): AuditLog {
         // Enforce fail-loudly if context is missing, unless it's an identity flow
         if (!$this->tenantContext->hasTenant()) {
@@ -43,8 +45,8 @@ class AuditLogger
             'reason' => $reason,
             'remarks' => $remarks,
             'metadata' => $metadata ?: null,
-            'actor_user_id' => \Illuminate\Support\Facades\Auth::id(),
-            'actor_type' => \Illuminate\Support\Facades\Auth::user()?->actor_type ?? 'system',
+            'actor_user_id' => $actor?->id ?? \Illuminate\Support\Facades\Auth::id(),
+            'actor_type' => $actor?->actor_type ?? \Illuminate\Support\Facades\Auth::user()?->actor_type ?? 'system',
             'ip_address' => Request::ip(),
             'user_agent' => Request::userAgent(),
             'created_at' => now(), // Explicitly set because $timestamps = false in model
