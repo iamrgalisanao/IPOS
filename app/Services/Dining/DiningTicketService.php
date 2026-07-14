@@ -5,7 +5,6 @@ namespace App\Services\Dining;
 use App\Exceptions\Dining\DiningDomainException;
 use App\Exceptions\Dining\DiningTableAlreadyOccupiedException;
 use App\Exceptions\Dining\DiningTicketIdempotencyDriftException;
-use App\Exceptions\Dining\DiningTicketRevisionConflictException;
 use App\Exceptions\Dining\DiningTicketTransitionException;
 use App\Exceptions\Dining\DiningTicketUnavailableException;
 use App\Models\DiningTable;
@@ -13,7 +12,7 @@ use App\Models\DiningTicket;
 use App\Models\DiningTicketTable;
 use App\Models\SalesMachineProfile;
 use App\Models\User;
-use App\Services\AuditLogger;
+use App\Values\Dining\DiningTimelinePayload;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -22,7 +21,9 @@ class DiningTicketService
 {
     public function __construct(
         private readonly DiningTicketNumberService $numberService,
-        private readonly AuditLogger $auditLogger,
+        private readonly DiningOperationAuditService $operationAuditService,
+        private readonly DiningTicketRevisionService $revisionService,
+        private readonly DiningTicketTimelineService $timelineService,
     ) {
     }
 
@@ -113,17 +114,29 @@ class DiningTicketService
 
             $ticket->load('primaryTableMapping.table');
 
-            $this->auditLogger->log(
-                'DINING_TICKET_OPENED',
+            $metadata = [
+                'service_area_id' => $lockedTable->service_area_id,
+                'primary_table_id' => $lockedTable->id,
+            ];
+            $this->operationAuditService->recordTicketOpened(
                 $ticket,
-                null,
-                $this->ticketAuditPayload($ticket),
-                metadata: [
-                    'schema_version' => 1,
-                    'service_area_id' => $lockedTable->service_area_id,
-                    'primary_table_id' => $lockedTable->id,
-                    'terminal_id' => $terminal?->id,
-                ],
+                $actor,
+                $terminal,
+                $metadata,
+            );
+            $this->revisionService->recordInitialVersion(
+                $ticket,
+                $actor,
+                $terminal,
+                'opened',
+                $this->revisionService->snapshot($ticket),
+                $metadata,
+            );
+            $this->timelineService->recordOpened(
+                $ticket,
+                $actor,
+                $terminal,
+                DiningTimelinePayload::fromTicket($ticket),
             );
 
             return $ticket;
@@ -136,23 +149,27 @@ class DiningTicketService
         User $actor,
         ?int $expectedRevision = null,
         array $context = [],
+        ?SalesMachineProfile $terminal = null,
     ): DiningTicket {
-        return DB::transaction(function () use ($ticket, $targetStatus, $actor, $expectedRevision, $context) {
+        return DB::transaction(function () use ($ticket, $targetStatus, $actor, $expectedRevision, $context, $terminal) {
             /** @var DiningTicket $lockedTicket */
             $lockedTicket = DiningTicket::query()
+                ->with('terminal')
                 ->whereKey($ticket->id)
                 ->lockForUpdate()
                 ->firstOrFail();
 
             $this->authorizeTransition($lockedTicket, $actor);
+            $actingTerminal = $terminal ?? $lockedTicket->terminal;
+            $this->assertTerminalMatchesTicket($actingTerminal, $lockedTicket);
 
-            if ($expectedRevision !== null && $expectedRevision !== $lockedTicket->ticket_revision) {
-                throw new DiningTicketRevisionConflictException($lockedTicket->ticket_revision);
-            }
+            $this->revisionService->assertExpectedRevision($lockedTicket, $expectedRevision);
 
             $this->assertCanTransition($lockedTicket, $targetStatus, $context);
 
-            $before = $this->ticketAuditPayload($lockedTicket);
+            $fromStatus = $lockedTicket->status;
+            $beforeSnapshot = $this->revisionService->snapshot($lockedTicket);
+            $beforeAudit = $this->operationAuditService->payloadForTicket($lockedTicket);
             $lockedTicket->status = $targetStatus;
             $lockedTicket->ticket_revision++;
 
@@ -161,13 +178,133 @@ class DiningTicketService
             }
 
             $lockedTicket->save();
+            $lockedTicket->load('primaryTableMapping.table');
 
-            $this->auditLogger->log(
-                'DINING_TICKET_STATUS_CHANGED',
+            $reason = $context['reason'] ?? null;
+            $afterSnapshot = $this->revisionService->snapshot($lockedTicket, [
+                'from_status' => $fromStatus,
+                'to_status' => $targetStatus,
+            ]);
+            $afterAudit = $this->operationAuditService->payloadForTicket($lockedTicket, [
+                'from_status' => $fromStatus,
+                'to_status' => $targetStatus,
+            ]);
+            $metadata = [
+                'from_status' => $fromStatus,
+                'to_status' => $targetStatus,
+            ];
+
+            $this->operationAuditService->recordStatusChanged(
                 $lockedTicket,
-                $before,
-                $this->ticketAuditPayload($lockedTicket),
-                metadata: ['schema_version' => 1],
+                $beforeAudit,
+                $afterAudit,
+                $actor,
+                $actingTerminal,
+                $reason,
+                $metadata,
+            );
+            $this->revisionService->recordMutationVersion(
+                $lockedTicket,
+                $actor,
+                $actingTerminal,
+                $targetStatus === DiningTicket::STATUS_CLOSED ? 'ticket_closed' : 'status_changed',
+                $beforeSnapshot,
+                $afterSnapshot,
+                $reason,
+                $metadata,
+            );
+            $this->timelineService->recordStatusChanged(
+                $lockedTicket,
+                $fromStatus,
+                $targetStatus,
+                $actor,
+                $actingTerminal,
+                DiningTimelinePayload::fromTicket($lockedTicket, [
+                    'from_status' => $fromStatus,
+                    'to_status' => $targetStatus,
+                ]),
+            );
+
+            return $lockedTicket->fresh(['primaryTableMapping.table']);
+        });
+    }
+
+    public function changeGuestCount(
+        DiningTicket $ticket,
+        int $guestCount,
+        User $actor,
+        ?SalesMachineProfile $terminal,
+        ?int $expectedRevision = null,
+        ?string $reason = null
+    ): DiningTicket {
+        return DB::transaction(function () use ($ticket, $guestCount, $actor, $terminal, $expectedRevision, $reason) {
+            /** @var DiningTicket $lockedTicket */
+            $lockedTicket = DiningTicket::query()
+                ->with(['primaryTableMapping.table', 'branch'])
+                ->whereKey($ticket->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $this->authorizeTransition($lockedTicket, $actor);
+            $this->assertTerminalMatchesTicket($terminal, $lockedTicket);
+
+            if (!$lockedTicket->isActive()) {
+                throw new DiningDomainException('DINING_TICKET_NOT_ACTIVE', 'Closed or voided dining tickets cannot be changed.', 409);
+            }
+
+            if ($guestCount < 1 || $guestCount > 99) {
+                throw new DiningDomainException('DINING_GUEST_COUNT_INVALID', 'Guest count must be between 1 and 99.', 422);
+            }
+
+            $this->revisionService->assertExpectedRevision($lockedTicket, $expectedRevision);
+
+            $beforeCount = $lockedTicket->guest_count;
+            if ($beforeCount === $guestCount) {
+                return $lockedTicket->fresh(['primaryTableMapping.table']);
+            }
+
+            $beforeSnapshot = $this->revisionService->snapshot($lockedTicket);
+            $beforeAudit = $this->operationAuditService->payloadForTicket($lockedTicket);
+
+            $lockedTicket->guest_count = $guestCount;
+            $lockedTicket->ticket_revision++;
+            $lockedTicket->save();
+            $lockedTicket->load('primaryTableMapping.table');
+
+            $metadata = [
+                'before_guest_count' => $beforeCount,
+                'after_guest_count' => $guestCount,
+            ];
+            $afterSnapshot = $this->revisionService->snapshot($lockedTicket, $metadata);
+            $afterAudit = $this->operationAuditService->payloadForTicket($lockedTicket, $metadata);
+
+            $this->operationAuditService->recordOperation(
+                DiningOperationAuditService::GUEST_COUNT_CHANGED,
+                $lockedTicket,
+                $beforeAudit,
+                $afterAudit,
+                $actor,
+                $terminal,
+                $reason,
+                $metadata,
+            );
+            $this->revisionService->recordMutationVersion(
+                $lockedTicket,
+                $actor,
+                $terminal,
+                'guest_count_changed',
+                $beforeSnapshot,
+                $afterSnapshot,
+                $reason,
+                $metadata,
+            );
+            $this->timelineService->recordGuestCountChanged(
+                $lockedTicket,
+                $beforeCount,
+                $guestCount,
+                $actor,
+                $terminal,
+                DiningTimelinePayload::fromTicket($lockedTicket, $metadata),
             );
 
             return $lockedTicket->fresh(['primaryTableMapping.table']);
@@ -289,26 +426,14 @@ class DiningTicketService
         }
     }
 
-    private function ticketAuditPayload(DiningTicket $ticket): array
+    private function assertTerminalMatchesTicket(?SalesMachineProfile $terminal, DiningTicket $ticket): void
     {
-        $primary = $ticket->primaryTableMapping?->table;
+        if (!$terminal) {
+            throw new DiningDomainException('TERMINAL_CONTEXT_INVALID', 'Terminal context missing.', 403);
+        }
 
-        return [
-            'schema_version' => 1,
-            'id' => $ticket->id,
-            'tenant_id' => $ticket->tenant_id,
-            'branch_id' => $ticket->branch_id,
-            'ticket_number' => $ticket->ticket_number,
-            'status' => $ticket->status,
-            'guest_count' => $ticket->guest_count,
-            'ticket_revision' => $ticket->ticket_revision,
-            'opened_by' => $ticket->opened_by,
-            'opened_at' => optional($ticket->opened_at)->toIso8601String(),
-            'closed_at' => optional($ticket->closed_at)->toIso8601String(),
-            'terminal_id' => $ticket->terminal_id,
-            'primary_table_id' => $primary?->id,
-            'primary_table_number' => $primary?->table_number,
-            'service_area_id' => $primary?->service_area_id,
-        ];
+        if ($terminal->tenant_id !== $ticket->tenant_id || $terminal->branch_id !== $ticket->branch_id) {
+            throw new DiningDomainException('TERMINAL_CONTEXT_INVALID', 'Invalid terminal context.', 403);
+        }
     }
 }

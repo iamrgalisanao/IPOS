@@ -119,6 +119,26 @@ class DiningTicket extends Model
         return $this->hasMany(DiningTicketItem::class);
     }
 
+    public function versions(): HasMany
+    {
+        return $this->hasMany(DiningTicketVersion::class);
+    }
+
+    public function timelineEvents(): HasMany
+    {
+        return $this->hasMany(DiningTicketEvent::class);
+    }
+
+    public function latestVersion(): HasOne
+    {
+        return $this->hasOne(DiningTicketVersion::class)->latestOfMany('version');
+    }
+
+    public function latestTimelineEvent(): HasOne
+    {
+        return $this->hasOne(DiningTicketEvent::class)->latestOfMany('event_sequence');
+    }
+
     public function isActive(): bool
     {
         return in_array($this->status, self::ACTIVE_STATUSES, true);
