@@ -1836,19 +1836,28 @@ export default function Index({ categories, initial_products, payment_methods, d
                                 <Clock className="w-4 h-4 text-slate-500" />
                                 <span>No active shift</span>
                             </div>
-                            <Link
-                                href={route('shifts.open')}
-                                onClick={(e) => {
-                                    if (connOffline) {
-                                        e.preventDefault();
-                                        setErrorMessage("Internet connection required to open or modify cashier shifts.");
-                                        setTimeout(() => setErrorMessage(null), 5000);
-                                    }
-                                }}
-                                className="rounded-lg border border-slate-700 bg-slate-800/40 px-3 py-1.5 text-xs font-bold text-slate-200 hover:bg-slate-800 hover:text-white transition-all active:scale-95"
-                            >
-                                Open shift
-                            </Link>
+                            <div className="flex items-center gap-2">
+                                <Link
+                                    href={route('pos.terminal.floor-map')}
+                                    className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/40 px-3 py-1.5 text-xs font-bold text-slate-200 hover:bg-slate-800 hover:text-white transition-all active:scale-95"
+                                >
+                                    <Utensils className="h-3.5 w-3.5" />
+                                    Floor map
+                                </Link>
+                                <Link
+                                    href={route('shifts.open')}
+                                    onClick={(e) => {
+                                        if (connOffline) {
+                                            e.preventDefault();
+                                            setErrorMessage("Internet connection required to open or modify cashier shifts.");
+                                            setTimeout(() => setErrorMessage(null), 5000);
+                                        }
+                                    }}
+                                    className="rounded-lg border border-slate-700 bg-slate-800/40 px-3 py-1.5 text-xs font-bold text-slate-200 hover:bg-slate-800 hover:text-white transition-all active:scale-95"
+                                >
+                                    Open shift
+                                </Link>
+                            </div>
                         </div>
                     ) : (
                         <div className="mx-6 mt-4 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/30 px-4 py-3 text-slate-400">
@@ -1868,6 +1877,13 @@ export default function Index({ categories, initial_products, payment_methods, d
                                 )}
                             </div>
                             <div className="flex items-center gap-3">
+                                <Link
+                                    href={route('pos.terminal.floor-map')}
+                                    className="flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-all active:scale-95"
+                                >
+                                    <Utensils className="h-3.5 w-3.5" />
+                                    Floor map
+                                </Link>
                                 <button
                                     onClick={() => setShowCashEvent(true)}
                                     className="rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-all active:scale-95"
