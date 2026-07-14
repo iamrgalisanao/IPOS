@@ -20,6 +20,7 @@ class DiningOperationAuditService
     public const ITEM_SEAT_ASSIGNED = 'DINING_ITEM_SEAT_ASSIGNED';
     public const ITEM_MOVED = 'DINING_ITEM_MOVED';
     public const ITEM_VOIDED = 'DINING_ITEM_VOIDED';
+    public const BILL_SPLIT_CREATED = 'DINING_BILL_SPLIT_CREATED';
 
     public function __construct(private readonly AuditLogger $auditLogger)
     {

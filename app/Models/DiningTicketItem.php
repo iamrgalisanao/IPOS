@@ -70,6 +70,16 @@ class DiningTicketItem extends Model
         return $this->hasMany(self::class, 'source_item_id');
     }
 
+    public function sourceSplitAllocations(): HasMany
+    {
+        return $this->hasMany(BillSplitAllocation::class, 'source_ticket_item_id');
+    }
+
+    public function childSplitAllocation()
+    {
+        return $this->hasOne(BillSplitAllocation::class, 'child_ticket_item_id');
+    }
+
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);

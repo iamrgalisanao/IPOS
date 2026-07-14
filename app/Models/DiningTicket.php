@@ -94,6 +94,16 @@ class DiningTicket extends Model
         return $this->hasMany(self::class, 'parent_ticket_id');
     }
 
+    public function splitAllocations(): HasMany
+    {
+        return $this->hasMany(BillSplitAllocation::class, 'parent_ticket_id');
+    }
+
+    public function childSplitAllocations(): HasMany
+    {
+        return $this->hasMany(BillSplitAllocation::class, 'child_ticket_id');
+    }
+
     public function tableMappings(): HasMany
     {
         return $this->hasMany(DiningTicketTable::class);
