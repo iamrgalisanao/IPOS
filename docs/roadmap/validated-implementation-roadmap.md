@@ -47,7 +47,7 @@ For long-term production readiness, the POS Terminal will be hardened as a table
 | **Epic 35** | Recipe Maintenance and Costing Engine | **[Closed]** |
 | **Epic 36** | Local Register Sync and Store-Level Coordination | **[Closed — Implemented & Locally Validated]** |
 | **Epic 37** | Advanced Promotions & Bundling Engine | **[Proposed]** |
-| **Epic 38** | F&B Table & Bill Manipulation Operations | **[Proposed]** |
+| **Epic 38** | F&B Table & Bill Manipulation Operations | **[Closed — Implemented & Locally Validated]** |
 | **Epic 39** | Loyalty & Store Credit Ledger | **[Proposed]** |
 | **Epic 40** | Cash Drawer Audit & Manager Shift Reconciliation | **[Closed]** |
 | **Epic 41** | POS Terminal Production Hardening for Android Tablet | **[Implemented & Locally Validated / UAT Release Gate Pending / Hardware Validation Deferred]** |
@@ -1441,19 +1441,39 @@ Epic 37 is proposed to enable complex promotional logic and auto-applied bundlin
 
 ---
 
-## Epic 38: F&B Table & Bill Manipulation Operations [Proposed]
-*Initialized: May 2026*
+## Epic 38: F&B Table & Bill Manipulation Operations [Closed — Implemented & Locally Validated]
+*Initialized: May 2026 / Closed: July 2026*
 
-Epic 38 introduces visual table management and complex checkout bill splitting, moving, and merging.
+Epic 38 introduces dine-in F&B table operations, dining-ticket aggregate management,
+item mutation workflows, floor-map read models, bill splitting, online-only dining
+mutation enforcement, and checkout integration with the existing POS sale creation
+authority.
 
-**Proposed Stories:**
-- 38.1 Dining Floor Table Status Visualizer
-- 38.2 Split-Bill by Seat/Item Service
-- 38.3 Merge/Move Orders between Table IDs
+**Execution Record:**
+- [Epic 38 Architecture Lock](../implementation-plans/epic-38/epic-38-architecture-lock.md)
+- [Epic 38 Story Implementation Guide](../implementation-plans/epic-38/epic-38-implementation-guide.md)
+- [Epic 38 ADR Index](../implementation-plans/epic-38/adr/README.md)
+
+**Completed Stories:**
+- 38.1 Service Area Layout Management
+- 38.2 Dining Ticket Aggregate Foundation
+- 38.5 Dining Audit, Revision History, and Timeline
+- 38.3 Dining Floor Map Read Model
+- 38.4 Dining Ticket Item Mutations
+- 38.6 Bill Split Allocation
+- 38.8 Online-Only Dining Mutation Enforcement
+- 38.7 Dining Checkout Integration
 
 **Architecture Boundary & Guidelines:**
-- Table layout configurations must be synced from BackOffice and cached locally.
-- Bill split operations must preserve strict accounting balance constraints (sum of parts must exactly equal original total).
+- `DiningTicketService` remains the aggregate mutation authority for dining operations.
+- `SaleCreationService` remains the sole sales authority for sale records, sale items,
+  inventory effects, receipt data, and compliance records.
+- Split allocation, promotion, rounding, and checkout snapshots are immutable once
+  produced and must not be recalculated during child-ticket checkout.
+- Dining mutations remain online-only; offline capture is prohibited for table,
+  ticket, item, split, and dining checkout operations.
+- Sales remain immutable and existing receipt, Z-read, settlement, and accounting
+  flows remain authoritative.
 
 ---
 
