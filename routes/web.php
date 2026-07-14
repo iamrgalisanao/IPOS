@@ -276,6 +276,7 @@ Route::middleware(['auth', 'tenant'])->group(function () {
         ])
         ->group(function () {
             Route::get('/checkout', [\App\Http\Controllers\CheckoutController::class, 'index'])->name('checkout');
+            Route::get('/floor-map', [\App\Http\Controllers\POS\DiningFloorMapController::class, 'show'])->name('floor-map');
             Route::get('/shift', [\App\Http\Controllers\CheckoutController::class, 'shift'])->name('shift');
             Route::get('/sync-status', [\App\Http\Controllers\CheckoutController::class, 'syncStatus'])->name('sync-status');
             Route::get('/settings', [\App\Http\Controllers\CheckoutController::class, 'settings'])->name('settings');
@@ -318,6 +319,10 @@ Route::middleware(['auth', 'tenant'])->group(function () {
         // Timecard status check (within auth/tenant/branch context)
         Route::get('/pos/timecard/status', [\App\Http\Controllers\POS\TimecardController::class, 'status'])
             ->name('pos.timecard.status');
+
+        Route::get('/pos/dining/floor-map', [\App\Http\Controllers\POS\DiningFloorMapController::class, 'index'])
+            ->middleware('permission:create_sale')
+            ->name('pos.dining.floor-map.index');
 
         Route::post('/pos/offline-sync', [\App\Http\Controllers\POS\OfflineSyncController::class, 'sync'])
             ->middleware('permission:create_sale')

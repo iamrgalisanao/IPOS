@@ -40,8 +40,8 @@ Reason:
 | --- | --- | --- | --- |
 | 38.1 | Done | - | - |
 | 38.2 | Done | - | - |
-| 38.5 | Implemented - Pending Review | - | - |
-| 38.3 | Blocked by 38.1, 38.2, 38.5 | - | - |
+| 38.5 | Done | - | - |
+| 38.3 | Implemented - Pending Review | - | - |
 | 38.4 | Blocked by 38.2, 38.5 | - | - |
 | 38.6 | Blocked by 38.2, 38.4, 38.5 | - | - |
 | 38.8 | Blocked by 38.3, 38.4, 38.6 | - | - |
