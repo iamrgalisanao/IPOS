@@ -2,7 +2,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import axios from 'axios';
 import { catalogCache, filterCachedProducts, validateBootstrapPayload } from '../../resources/js/POS/offline/catalogCache.ts';
-import { validateCheckoutAllowed, isOffline, resolveOfflineCaptureReadiness } from '../../resources/js/POS/offline/offlineGuards.ts';
+import {
+    assertDiningOnline,
+    diningOnlineOnlyHeaders,
+    isDiningMutationAllowed,
+    validateCheckoutAllowed,
+    isOffline,
+    resolveOfflineCaptureReadiness,
+} from '../../resources/js/POS/offline/offlineGuards.ts';
 import { globalState } from '../../resources/js/POS/offline/connectivityStore.ts';
 
 // ----------------- Mock IndexedDB -----------------
@@ -346,6 +353,38 @@ test('Frontend catalogCache functionality', async (t) => {
         assert.strictEqual(isOffline(), false);
         await assert.doesNotReject(async () => {
             await validateCheckoutAllowed();
+        });
+    });
+
+    await t.test('dining mutations require online connectivity and valid terminal context', async () => {
+        mockNavigator.onLine = false;
+        globalState.status = 'offline';
+        globalState.terminalContextInvalid = false;
+
+        assert.strictEqual(isDiningMutationAllowed(), false);
+        assert.throws(() => assertDiningOnline(), /Dining actions require an online connection/);
+        assert.deepStrictEqual(diningOnlineOnlyHeaders(), {
+            'X-IPOS-Online-Only': 'dining',
+            'X-IPOS-Connectivity': 'offline',
+        });
+
+        mockNavigator.onLine = true;
+        globalState.status = 'checking';
+        assert.strictEqual(isDiningMutationAllowed(), false);
+        assert.throws(() => assertDiningOnline(), /Dining actions require an online connection/);
+        assert.strictEqual(diningOnlineOnlyHeaders()['X-IPOS-Connectivity'], 'checking');
+
+        globalState.status = 'online';
+        globalState.terminalContextInvalid = true;
+        assert.strictEqual(isDiningMutationAllowed(), false);
+        assert.throws(() => assertDiningOnline(), /Dining actions require an online connection/);
+
+        globalState.terminalContextInvalid = false;
+        assert.strictEqual(isDiningMutationAllowed(), true);
+        assert.doesNotThrow(() => assertDiningOnline());
+        assert.deepStrictEqual(diningOnlineOnlyHeaders(), {
+            'X-IPOS-Online-Only': 'dining',
+            'X-IPOS-Connectivity': 'online',
         });
     });
 });

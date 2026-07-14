@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import TabletPOSLayout from '@/Layouts/TabletPOSLayout';
 import TerminalInfoShell from './TerminalInfoShell';
 import { AlertTriangle, Armchair, CloudOff, RefreshCw, Search, Utensils } from 'lucide-react';
+import { assertDiningOnline, diningOnlineOnlyHeaders } from '@/POS/offline/offlineGuards.ts';
 
 const STATUS_STYLES = {
     vacant: 'border-emerald-400 bg-emerald-500/15 text-emerald-50',
@@ -27,6 +28,55 @@ function storageKey(terminalContext) {
     const terminalId = terminalContext?.terminal?.id || 'terminal';
 
     return `ipos:dining-floor-map:v1:${tenantId}:${branchId}:${terminalId}`;
+}
+
+function readFloorMapCache(cacheKey) {
+    const cached = localStorage.getItem(cacheKey);
+    if (!cached) {
+        return null;
+    }
+
+    const parsed = JSON.parse(cached);
+    if (parsed && parsed.data && parsed.cached_at) {
+        return parsed;
+    }
+
+    return {
+        data: parsed,
+        cached_at: null,
+    };
+}
+
+function floorMapCachePayload(data) {
+    return {
+        data,
+        cached_at: new Date().toISOString(),
+    };
+}
+
+function cacheAgeLabel(cachedAt) {
+    if (!cachedAt) {
+        return null;
+    }
+
+    const date = new Date(cachedAt);
+    if (Number.isNaN(date.getTime())) {
+        return null;
+    }
+
+    const minutes = Math.max(0, Math.floor((Date.now() - date.getTime()) / 60000));
+    const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    if (minutes < 1) {
+        return `Last updated ${time} (just now)`;
+    }
+
+    if (minutes < 60) {
+        return `Last updated ${time} (${minutes} minutes ago)`;
+    }
+
+    const hours = Math.floor(minutes / 60);
+    return `Last updated ${time} (${hours}h ${minutes % 60}m ago)`;
 }
 
 function posHeaders(terminalContext) {
@@ -153,6 +203,7 @@ export default function FloorMap({ terminal_context }) {
     const [seatNumber, setSeatNumber] = useState('');
     const [itemActionError, setItemActionError] = useState(null);
     const [isMutating, setIsMutating] = useState(false);
+    const [floorMapCachedAt, setFloorMapCachedAt] = useState(null);
 
     const cacheKey = useMemo(() => storageKey(terminal_context), [terminal_context]);
 
@@ -182,12 +233,12 @@ export default function FloorMap({ terminal_context }) {
             setIsLoading(true);
             setError(null);
 
-            const cached = localStorage.getItem(cacheKey);
+            const cached = readFloorMapCache(cacheKey);
 
             if (!navigator.onLine && cached) {
-                const parsed = JSON.parse(cached);
-                setFloorMap(parsed);
-                setActiveAreaId((current) => current || parsed.service_areas?.[0]?.id || null);
+                setFloorMap(cached.data);
+                setFloorMapCachedAt(cached.cached_at);
+                setActiveAreaId((current) => current || cached.data.service_areas?.[0]?.id || null);
                 setIsLoading(false);
                 return;
             }
@@ -209,13 +260,14 @@ export default function FloorMap({ terminal_context }) {
                 }
 
                 setFloorMap(payload.data);
+                setFloorMapCachedAt(new Date().toISOString());
                 setActiveAreaId((current) => current || payload.data.service_areas?.[0]?.id || null);
-                localStorage.setItem(cacheKey, JSON.stringify(payload.data));
+                localStorage.setItem(cacheKey, JSON.stringify(floorMapCachePayload(payload.data)));
             } catch (requestError) {
                 if (cached) {
-                    const parsed = JSON.parse(cached);
-                    setFloorMap(parsed);
-                    setActiveAreaId((current) => current || parsed.service_areas?.[0]?.id || null);
+                    setFloorMap(cached.data);
+                    setFloorMapCachedAt(cached.cached_at);
+                    setActiveAreaId((current) => current || cached.data.service_areas?.[0]?.id || null);
                     setError('Showing cached floor map');
                 } else {
                     setError(requestError.message || 'Floor map unavailable');
@@ -238,6 +290,7 @@ export default function FloorMap({ terminal_context }) {
     const activeArea = areas.find((area) => area.id === activeAreaId) || areas[0] || null;
     const selectedTable = areas.flatMap((area) => area.tables || []).find((table) => table.id === selectedTableId) || null;
     const activeTicket = selectedTable?.active_ticket || null;
+    const floorMapAge = cacheAgeLabel(floorMapCachedAt);
 
     async function refreshTicket(ticketId) {
         const response = await fetch(route('pos.dining.tickets.show', ticketId), {
@@ -329,9 +382,14 @@ export default function FloorMap({ terminal_context }) {
         setItemActionError(null);
 
         try {
+            assertDiningOnline();
+
             const response = await fetch(url, {
                 method,
-                headers: posHeaders(terminal_context),
+                headers: {
+                    ...posHeaders(terminal_context),
+                    ...diningOnlineOnlyHeaders(),
+                },
                 credentials: 'same-origin',
                 body: JSON.stringify(payload),
             });
@@ -391,6 +449,7 @@ export default function FloorMap({ terminal_context }) {
                             <div className="truncate text-sm font-black text-slate-100">{terminal_context?.branch?.name || 'Dining Floor'}</div>
                             <div className="mt-1 truncate text-xs text-slate-500">
                                 Layout {floorMap?.layout_revision?.slice?.(0, 10) || 'pending'} · Occupancy {floorMap?.occupancy_revision?.slice?.(0, 10) || 'pending'}
+                                {floorMapAge ? ` · ${floorMapAge}` : ''}
                             </div>
                         </div>
                     </div>
@@ -398,7 +457,7 @@ export default function FloorMap({ terminal_context }) {
                         {(isOffline || error) && (
                             <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-100">
                                 {isOffline ? <CloudOff className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
-                                {isOffline ? 'Offline' : error}
+                                {isOffline ? 'Offline - cached floor map is read-only' : error}
                             </div>
                         )}
                         <button
@@ -462,6 +521,14 @@ export default function FloorMap({ terminal_context }) {
                                         <div className="text-lg font-black text-white">{selectedTable.table_number}</div>
                                         <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-3 text-sm font-bold text-slate-400">
                                             {STATUS_LABELS[selectedTable.status] || selectedTable.status}
+                                        </div>
+                                    </div>
+                                ) : isOffline ? (
+                                    <div className="space-y-3">
+                                        <div className="text-lg font-black text-white">{selectedTable.table_number}</div>
+                                        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm font-bold text-amber-100">
+                                            Dining actions require an online connection. Cached floor map is read-only.
+                                            {floorMapAge ? <div className="mt-2 text-xs text-amber-200/80">{floorMapAge}</div> : null}
                                         </div>
                                     </div>
                                 ) : ticketLoading ? (

@@ -15,6 +15,31 @@ export function isOffline(): boolean {
     return globalState.status === 'offline';
 }
 
+export function isDiningMutationAllowed(): boolean {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        return false;
+    }
+
+    if (globalState.status !== 'online') {
+        return false;
+    }
+
+    return !globalState.terminalContextInvalid;
+}
+
+export function diningOnlineOnlyHeaders(): Record<string, string> {
+    return {
+        'X-IPOS-Online-Only': 'dining',
+        'X-IPOS-Connectivity': globalState.status,
+    };
+}
+
+export function assertDiningOnline(): void {
+    if (!isDiningMutationAllowed()) {
+        throw new Error('Dining actions require an online connection. Cached floor map is read-only.');
+    }
+}
+
 export async function resolveOfflineCaptureReadiness(): Promise<OfflineCaptureReadiness> {
     try {
         const catalog = await catalogCache.getCachedCatalog();
