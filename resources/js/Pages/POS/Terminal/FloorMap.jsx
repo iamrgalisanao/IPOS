@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import TabletPOSLayout from '@/Layouts/TabletPOSLayout';
 import TerminalInfoShell from './TerminalInfoShell';
-import { AlertTriangle, Armchair, CloudOff, RefreshCw, Utensils } from 'lucide-react';
+import { AlertTriangle, Armchair, CloudOff, RefreshCw, Search, Utensils } from 'lucide-react';
 
 const STATUS_STYLES = {
     vacant: 'border-emerald-400 bg-emerald-500/15 text-emerald-50',
@@ -29,6 +29,17 @@ function storageKey(terminalContext) {
     return `ipos:dining-floor-map:v1:${tenantId}:${branchId}:${terminalId}`;
 }
 
+function posHeaders(terminalContext) {
+    return {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+        ...(terminalContext?.tenant?.id ? { 'X-Tenant-ID': terminalContext.tenant.id } : {}),
+        ...(terminalContext?.branch?.id ? { 'X-Branch-ID': terminalContext.branch.id } : {}),
+        ...(terminalContext?.terminal?.id ? { 'X-Terminal-ID': terminalContext.terminal.id } : {}),
+    };
+}
+
 function tableDuration(openedAt, now) {
     if (!openedAt) {
         return null;
@@ -39,6 +50,10 @@ function tableDuration(openedAt, now) {
     const remainder = minutes % 60;
 
     return hours > 0 ? `${hours}h ${remainder}m` : `${remainder}m`;
+}
+
+function formatPeso(centavos) {
+    return `₱${(Number(centavos || 0) / 100).toFixed(2)}`;
 }
 
 function canvasStyle(area) {
@@ -75,13 +90,15 @@ function tableStyle(table, area) {
     };
 }
 
-function TableNode({ table, area, now }) {
+function TableNode({ table, area, now, selected, onSelect }) {
     const activeTicket = table.active_ticket;
     const duration = tableDuration(activeTicket?.opened_at, now);
 
     return (
-        <div
-            className={`absolute flex min-h-12 min-w-16 flex-col items-center justify-center overflow-hidden border-2 px-2 text-center shadow-lg shadow-black/20 ${STATUS_STYLES[table.status] || STATUS_STYLES.unavailable}`}
+        <button
+            type="button"
+            onClick={() => onSelect(table.id)}
+            className={`absolute flex min-h-12 min-w-16 flex-col items-center justify-center overflow-hidden border-2 px-2 text-center shadow-lg shadow-black/20 transition ${selected ? 'ring-2 ring-white' : ''} ${STATUS_STYLES[table.status] || STATUS_STYLES.unavailable}`}
             style={tableStyle(table, area)}
             title={`${table.table_number} - ${STATUS_LABELS[table.status] || table.status}`}
         >
@@ -94,7 +111,7 @@ function TableNode({ table, area, now }) {
                     {activeTicket.ticket_number}{duration ? ` · ${duration}` : ''}
                 </div>
             )}
-        </div>
+        </button>
     );
 }
 
@@ -121,10 +138,21 @@ function StatusLegend({ areas }) {
 export default function FloorMap({ terminal_context }) {
     const [floorMap, setFloorMap] = useState(null);
     const [activeAreaId, setActiveAreaId] = useState(null);
+    const [selectedTableId, setSelectedTableId] = useState(null);
     const [isOffline, setIsOffline] = useState(typeof navigator !== 'undefined' ? !navigator.onLine : false);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
     const [now, setNow] = useState(new Date());
+    const [ticketDetail, setTicketDetail] = useState(null);
+    const [ticketLoading, setTicketLoading] = useState(false);
+    const [ticketError, setTicketError] = useState(null);
+    const [productQuery, setProductQuery] = useState('');
+    const [products, setProducts] = useState([]);
+    const [selectedProduct, setSelectedProduct] = useState(null);
+    const [quantity, setQuantity] = useState('1.000');
+    const [seatNumber, setSeatNumber] = useState('');
+    const [itemActionError, setItemActionError] = useState(null);
+    const [isMutating, setIsMutating] = useState(false);
 
     const cacheKey = useMemo(() => storageKey(terminal_context), [terminal_context]);
 
@@ -167,13 +195,7 @@ export default function FloorMap({ terminal_context }) {
             try {
                 const response = await fetch(route('pos.dining.floor-map.index'), {
                     method: 'GET',
-                    headers: {
-                        Accept: 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest',
-                        ...(terminal_context?.tenant?.id ? { 'X-Tenant-ID': terminal_context.tenant.id } : {}),
-                        ...(terminal_context?.branch?.id ? { 'X-Branch-ID': terminal_context.branch.id } : {}),
-                        ...(terminal_context?.terminal?.id ? { 'X-Terminal-ID': terminal_context.terminal.id } : {}),
-                    },
+                    headers: posHeaders(terminal_context),
                     credentials: 'same-origin',
                 });
 
@@ -210,15 +232,153 @@ export default function FloorMap({ terminal_context }) {
         return () => {
             ignore = true;
         };
-    }, [cacheKey]);
+    }, [cacheKey, terminal_context]);
 
     const areas = floorMap?.service_areas || [];
     const activeArea = areas.find((area) => area.id === activeAreaId) || areas[0] || null;
+    const selectedTable = areas.flatMap((area) => area.tables || []).find((table) => table.id === selectedTableId) || null;
+    const activeTicket = selectedTable?.active_ticket || null;
+
+    async function refreshTicket(ticketId) {
+        const response = await fetch(route('pos.dining.tickets.show', ticketId), {
+            headers: posHeaders(terminal_context),
+            credentials: 'same-origin',
+        });
+        const payload = await response.json();
+        setTicketDetail(payload.dining_ticket);
+    }
+
+    useEffect(() => {
+        if (!activeTicket?.id || isOffline) {
+            setTicketDetail(null);
+            return;
+        }
+
+        let ignore = false;
+
+        async function loadTicket() {
+            setTicketLoading(true);
+            setTicketError(null);
+
+            try {
+                const response = await fetch(route('pos.dining.tickets.show', activeTicket.id), {
+                    headers: posHeaders(terminal_context),
+                    credentials: 'same-origin',
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Ticket request failed with ${response.status}`);
+                }
+
+                const payload = await response.json();
+                if (!ignore) {
+                    setTicketDetail(payload.dining_ticket);
+                }
+            } catch (requestError) {
+                if (!ignore) {
+                    setTicketError(requestError.message || 'Ticket unavailable');
+                }
+            } finally {
+                if (!ignore) {
+                    setTicketLoading(false);
+                }
+            }
+        }
+
+        loadTicket();
+
+        return () => {
+            ignore = true;
+        };
+    }, [activeTicket?.id, isOffline, terminal_context]);
+
+    useEffect(() => {
+        if (isOffline || productQuery.trim().length < 2) {
+            setProducts([]);
+            return;
+        }
+
+        let ignore = false;
+
+        async function searchProducts() {
+            const params = new URLSearchParams({ q: productQuery.trim() });
+            const response = await fetch(`/pos/search?${params.toString()}`, {
+                headers: posHeaders(terminal_context),
+                credentials: 'same-origin',
+            });
+
+            if (!response.ok) {
+                return;
+            }
+
+            const payload = await response.json();
+            if (!ignore) {
+                setProducts(Array.isArray(payload) ? payload.slice(0, 8) : []);
+            }
+        }
+
+        searchProducts();
+
+        return () => {
+            ignore = true;
+        };
+    }, [productQuery, isOffline, terminal_context]);
+
+    async function mutateItem(url, method, payload) {
+        setIsMutating(true);
+        setItemActionError(null);
+
+        try {
+            const response = await fetch(url, {
+                method,
+                headers: posHeaders(terminal_context),
+                credentials: 'same-origin',
+                body: JSON.stringify(payload),
+            });
+            const json = await response.json();
+
+            if (!response.ok) {
+                throw new Error(json.message || `Request failed with ${response.status}`);
+            }
+
+            await refreshTicket(json.dining_ticket.id);
+            return json;
+        } catch (requestError) {
+            setItemActionError(requestError.message || 'Item action failed');
+            return null;
+        } finally {
+            setIsMutating(false);
+        }
+    }
+
+    async function addItem(event) {
+        event.preventDefault();
+
+        if (!activeTicket?.id || !ticketDetail || !selectedProduct) {
+            return;
+        }
+
+        const result = await mutateItem(route('pos.dining.tickets.items.store', activeTicket.id), 'POST', {
+            product_id: selectedProduct.id,
+            quantity,
+            seat_number: seatNumber ? Number(seatNumber) : null,
+            expected_ticket_revision: ticketDetail.ticket_revision,
+        });
+
+        if (result) {
+            setSelectedProduct(null);
+            setProductQuery('');
+            setProducts([]);
+            setQuantity('1.000');
+        }
+    }
+
+    const ticketItems = ticketDetail?.items || [];
 
     return (
         <TerminalInfoShell
             title="Floor Map"
-            subtitle="Read-only dining table status for the active terminal."
+            subtitle="Dining table status and active ticket items for this terminal."
             terminalContext={terminal_context}
         >
             <div className="space-y-4">
@@ -271,20 +431,204 @@ export default function FloorMap({ terminal_context }) {
                     ))}
                 </div>
 
-                <section className="min-h-[480px] rounded-lg border border-slate-800 bg-slate-950 p-4">
+                <section className="grid min-h-[480px] gap-4 rounded-lg border border-slate-800 bg-slate-950 p-4 xl:grid-cols-[minmax(0,1fr)_380px]">
                     {isLoading ? (
-                        <div className="flex h-[420px] items-center justify-center text-sm font-bold text-slate-500">Loading floor map</div>
+                        <div className="flex h-[420px] items-center justify-center text-sm font-bold text-slate-500 xl:col-span-2">Loading floor map</div>
                     ) : !activeArea ? (
-                        <div className="flex h-[420px] flex-col items-center justify-center gap-3 text-center text-slate-500">
+                        <div className="flex h-[420px] flex-col items-center justify-center gap-3 text-center text-slate-500 xl:col-span-2">
                             <Armchair className="h-10 w-10" />
                             <div className="text-sm font-bold">No dining tables available</div>
                         </div>
                     ) : (
-                        <div className="relative w-full overflow-hidden rounded-lg border border-slate-800 bg-[linear-gradient(rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[size:24px_24px]" style={canvasStyle(activeArea)}>
-                            {(activeArea.tables || []).map((table) => (
-                                <TableNode key={table.id} table={table} area={activeArea} now={now} />
-                            ))}
-                        </div>
+                        <>
+                            <div className="relative w-full overflow-hidden rounded-lg border border-slate-800 bg-[linear-gradient(rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[size:24px_24px]" style={canvasStyle(activeArea)}>
+                                {(activeArea.tables || []).map((table) => (
+                                    <TableNode
+                                        key={table.id}
+                                        table={table}
+                                        area={activeArea}
+                                        now={now}
+                                        selected={selectedTableId === table.id}
+                                        onSelect={setSelectedTableId}
+                                    />
+                                ))}
+                            </div>
+
+                            <aside className="min-h-[420px] rounded-lg border border-slate-800 bg-slate-900/70 p-4">
+                                {!selectedTable ? (
+                                    <div className="flex h-full items-center justify-center text-center text-sm font-bold text-slate-500">Select a table</div>
+                                ) : selectedTable.status !== 'occupied' ? (
+                                    <div className="space-y-3">
+                                        <div className="text-lg font-black text-white">{selectedTable.table_number}</div>
+                                        <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-3 text-sm font-bold text-slate-400">
+                                            {STATUS_LABELS[selectedTable.status] || selectedTable.status}
+                                        </div>
+                                    </div>
+                                ) : ticketLoading ? (
+                                    <div className="flex h-full items-center justify-center text-sm font-bold text-slate-500">Loading ticket</div>
+                                ) : ticketError ? (
+                                    <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-sm font-bold text-rose-100">{ticketError}</div>
+                                ) : ticketDetail ? (
+                                    <div className="space-y-4">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <div className="truncate text-lg font-black text-white">{ticketDetail.ticket_number}</div>
+                                                <div className="mt-1 text-xs font-bold uppercase tracking-widest text-slate-500">Revision {ticketDetail.ticket_revision}</div>
+                                            </div>
+                                            <div className="text-right text-sm font-black text-cyan-100">{formatPeso(ticketDetail.grand_total_centavos)}</div>
+                                        </div>
+
+                                        {itemActionError && (
+                                            <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs font-bold text-rose-100">{itemActionError}</div>
+                                        )}
+
+                                        <form onSubmit={addItem} className="space-y-3 rounded-lg border border-slate-800 bg-slate-950/70 p-3">
+                                            <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-400">
+                                                <Search className="h-4 w-4" />
+                                                Add item
+                                            </div>
+                                            <input
+                                                value={productQuery}
+                                                onChange={(event) => {
+                                                    setProductQuery(event.target.value);
+                                                    setSelectedProduct(null);
+                                                }}
+                                                disabled={isOffline || isMutating}
+                                                className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-semibold text-white outline-none focus:border-cyan-400"
+                                                placeholder="Search catalog"
+                                            />
+                                            {products.length > 0 && (
+                                                <div className="max-h-36 space-y-1 overflow-y-auto">
+                                                    {products.map((product) => (
+                                                        <button
+                                                            key={product.id}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setSelectedProduct(product);
+                                                                setProductQuery(product.name);
+                                                                setProducts([]);
+                                                            }}
+                                                            className="w-full rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-left text-xs font-bold text-slate-200 hover:border-cyan-400"
+                                                        >
+                                                            {product.name}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <input
+                                                    value={quantity}
+                                                    onChange={(event) => setQuantity(event.target.value)}
+                                                    disabled={isOffline || isMutating}
+                                                    className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-semibold text-white outline-none focus:border-cyan-400"
+                                                    placeholder="Qty"
+                                                />
+                                                <input
+                                                    value={seatNumber}
+                                                    onChange={(event) => setSeatNumber(event.target.value)}
+                                                    disabled={isOffline || isMutating}
+                                                    className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-semibold text-white outline-none focus:border-cyan-400"
+                                                    placeholder="Seat"
+                                                />
+                                            </div>
+                                            <button
+                                                type="submit"
+                                                disabled={isOffline || isMutating || !selectedProduct}
+                                                className="w-full rounded-lg bg-cyan-600 px-3 py-2 text-xs font-black uppercase tracking-widest text-white disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                                            >
+                                                Add
+                                            </button>
+                                        </form>
+
+                                        <div className="space-y-2">
+                                            {ticketItems.length === 0 ? (
+                                                <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-3 text-sm font-bold text-slate-500">No items</div>
+                                            ) : ticketItems.map((item) => (
+                                                <div key={item.id} className="rounded-lg border border-slate-800 bg-slate-950/70 p-3">
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div className="min-w-0">
+                                                            <div className="truncate text-sm font-black text-slate-100">{item.product_name || item.product_id}</div>
+                                                            <div className="mt-1 text-xs font-bold text-slate-500">
+                                                                Seat {item.seat_number || '-'} · {item.quantity} · {item.status}
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-sm font-black text-slate-200">{formatPeso(item.line_total_centavos)}</div>
+                                                    </div>
+                                                    {item.status === 'open' && (
+                                                        <div className="mt-3 grid grid-cols-2 gap-2">
+                                                            <button
+                                                                type="button"
+                                                                disabled={isOffline || isMutating}
+                                                                onClick={() => {
+                                                                    const next = window.prompt('Quantity', item.quantity);
+                                                                    if (next) {
+                                                                        mutateItem(route('pos.dining.tickets.items.quantity', [ticketDetail.id, item.id]), 'PATCH', {
+                                                                            quantity: next,
+                                                                            expected_ticket_revision: ticketDetail.ticket_revision,
+                                                                        });
+                                                                    }
+                                                                }}
+                                                                className="rounded-lg border border-slate-700 px-2 py-1.5 text-xs font-bold text-slate-200 disabled:text-slate-600"
+                                                            >
+                                                                Qty
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                disabled={isOffline || isMutating}
+                                                                onClick={() => {
+                                                                    const next = window.prompt('Seat', item.seat_number || '');
+                                                                    mutateItem(route('pos.dining.tickets.items.seat', [ticketDetail.id, item.id]), 'PATCH', {
+                                                                        seat_number: next ? Number(next) : null,
+                                                                        expected_ticket_revision: ticketDetail.ticket_revision,
+                                                                    });
+                                                                }}
+                                                                className="rounded-lg border border-slate-700 px-2 py-1.5 text-xs font-bold text-slate-200 disabled:text-slate-600"
+                                                            >
+                                                                Seat
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                disabled={isOffline || isMutating}
+                                                                onClick={() => {
+                                                                    const next = window.prompt('Move to seat', item.seat_number || '');
+                                                                    if (next) {
+                                                                        mutateItem(route('pos.dining.tickets.items.move-seat', [ticketDetail.id, item.id]), 'POST', {
+                                                                            seat_number: Number(next),
+                                                                            expected_ticket_revision: ticketDetail.ticket_revision,
+                                                                        });
+                                                                    }
+                                                                }}
+                                                                className="rounded-lg border border-slate-700 px-2 py-1.5 text-xs font-bold text-slate-200 disabled:text-slate-600"
+                                                            >
+                                                                Move
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                disabled={isOffline || isMutating}
+                                                                onClick={() => {
+                                                                    const reason = window.prompt('Void reason');
+                                                                    if (reason) {
+                                                                        mutateItem(route('pos.dining.tickets.items.void', [ticketDetail.id, item.id]), 'POST', {
+                                                                            reason,
+                                                                            expected_ticket_revision: ticketDetail.ticket_revision,
+                                                                        });
+                                                                    }
+                                                                }}
+                                                                className="rounded-lg border border-rose-500/30 px-2 py-1.5 text-xs font-bold text-rose-200 disabled:text-slate-600"
+                                                            >
+                                                                Void
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="flex h-full items-center justify-center text-center text-sm font-bold text-slate-500">Ticket unavailable</div>
+                                )}
+                            </aside>
+                        </>
                     )}
                 </section>
             </div>
