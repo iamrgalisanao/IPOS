@@ -407,6 +407,14 @@ class DiningTicketItemService
             throw new DiningDomainException('DINING_TICKET_NOT_ACTIVE', 'Closed or voided dining tickets cannot be changed.', 409);
         }
 
+        if ($this->hasSplitChildren($ticket)) {
+            throw new DiningDomainException(
+                'DINING_TICKET_ALREADY_SPLIT',
+                'This ticket has split child bills and can no longer be changed directly.',
+                409
+            );
+        }
+
         $this->revisionService->assertExpectedRevision($ticket, $expectedRevision);
     }
 
@@ -469,6 +477,13 @@ class DiningTicketItemService
         return DiningTicketItem::query()
             ->where('source_item_id', $item->id)
             ->where('status', '!=', DiningTicketItem::STATUS_VOIDED)
+            ->exists();
+    }
+
+    private function hasSplitChildren(DiningTicket $ticket): bool
+    {
+        return DiningTicket::query()
+            ->where('parent_ticket_id', $ticket->id)
             ->exists();
     }
 

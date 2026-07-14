@@ -20,6 +20,8 @@ class DiningTicketTimelineService
     public const SEAT_ASSIGNED = 'seat_assigned';
     public const ITEM_MOVED = 'item_moved';
     public const ITEM_VOIDED = 'item_voided';
+    public const BILL_SPLIT_CREATED = 'bill_split_created';
+    public const CHILD_BILL_CREATED = 'child_bill_created';
 
     public function recordOpened(
         DiningTicket $ticket,
@@ -120,6 +122,14 @@ class DiningTicketTimelineService
             self::ITEM_VOIDED => sprintf(
                 'Item %s voided.',
                 $payload->get('product_name', $payload->get('item_id', 'unknown'))
+            ),
+            self::BILL_SPLIT_CREATED => sprintf(
+                'Ticket split into %s child bills.',
+                $payload->get('child_ticket_count', 0)
+            ),
+            self::CHILD_BILL_CREATED => sprintf(
+                'Child bill created from ticket %s.',
+                $payload->get('parent_ticket_number', 'unknown')
             ),
             self::STATUS_CHANGED => sprintf(
                 'Ticket status changed from %s to %s.',
