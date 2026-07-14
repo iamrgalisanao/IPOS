@@ -6,6 +6,7 @@ use App\Models\CheckoutRequest;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Values\Dining\DiningCheckoutSnapshot;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -611,9 +612,289 @@ class SaleCreationService
         return ['status' => 'created', 'sale' => $sale->load('items')];
     }
 
+    /**
+     * Create an immutable POS sale from a dining checkout snapshot.
+     *
+     * This path is intentionally owned by SaleCreationService so dining checkout
+     * coordinates settlement without becoming a parallel sales engine.
+     *
+     * @return array{status: string, sale?: Sale, message?: string}
+     */
+    public function createFromDiningSnapshot(DiningCheckoutSnapshot $snapshot): array
+    {
+        $hash = $snapshot->materialHash();
+
+        $checkoutRequest = CheckoutRequest::where('tenant_id', $snapshot->tenantId())
+            ->where('branch_id', $snapshot->branchId())
+            ->where('user_id', $snapshot->userId())
+            ->where('client_request_uuid', $snapshot->checkoutRequestUuid())
+            ->first();
+
+        if ($checkoutRequest) {
+            if ($checkoutRequest->payload_hash !== $hash) {
+                return ['status' => 'conflict'];
+            }
+
+            if ($checkoutRequest->sale_id) {
+                return [
+                    'status' => 'duplicate_seen',
+                    'sale' => Sale::with('items')->find($checkoutRequest->sale_id),
+                ];
+            }
+        } else {
+            $checkoutRequest = CheckoutRequest::create([
+                'tenant_id' => $snapshot->tenantId(),
+                'branch_id' => $snapshot->branchId(),
+                'user_id' => $snapshot->userId(),
+                'client_request_uuid' => $snapshot->checkoutRequestUuid(),
+                'status' => 'validated',
+                'payload_hash' => $hash,
+                'validated_at' => now(),
+                'last_seen_at' => now(),
+                'is_training_mode' => $snapshot->isTrainingMode(),
+            ]);
+        }
+
+        $productIds = collect($snapshot->items())->pluck('product_id')->filter()->unique()->values()->all();
+        $products = Product::where('tenant_id', $snapshot->tenantId())
+            ->whereIn('id', $productIds)
+            ->active()
+            ->with('taxCategory')
+            ->get()
+            ->keyBy('id');
+
+        if ($products->count() !== count($productIds)) {
+            return ['status' => 'invalid_products'];
+        }
+
+        $sale = DB::transaction(function () use ($snapshot, $checkoutRequest, $products) {
+            $machineProfile = \App\Models\SalesMachineProfile::where('tenant_id', $snapshot->tenantId())
+                ->where('branch_id', $snapshot->branchId())
+                ->where('status', 'active')
+                ->when($snapshot->terminalId(), fn ($query) => $query->where('id', $snapshot->terminalId()))
+                ->first();
+
+            $principalInvoiceNumber = null;
+            if ($machineProfile) {
+                $principalInvoiceNumber = $snapshot->isTrainingMode()
+                    ? 'TRAIN-INV-' . ($machineProfile->profile_code ?: 'POS') . '-' . strtoupper(Str::random(10))
+                    : app(\App\Services\POS\InvoiceSequenceService::class)->generateNextInvoiceNumber($machineProfile);
+            }
+
+            $profileSnapshot = app(\App\Services\Tax\TaxSourceSnapshotService::class)->prepareSaleTaxProfileSnapshot($machineProfile, [
+                'tax_source' => Sale::TAX_SOURCE_SYSTEM,
+                'tax_computation_source' => Sale::TAX_SOURCE_SYSTEM,
+                'tax_source_version' => 'BIR_VAT_2026_BASELINE',
+            ]);
+
+            $subtotalCentavos = 0;
+            $discountCentavos = 0;
+            $totalCentavos = 0;
+            $vatableCentavos = 0;
+            $vatExemptCentavos = 0;
+            $zeroRatedCentavos = 0;
+            $nonVatCentavos = 0;
+            $vatAmountCentavos = 0;
+            $saleItemsData = [];
+
+            foreach ($snapshot->items() as $item) {
+                /** @var Product $product */
+                $product = $products[$item['product_id']];
+                $productSnapshot = $product->getSaleSnapshotBase();
+                $quantity = (float) $item['quantity'];
+                $lineTotalCentavos = (int) $item['allocated_amount_centavos'];
+                $promotionDiscountCentavos = (int) $item['promotion_discount_centavos'];
+                $lineSubtotalCentavos = $lineTotalCentavos + $promotionDiscountCentavos;
+                $unitPriceCentavos = $quantity > 0
+                    ? (int) round($lineSubtotalCentavos / $quantity)
+                    : (int) $item['unit_price_centavos'];
+                $tax = $this->taxAmountsFromCentavos($lineTotalCentavos, $productSnapshot);
+
+                $subtotalCentavos += $lineSubtotalCentavos;
+                $discountCentavos += $promotionDiscountCentavos;
+                $totalCentavos += $lineTotalCentavos;
+                $vatableCentavos += $tax['vatable_centavos'];
+                $vatExemptCentavos += $tax['vat_exempt_centavos'];
+                $zeroRatedCentavos += $tax['zero_rated_centavos'];
+                $nonVatCentavos += $tax['non_vat_centavos'];
+                $vatAmountCentavos += $tax['tax_amount_centavos'];
+
+                $saleItemsData[] = [
+                    'id' => Str::uuid()->toString(),
+                    'tenant_id' => $snapshot->tenantId(),
+                    'branch_id' => $snapshot->branchId(),
+                    'product_id' => $product->id,
+                    'product_name' => $productSnapshot['product_name'],
+                    'sku' => $productSnapshot['sku'],
+                    'barcode' => $productSnapshot['barcode'],
+                    'unit_of_measure' => $productSnapshot['unit_of_measure'],
+                    'quantity' => number_format($quantity, 4, '.', ''),
+                    'unit_price' => $this->centavosToDecimal($unitPriceCentavos),
+                    'subtotal' => $this->centavosToDecimal($lineSubtotalCentavos),
+                    'discount_amount' => $this->centavosToDecimal($promotionDiscountCentavos),
+                    'tax_category_id' => $productSnapshot['tax_category_id'],
+                    'tax_type' => $productSnapshot['tax_type'],
+                    'tax_bucket' => $tax['tax_bucket'],
+                    'tax_rate' => number_format($tax['tax_rate'], 4, '.', ''),
+                    'tax_amount' => $this->centavosToDecimal($tax['tax_amount_centavos']),
+                    'net_amount' => $this->centavosToDecimal($tax['net_centavos']),
+                    'vatable_amount' => $this->centavosToDecimal($tax['vatable_centavos']),
+                    'vat_exempt_amount' => $this->centavosToDecimal($tax['vat_exempt_centavos']),
+                    'zero_rated_amount' => $this->centavosToDecimal($tax['zero_rated_centavos']),
+                    'non_vat_amount' => $this->centavosToDecimal($tax['non_vat_centavos']),
+                    'tax_source' => Sale::TAX_SOURCE_SYSTEM,
+                    'tax_snapshot' => json_encode([
+                        'schema_version' => DiningCheckoutSnapshot::SCHEMA_VERSION,
+                        'source' => 'dining_checkout_snapshot',
+                        'dining_ticket_item_id' => $item['dining_ticket_item_id'],
+                    ]),
+                    'line_total' => $this->centavosToDecimal($lineTotalCentavos),
+                    'is_inventory_tracked' => $product->is_inventory_tracked,
+                    'original_unit_price_centavos' => $unitPriceCentavos,
+                    'modifier_adjusted_unit_price_centavos' => $unitPriceCentavos,
+                    'promotion_discount_centavos' => $promotionDiscountCentavos,
+                    'promotion_adjusted_unit_price_centavos' => $unitPriceCentavos,
+                    'statutory_discount_centavos' => 0,
+                    'final_unit_price_centavos' => $quantity > 0 ? (int) round($lineTotalCentavos / $quantity) : $lineTotalCentavos,
+                    'created_at' => now(),
+                ];
+            }
+
+            $sale = Sale::create([
+                'id' => Str::uuid()->toString(),
+                'tenant_id' => $snapshot->tenantId(),
+                'branch_id' => $snapshot->branchId(),
+                'user_id' => $snapshot->userId(),
+                'client_request_uuid' => $snapshot->checkoutRequestUuid(),
+                'checkout_request_id' => $checkoutRequest->id,
+                'sales_machine_profile_id' => $machineProfile?->id,
+                'principal_invoice_number' => $principalInvoiceNumber,
+                'sale_number' => $principalInvoiceNumber,
+                'principal_invoice_type' => 'vat',
+                'principal_invoice_label' => 'Invoice',
+                'status' => 'created',
+                'subtotal' => $this->centavosToDecimal($subtotalCentavos),
+                'tax_total' => $this->centavosToDecimal($vatAmountCentavos),
+                'discount_total' => $this->centavosToDecimal($discountCentavos),
+                'total' => $this->centavosToDecimal($totalCentavos),
+                'gross_sales_amount' => $this->centavosToDecimal($subtotalCentavos),
+                'vatable_sales_amount' => $this->centavosToDecimal($vatableCentavos),
+                'vat_exempt_sales_amount' => $this->centavosToDecimal($vatExemptCentavos),
+                'zero_rated_sales_amount' => $this->centavosToDecimal($zeroRatedCentavos),
+                'non_vat_sales_amount' => $this->centavosToDecimal($nonVatCentavos),
+                'vat_amount' => $this->centavosToDecimal($vatAmountCentavos),
+                'statutory_discount_total' => number_format(0, 4, '.', ''),
+                'commercial_discount_total' => $this->centavosToDecimal($discountCentavos),
+                'other_adjustment_total' => number_format(0, 4, '.', ''),
+                'discount_policy_snapshot' => [
+                    'source' => 'dining_checkout_snapshot',
+                    'snapshot_hash' => $snapshot->materialHash(),
+                ],
+                'contains_statutory_discount' => false,
+                'compliance_version' => 'EPIC38_DINING_CHECKOUT_V1',
+                'tax_source_version' => 'BIR_VAT_2026_BASELINE',
+                'tax_computation_source' => 'system',
+                'tax_profile_snapshot' => $profileSnapshot,
+                'invoice_issued_at' => now(),
+                'reporting_basis_at' => now(),
+                'confirmed_at' => now(),
+                'is_training_mode' => $snapshot->isTrainingMode(),
+            ]);
+
+            $rows = array_map(fn (array $item) => array_merge($item, ['sale_id' => $sale->id]), $saleItemsData);
+            SaleItem::insert($rows);
+
+            if (! $snapshot->isTrainingMode()) {
+                foreach ($snapshot->items() as $item) {
+                    $product = $products[$item['product_id']] ?? null;
+                    if ($product && $product->expiry_tracking_enabled) {
+                        $this->fefoAllocationService->allocate(
+                            $snapshot->tenantId(),
+                            $snapshot->branchId(),
+                            $product->id,
+                            number_format((float) $item['quantity'], 4, '.', '')
+                        );
+                    }
+                }
+            }
+
+            $checkoutRequest->update(['sale_id' => $sale->id]);
+
+            return $sale;
+        });
+
+        return ['status' => 'created', 'sale' => $sale->load('items')];
+    }
+
     private function statutoryPackageBenefitCentavos(array $statutoryResult): int
     {
         return (int) round(((float) ($statutoryResult['discount_amount'] ?? 0) + (float) ($statutoryResult['vat_amount_removed'] ?? 0)) * 100);
+    }
+
+    private function centavosToDecimal(int $centavos): string
+    {
+        return number_format($centavos / 100, 4, '.', '');
+    }
+
+    private function taxAmountsFromCentavos(int $lineTotalCentavos, array $productSnapshot): array
+    {
+        $taxType = strtolower((string) ($productSnapshot['tax_type'] ?? 'non-vat'));
+        $rate = (float) ($productSnapshot['tax_rate'] ?? 0);
+
+        if ($taxType === 'vatable' || $taxType === 'vat') {
+            $netCentavos = $rate > 0
+                ? (int) round($lineTotalCentavos / (1 + ($rate / 100)))
+                : $lineTotalCentavos;
+            $taxCentavos = $lineTotalCentavos - $netCentavos;
+
+            return [
+                'tax_bucket' => SaleItem::TAX_BUCKET_VATABLE,
+                'tax_rate' => $rate,
+                'tax_amount_centavos' => $taxCentavos,
+                'net_centavos' => $netCentavos,
+                'vatable_centavos' => $netCentavos,
+                'vat_exempt_centavos' => 0,
+                'zero_rated_centavos' => 0,
+                'non_vat_centavos' => 0,
+            ];
+        }
+
+        if ($taxType === 'exempt' || $taxType === 'exm') {
+            return [
+                'tax_bucket' => SaleItem::TAX_BUCKET_VAT_EXEMPT,
+                'tax_rate' => $rate,
+                'tax_amount_centavos' => 0,
+                'net_centavos' => $lineTotalCentavos,
+                'vatable_centavos' => 0,
+                'vat_exempt_centavos' => $lineTotalCentavos,
+                'zero_rated_centavos' => 0,
+                'non_vat_centavos' => 0,
+            ];
+        }
+
+        if ($taxType === 'zero-rated' || $taxType === 'zero_rated' || $taxType === 'zro') {
+            return [
+                'tax_bucket' => SaleItem::TAX_BUCKET_ZERO_RATED,
+                'tax_rate' => $rate,
+                'tax_amount_centavos' => 0,
+                'net_centavos' => $lineTotalCentavos,
+                'vatable_centavos' => 0,
+                'vat_exempt_centavos' => 0,
+                'zero_rated_centavos' => $lineTotalCentavos,
+                'non_vat_centavos' => 0,
+            ];
+        }
+
+        return [
+            'tax_bucket' => SaleItem::TAX_BUCKET_NON_VAT,
+            'tax_rate' => $rate,
+            'tax_amount_centavos' => 0,
+            'net_centavos' => $lineTotalCentavos,
+            'vatable_centavos' => 0,
+            'vat_exempt_centavos' => 0,
+            'zero_rated_centavos' => 0,
+            'non_vat_centavos' => $lineTotalCentavos,
+        ];
     }
 
     private function withoutCommercialPromotions(PromotionCalculationResult $result): PromotionCalculationResult

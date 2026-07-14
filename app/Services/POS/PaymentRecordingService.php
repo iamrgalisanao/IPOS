@@ -7,6 +7,7 @@ use App\Models\Sale;
 use App\Models\SalePayment;
 use App\Models\User;
 use App\Services\AuditLogger;
+use App\Services\Dining\DiningTicketCheckoutService;
 use App\Services\InventoryService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -18,7 +19,8 @@ class PaymentRecordingService
         protected AuditLogger $auditLogger,
         protected InventoryService $inventoryService,
         protected \App\Services\Accounting\AccountingOutboxService $outboxService,
-        protected \App\Services\Shift\ShiftService $shiftService
+        protected \App\Services\Shift\ShiftService $shiftService,
+        protected DiningTicketCheckoutService $diningTicketCheckoutService,
     ) {}
 
     /**
@@ -214,6 +216,13 @@ class PaymentRecordingService
                         ])->toArray()
                     ]);
                 }
+
+                $sale->refresh();
+                $sale->setAttribute(
+                    'dining_finalization',
+                    $this->diningTicketCheckoutService->finalizeSuccessfulPayment($sale, $user)
+                );
+                $createdPayments->each(fn (SalePayment $payment) => $payment->setRelation('sale', $sale));
 
                 return $createdPayments;
             });

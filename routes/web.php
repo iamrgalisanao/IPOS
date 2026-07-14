@@ -348,6 +348,8 @@ Route::middleware(['auth', 'tenant'])->group(function () {
                 ->name('pos.dining.tickets.splits.seat');
             Route::post('/pos/dining/tickets/{ticket}/splits/items', [\App\Http\Controllers\POS\DiningTicketSplitController::class, 'byItemQuantity'])
                 ->name('pos.dining.tickets.splits.items');
+            Route::post('/pos/dining/tickets/{ticket}/checkout/create-sale', [\App\Http\Controllers\POS\DiningTicketCheckoutController::class, 'createSale'])
+                ->name('pos.dining.tickets.checkout.create-sale');
         });
 
         Route::get('/pos/dining/tickets/{ticket}', [\App\Http\Controllers\POS\DiningTicketController::class, 'show'])
