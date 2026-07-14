@@ -40,6 +40,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'idempotent' => \App\Http\Middleware\VerifyIdempotency::class,
             'terminal' => \App\Http\Middleware\IdentifyTerminalContext::class,
             'timecard.clocked_in' => \App\Http\Middleware\EnforceClockedIn::class,
+            'dining.online' => \App\Http\Middleware\DiningOnlineRequiredMiddleware::class,
         ]);
 
         $middleware->prependToPriorityList(

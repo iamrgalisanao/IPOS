@@ -43,8 +43,8 @@ Reason:
 | 38.5 | Done | - | - |
 | 38.3 | Done | - | - |
 | 38.4 | Done | - | - |
-| 38.6 | Implemented - Pending Review | - | - |
-| 38.8 | Blocked by 38.3, 38.4, 38.6 | - | - |
+| 38.6 | Done | - | - |
+| 38.8 | Implemented - Pending Review | - | - |
 | 38.7 | Blocked by 38.6, 38.8 | - | - |
 
 ## 4. Story Dependencies and Complexity
