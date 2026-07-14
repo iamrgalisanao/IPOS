@@ -38,8 +38,8 @@ Reason:
 
 | Story | Status | Owner | Sprint |
 | --- | --- | --- | --- |
-| 38.1 | Review | - | - |
-| 38.2 | Blocked by 38.1 foundation | - | - |
+| 38.1 | Done | - | - |
+| 38.2 | Approved for Implementation | - | - |
 | 38.5 | Blocked by 38.2 | - | - |
 | 38.3 | Blocked by 38.1, 38.2, 38.5 | - | - |
 | 38.4 | Blocked by 38.2, 38.5 | - | - |

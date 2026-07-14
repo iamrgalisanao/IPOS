@@ -51,4 +51,14 @@ class ServiceArea extends Model
     {
         return $this->hasMany(DiningTable::class);
     }
+
+    public function activeDiningTickets(): HasMany
+    {
+        return $this->hasMany(DiningTable::class)
+            ->whereHas('ticketMappings', function ($query) {
+                $query->whereNull('detached_at')
+                    ->where('role', DiningTicketTable::ROLE_PRIMARY)
+                    ->whereHas('ticket', fn ($ticketQuery) => $ticketQuery->whereIn('status', DiningTicket::ACTIVE_STATUSES));
+            });
+    }
 }
