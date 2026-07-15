@@ -2,7 +2,7 @@
 
 ## 1. Status
 
-Approved for Implementation
+Done
 
 Date: 2026-07-15
 
@@ -500,19 +500,19 @@ Recommended test setup:
 
 ## 19. Implementation Checklist
 
-1. Create migrations.
-2. Create models.
-3. Create factories.
-4. Add RBAC permissions.
-5. Create service class.
-6. Create request validators.
-7. Create controller and routes.
-8. Add audit events.
-9. Add feature tests.
-10. Run focused tests.
-11. Update this story status after implementation review.
-12. Verify route model binding enforces tenant scope.
-13. Verify immutable-field guards for `customer_id` and `currency_code`.
+1. [x] Create migrations.
+2. [x] Create models.
+3. [x] Create factories.
+4. [x] Add RBAC permissions.
+5. [x] Create service class.
+6. [x] Create request validators.
+7. [x] Create controller and routes.
+8. [x] Add audit events.
+9. [x] Add feature tests.
+10. [x] Run focused tests.
+11. [x] Update this story status after implementation review.
+12. [x] Verify route model binding enforces tenant scope.
+13. [x] Verify immutable-field guards for `customer_id` and `currency_code`.
 
 ## 20. Developer Guardrails
 
@@ -532,3 +532,48 @@ Recommended test setup:
 1. Branch Manager receives `customer-accounts.view` only in Story 39.1. `customer-accounts.manage` stays Owner/Admin-only.
 2. API-first implementation is acceptable and preferred for the first PR if it keeps scope focused. A minimal Inertia page may be included only if it stays limited to create, view, and lifecycle actions.
 3. `external_reference` should be unique per tenant where the database supports partial unique indexes. If not portable, enforce uniqueness in service validation.
+
+## 22. Dev Agent Record
+
+### Debug Log
+
+- 2026-07-15: Started implementation from approved Story 39.1 specification.
+- 2026-07-15: Implemented API-first customer financial account foundation.
+- 2026-07-15: Focused customer-account tests passed.
+- 2026-07-15: Adjacent Service Area layout regression tests passed after RBAC route changes.
+- 2026-07-15: Local PR review completed; factory tenant consistency issue fixed before commit.
+
+### Completion Notes
+
+- Added tenant-scoped `customers` and `customer_financial_accounts` foundations.
+- Added `Customer` and `CustomerFinancialAccount` models with UUIDs, tenant scoping, relationships, status constants, and immutable account ownership/currency guards.
+- Added `CustomerFinancialAccountService` for creation, lifecycle transitions, anonymization, and audit events.
+- Added API-first admin JSON routes for account index, creation, show, status update, and customer anonymization.
+- Added `customer-accounts.view` and `customer-accounts.manage` permissions with Owner/Admin manage access, Branch Manager view-only access, Accountant view-only access, and no Cashier access.
+- Added feature tests covering tenant isolation, permission boundaries, lifecycle conflicts, UUID rejection, email reuse, hard-delete prevention, anonymization, immutable fields, audit events, and no sale/payment/refund/accounting side effects.
+- Local PR review completed with no remaining findings.
+
+### File List
+
+- `app/Exceptions/Customers/CustomerFinancialAccountAlreadyExistsException.php`
+- `app/Exceptions/Customers/CustomerFinancialAccountCurrencyImmutableException.php`
+- `app/Exceptions/Customers/CustomerFinancialAccountOwnershipImmutableException.php`
+- `app/Exceptions/Customers/CustomerFinancialAccountStateConflictException.php`
+- `app/Http/Controllers/Admin/CustomerFinancialAccountController.php`
+- `app/Http/Requests/Customers/AnonymizeCustomerRequest.php`
+- `app/Http/Requests/Customers/StoreCustomerFinancialAccountRequest.php`
+- `app/Http/Requests/Customers/UpdateCustomerFinancialAccountStatusRequest.php`
+- `app/Models/Customer.php`
+- `app/Models/CustomerFinancialAccount.php`
+- `app/Services/Customers/CustomerFinancialAccountService.php`
+- `app/Services/RbacSeeder.php`
+- `database/factories/CustomerFactory.php`
+- `database/factories/CustomerFinancialAccountFactory.php`
+- `database/migrations/2026_07_15_000001_create_customers_and_financial_accounts.php`
+- `docs/implementation-plans/epic-39/stories/story-39.1-customer-account-foundation.md`
+- `routes/web.php`
+- `tests/Feature/Customers/CustomerFinancialAccountFoundationTest.php`
+
+### Change Log
+
+- Implemented Story 39.1 customer account foundation and validated locally.

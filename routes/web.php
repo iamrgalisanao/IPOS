@@ -669,6 +669,25 @@ Route::middleware(['auth', 'tenant'])->group(function () {
                 ->name('tables.activation');
         });
 
+        Route::prefix('admin/customer-accounts')->name('admin.customer-accounts.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Admin\CustomerFinancialAccountController::class, 'index'])
+                ->middleware('permission:customer-accounts.view')
+                ->name('index');
+            Route::post('/', [\App\Http\Controllers\Admin\CustomerFinancialAccountController::class, 'store'])
+                ->middleware('permission:customer-accounts.manage')
+                ->name('store');
+            Route::get('/{customerFinancialAccount}', [\App\Http\Controllers\Admin\CustomerFinancialAccountController::class, 'show'])
+                ->middleware('permission:customer-accounts.view')
+                ->name('show');
+            Route::patch('/{customerFinancialAccount}/status', [\App\Http\Controllers\Admin\CustomerFinancialAccountController::class, 'status'])
+                ->middleware('permission:customer-accounts.manage')
+                ->name('status');
+        });
+
+        Route::post('/admin/customers/{customer}/anonymize', [\App\Http\Controllers\Admin\CustomerFinancialAccountController::class, 'anonymize'])
+            ->middleware('permission:customer-accounts.manage')
+            ->name('admin.customers.anonymize');
+
         // Terminal Layout Assignment (per-register override)
         Route::prefix('admin/sales-machine-profiles')
             ->name('admin.sales-machine-profiles.')
