@@ -11,6 +11,15 @@ use App\Services\POS\VoidService;
 use App\Services\POS\RefundService;
 use App\Services\BranchContext;
 use App\Services\TenantContext;
+use App\Values\POS\RefundPayoutCommand;
+use App\Exceptions\StoreCredit\StoreCreditRefundAccountConflictException;
+use App\Exceptions\StoreCredit\StoreCreditRefundAlreadyIssuedException;
+use App\Exceptions\StoreCredit\StoreCreditRefundCurrencyMismatchException;
+use App\Exceptions\StoreCredit\StoreCreditRefundOfflineNotAllowedException;
+use App\Exceptions\StoreCredit\StoreCreditLedgerAccountStateException;
+use App\Exceptions\StoreCredit\StoreCreditLedgerCurrencyMismatchException;
+use App\Exceptions\StoreCredit\StoreCreditLedgerIdempotencyDriftException;
+use App\Exceptions\StoreCredit\StoreCreditLedgerSourceConflictException;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
@@ -120,7 +129,15 @@ class VoidRefundController extends Controller
         $shift = $payment ? $payment->shift : null;
         $isShiftClosed = !$shift || $shift->status !== Shift::STATUS_OPEN;
 
-        $payoutMethod = $request->input('payout_method', 'electronic'); // electronic or cash_exception
+        $payoutMethod = $request->input('payout_method', 'electronic'); // electronic, cash_exception, or store_credit
+
+        if ($payoutMethod === RefundPayoutCommand::METHOD_STORE_CREDIT && !$request->input('customer_financial_account_id')) {
+            return response()->json([
+                'success' => false,
+                'code' => 'STORE_CREDIT_ACCOUNT_REQUIRED',
+                'message' => 'A customer financial account is required for store credit refunds.'
+            ], 422);
+        }
 
         // 2. Closed-shift Electronic Payment Rule
         if ($isElectronic && $isShiftClosed && $payoutMethod !== 'cash_exception') {
@@ -199,10 +216,29 @@ class VoidRefundController extends Controller
             }
 
             $activeShift = $this->getActiveShift();
-            $refund = $this->refundService->refund($sale, $itemsToRefund, $reasonCode, $reasonNotes, $activeShift?->id);
+            $payoutCommand = new RefundPayoutCommand(
+                payoutMethod: $payoutMethod,
+                customerFinancialAccountId: $request->input('customer_financial_account_id'),
+                idempotencyKey: $request->header('Idempotency-Key'),
+                requestedBy: $user,
+                approvalReference: $request->input('supervisor_email'),
+                sourceChannel: 'pos',
+            );
+
+            $refund = $this->refundService->refund(
+                $sale,
+                $itemsToRefund,
+                $reasonCode,
+                $reasonNotes,
+                $activeShift?->id,
+                $payoutCommand
+            );
 
             // Log Cash Drawer impact if payout method was cash (cash exception or standard cash)
-            if ($payoutMethod === 'cash_exception' || strtolower($originalPaymentMethod) === 'cash') {
+            if (
+                $payoutMethod !== RefundPayoutCommand::METHOD_STORE_CREDIT
+                && ($payoutMethod === 'cash_exception' || strtolower($originalPaymentMethod) === 'cash')
+            ) {
                 if ($activeShift) {
                     $activeShift->cashDrawerEvents()->create([
                         'tenant_id' => $sale->tenant_id,
@@ -215,6 +251,8 @@ class VoidRefundController extends Controller
                 }
             }
 
+            $storeCredit = $refund->storeCreditIssuance;
+
             return response()->json([
                 'success' => true,
                 'message' => 'Refund processed successfully.',
@@ -222,9 +260,31 @@ class VoidRefundController extends Controller
                     'refund_id' => $refund->id,
                     'sale_id' => $sale->id,
                     'refund_total' => $refund->refund_total,
-                    'status' => 'refunded'
+                    'status' => 'refunded',
+                    'payout_method' => $payoutMethod,
+                    'store_credit' => $storeCredit ? [
+                        'customer_financial_account_id' => $storeCredit->customer_financial_account_id,
+                        'ledger_entry_id' => $storeCredit->store_credit_ledger_entry_id,
+                        'amount_centavos' => $storeCredit->amount_centavos,
+                        'currency_code' => $storeCredit->currency_code,
+                    ] : null,
                 ]
             ]);
+        } catch (
+            StoreCreditRefundAccountConflictException
+            | StoreCreditRefundAlreadyIssuedException
+            | StoreCreditRefundCurrencyMismatchException
+            | StoreCreditRefundOfflineNotAllowedException
+            | StoreCreditLedgerAccountStateException
+            | StoreCreditLedgerCurrencyMismatchException
+            | StoreCreditLedgerIdempotencyDriftException
+            | StoreCreditLedgerSourceConflictException $e
+        ) {
+            return response()->json([
+                'success' => false,
+                'code' => 'STORE_CREDIT_REFUND_FAILED',
+                'message' => $e->getMessage()
+            ], 409);
         } catch (\Throwable $e) {
             return response()->json([
                 'success' => false,

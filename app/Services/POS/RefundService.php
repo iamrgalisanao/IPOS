@@ -14,6 +14,8 @@ use App\Services\AuditLogger;
 use App\Services\TenantContext;
 use App\Services\BranchContext;
 use App\Services\InventoryService;
+use App\Services\StoreCredit\StoreCreditRefundIssuer;
+use App\Values\POS\RefundPayoutCommand;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 
@@ -24,19 +26,27 @@ class RefundService
         protected TenantContext $tenantContext,
         protected BranchContext $branchContext,
         protected InventoryService $inventoryService,
-        protected \App\Services\Accounting\AccountingOutboxService $outboxService
+        protected \App\Services\Accounting\AccountingOutboxService $outboxService,
+        protected StoreCreditRefundIssuer $storeCreditRefundIssuer
     ) {}
 
     /**
      * Perform a refund on a sale.
      * $itemsToRefund: Array of ['sale_item_id' => string, 'quantity' => float, 'restock_action' => string]
      */
-    public function refund(Sale $sale, array $itemsToRefund, string $reasonCode, ?string $reasonNotes = null, ?string $shiftId = null): SaleRefund
+    public function refund(
+        Sale $sale,
+        array $itemsToRefund,
+        string $reasonCode,
+        ?string $reasonNotes = null,
+        ?string $shiftId = null,
+        ?RefundPayoutCommand $payoutCommand = null
+    ): SaleRefund
     {
         $this->validateSaleStatus($sale);
         $this->validateIsolation($sale);
 
-        return DB::transaction(function () use ($sale, $itemsToRefund, $reasonCode, $reasonNotes, $shiftId) {
+        return DB::transaction(function () use ($sale, $itemsToRefund, $reasonCode, $reasonNotes, $shiftId, $payoutCommand) {
             $user = Auth::user();
             $refundTotal = 0;
             $refundItemsData = [];
@@ -170,7 +180,11 @@ class RefundService
                 ])->toArray(),
             ]);
 
-            return $refund;
+            if ($payoutCommand?->isStoreCredit()) {
+                $this->storeCreditRefundIssuer->issue($refund, $payoutCommand);
+            }
+
+            return $refund->fresh(['items', 'storeCreditIssuance.ledgerEntry']);
         });
     }
 

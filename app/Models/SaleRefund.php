@@ -51,6 +51,11 @@ class SaleRefund extends Model
         return $this->belongsTo(Sale::class);
     }
 
+    public function storeCreditIssuance(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(StoreCreditRefundIssuance::class);
+    }
+
     public function shift(): BelongsTo
     {
         return $this->belongsTo(Shift::class);

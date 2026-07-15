@@ -41,8 +41,8 @@ Reason:
 | Story | Status | Owner | Sprint |
 | --- | --- | --- | --- |
 | 39.1 | Done | - | - |
-| 39.2 | Approved for Implementation | - | - |
-| 39.3 | Blocked by 39.2 | - | - |
+| 39.2 | Done | - | - |
+| 39.3 | Approved for Implementation | - | - |
 | 39.4 | Blocked by 39.2, 39.3 | - | - |
 | 39.5 | Blocked by 39.1, 39.2, 39.3, 39.4 | - | - |
 | 39.6 | Blocked by 39.1, 39.2 | - | - |
