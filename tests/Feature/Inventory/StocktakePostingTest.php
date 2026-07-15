@@ -120,14 +120,14 @@ class StocktakePostingTest extends TestCase
         $this->assertDatabaseHas('inventory_movements', [
             'product_id' => $product1->id,
             'quantity_change' => -5.0000,
-            'movement_type' => 'STOCKTAKE_ADJUSTMENT',
+            'movement_type' => 'stock_correction',
             'source_id' => $session->id,
         ]);
 
         $this->assertDatabaseHas('inventory_movements', [
             'product_id' => $product2->id,
             'quantity_change' => 10.0000,
-            'movement_type' => 'STOCKTAKE_ADJUSTMENT',
+            'movement_type' => 'stock_correction',
             'source_id' => $session->id,
         ]);
 

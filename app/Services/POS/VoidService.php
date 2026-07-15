@@ -278,6 +278,8 @@ class VoidService
                 'quantity_after' => $quantityAfter,
                 'source_type' => 'sale_void',
                 'source_id' => $void->id,
+                'source_reference' => $void->void_number ?? $void->id,
+                'source_effect_key' => "sale_void:{$void->id}:original_movement:{$original->id}",
                 'original_movement_id' => $original->id,
                 'user_id' => $void->voided_by,
                 'remarks' => "Void reversal for Sale #{$sale->sale_number}",

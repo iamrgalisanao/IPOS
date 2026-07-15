@@ -6,9 +6,11 @@ use App\Models\Branch;
 use App\Models\Product;
 use App\Models\BranchInventory;
 use App\Models\InventoryMovement;
+use App\Services\Inventory\InventoryMovementRecorder;
 use App\Services\Inventory\UnitConversionResolver;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\App;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -18,17 +20,20 @@ class InventoryService
     protected TenantContext $tenantContext;
     protected BranchContext $branchContext;
     protected UnitConversionResolver $unitConversionResolver;
+    protected InventoryMovementRecorder $movementRecorder;
 
     public function __construct(
         AuditLogger $auditLogger,
         TenantContext $tenantContext,
         BranchContext $branchContext,
-        UnitConversionResolver $unitConversionResolver
+        UnitConversionResolver $unitConversionResolver,
+        ?InventoryMovementRecorder $movementRecorder = null
     ) {
         $this->auditLogger = $auditLogger;
         $this->tenantContext = $tenantContext;
         $this->branchContext = $branchContext;
         $this->unitConversionResolver = $unitConversionResolver;
+        $this->movementRecorder = $movementRecorder ?? App::make(InventoryMovementRecorder::class);
     }
 
     /**
@@ -132,10 +137,15 @@ class InventoryService
         // Record initial movement if it's new or if current_stock > 0
         if ($inventory->wasRecentlyCreated && $inventory->current_stock > 0) {
             $this->recordMovement($inventory, [
-                'movement_type' => 'stock_in',
+                'movement_type' => 'inventory_opening_balance',
                 'quantity_change' => $inventory->current_stock,
                 'quantity_before' => 0,
                 'quantity_after' => $inventory->current_stock,
+                'source_type' => 'inventory_opening_balance',
+                'source_id' => $inventory->id,
+                'source_reference' => "opening-balance:{$inventory->id}",
+                'source_effect_key' => "opening_balance:{$inventory->id}:product:{$inventory->product_id}",
+                'reason_code' => 'opening_balance',
                 'remarks' => 'Initial inventory initialization'
             ]);
         }
@@ -155,58 +165,7 @@ class InventoryService
      */
     public function recordMovement(BranchInventory $inventory, array $data): InventoryMovement
     {
-        if (!$this->tenantContext->getTenant()) {
-            throw new \RuntimeException('Cannot record inventory movement without active TenantContext.');
-        }
-
-        // 14. Movement cannot be recorded for inventory from another tenant
-        if ($inventory->tenant_id !== $this->tenantContext->getTenant()->id) {
-            throw new \RuntimeException('Cannot record movement for inventory belonging to a different tenant.');
-        }
-
-        $validator = Validator::make($data, [
-            // 5. Movement type must be controlled/valid (Approved Vocabulary)
-            'movement_type' => ['required', 'string', Rule::in([
-                'stock_in', 
-                'manual_adjustment', 
-                'sale_deduction', 
-                'void_reversal', 
-                'refund_return', 
-                'stock_correction'
-            ])],
-            'quantity_change' => ['required', 'numeric'],
-            'quantity_before' => ['required', 'numeric'],
-            'quantity_after' => ['required', 'numeric'],
-            'source_type' => ['sometimes', 'nullable', 'string'],
-            'source_id' => ['sometimes', 'nullable', 'string'],
-            'original_movement_id' => ['sometimes', 'nullable', 'exists:inventory_movements,id'],
-            'user_id' => ['sometimes', 'nullable', 'exists:users,id'],
-            'reason_code' => ['sometimes', 'nullable', 'string'],
-            'remarks' => ['sometimes', 'nullable', 'string'],
-        ]);
-
-        if ($validator->fails()) {
-            throw new ValidationException($validator);
-        }
-
-        // 6. quantity_after equals quantity_before + quantity_change
-        // Normalize comparison using number_format to 4 decimals
-        $calculatedAfter = number_format($data['quantity_before'] + $data['quantity_change'], 4, '.', '');
-        $providedAfter = number_format($data['quantity_after'], 4, '.', '');
-        
-        if ($providedAfter !== $calculatedAfter) {
-            throw new \RuntimeException("Inventory consistency error: quantity_after ({$providedAfter}) must equal quantity_before ({$data['quantity_before']}) + quantity_change ({$data['quantity_change']}).");
-        }
-
-        // 2, 3, 4. Auto-capture tenant_id, branch_id, product_id from BranchInventory
-        $movement = InventoryMovement::create(array_merge($data, [
-            'tenant_id' => $inventory->tenant_id,
-            'branch_id' => $inventory->branch_id,
-            'product_id' => $inventory->product_id,
-            'branch_inventory_id' => $inventory->id,
-        ]));
-
-        return $movement;
+        return $this->movementRecorder->record($inventory, $data);
     }
     /**
      * Perform a stock-in / delivery entry.
@@ -254,6 +213,10 @@ class InventoryService
                 'source_type' => 'stock_in',
                 'source_id' => $supplierReference,
                 'reference_number' => $invoiceReference,
+                'source_reference' => $invoiceReference,
+                'source_effect_key' => $supplierReference
+                    ? "stock_in:{$supplierReference}:product:{$inventory->product_id}"
+                    : null,
                 'reason_code' => 'delivery_received',
                 'remarks' => $remarks,
                 'user_id' => $user?->id,
@@ -288,7 +251,7 @@ class InventoryService
                 if ($product && $product->recipes->count() > 0) {
                     // Scenario: Recipe-based deduction (Ingredients)
                     foreach ($product->recipes as $recipe) {
-                        $this->deductComponent($recipe, $sale, $item->quantity, $product->id);
+                        $this->deductComponent($recipe, $sale, $item->quantity, $product->id, $item->id);
                     }
                 } else {
                     // Scenario: Standard product deduction
@@ -305,7 +268,7 @@ class InventoryService
                         throw new \RuntimeException("Inventory record not found for product {$item->product_name} at branch {$sale->branch_id}.");
                     }
 
-                    $this->performDeduction($inventory, (float) $item->quantity, $sale);
+                    $this->performDeduction($inventory, (float) $item->quantity, $sale, null, null, $item->id);
                 }
             }
         });
@@ -323,7 +286,7 @@ class InventoryService
     /**
      * Deduct a single component/ingredient for a recipe.
      */
-    protected function deductComponent(\App\Models\ProductRecipe $recipe, \App\Models\Sale $sale, float $parentQuantity, ?string $parentProductId = null): void
+    protected function deductComponent(\App\Models\ProductRecipe $recipe, \App\Models\Sale $sale, float $parentQuantity, ?string $parentProductId = null, ?string $saleItemId = null): void
     {
         $deductQty = (float) $recipe->quantity * $parentQuantity;
         $recipeUnit = $recipe->unit;
@@ -345,7 +308,7 @@ class InventoryService
             throw new \RuntimeException("Ingredient {$recipe->ingredient->name} not found in inventory for branch {$sale->branch_id}.");
         }
 
-        $this->performDeduction($inventory, $deductQty, $sale, "Recipe component for {$recipe->product->name}", $parentProductId);
+        $this->performDeduction($inventory, $deductQty, $sale, "Recipe component for {$recipe->product->name}", $parentProductId, $saleItemId);
     }
 
     /**
@@ -365,7 +328,7 @@ class InventoryService
     /**
      * Internal helper to perform the actual stock decrement and movement logging.
      */
-    protected function performDeduction(BranchInventory $inventory, float $quantityChange, \App\Models\Sale $sale, ?string $extraRemarks = null, ?string $parentProductId = null): void
+    protected function performDeduction(BranchInventory $inventory, float $quantityChange, \App\Models\Sale $sale, ?string $extraRemarks = null, ?string $parentProductId = null, ?string $saleItemId = null): void
     {
         $quantityBefore = (float) $inventory->current_stock;
         $quantityAfter = $quantityBefore - $quantityChange;
@@ -430,6 +393,10 @@ class InventoryService
             'quantity_after' => $quantityAfter,
             'source_type' => 'sale',
             'source_id' => $sale->id,
+            'source_reference' => $sale->sale_number,
+            'source_effect_key' => $parentProductId
+                ? "sale:{$sale->id}:sale_item:{$saleItemId}:ingredient:{$inventory->product_id}"
+                : "sale:{$sale->id}:sale_item:{$saleItemId}:product:{$inventory->product_id}",
             'user_id' => $sale->user_id,
             'remarks' => $remarks,
         ]);

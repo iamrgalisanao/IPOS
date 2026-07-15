@@ -3,7 +3,6 @@
 namespace App\Services\Procurement;
 
 use App\Models\BranchInventory;
-use App\Models\InventoryMovement;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderLine;
 use App\Models\PurchaseReceiving;
@@ -12,6 +11,7 @@ use App\Models\Product;
 use App\Models\ExpiryLot;
 use App\Services\AuditLogger;
 use App\Services\BranchContext;
+use App\Services\Inventory\InventoryMovementRecorder;
 use App\Services\TenantContext;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -21,7 +21,8 @@ class PurchaseReceivingPostingService
     public function __construct(
         protected TenantContext $tenantContext,
         protected BranchContext $branchContext,
-        protected AuditLogger $auditLogger
+        protected AuditLogger $auditLogger,
+        protected InventoryMovementRecorder $movementRecorder
     ) {}
 
     /**
@@ -116,12 +117,7 @@ class PurchaseReceivingPostingService
 
 
 
-                // Create Inventory Movement
-                InventoryMovement::create([
-                    'tenant_id' => $receiving->tenant_id,
-                    'branch_id' => $receiving->branch_id,
-                    'product_id' => $line->product_id,
-                    'branch_inventory_id' => $inventory->id,
+                $this->movementRecorder->record($inventory, [
                     'movement_type' => 'supplier_receiving',
                     'quantity_change' => $receivedQty,
                     'quantity_before' => $quantityBefore,
@@ -129,6 +125,8 @@ class PurchaseReceivingPostingService
                     'source_type' => PurchaseReceiving::class,
                     'source_id' => $receiving->id,
                     'reference_number' => $receiving->receiving_number,
+                    'source_reference' => $receiving->receiving_number,
+                    'source_effect_key' => "purchase_receiving:{$receiving->id}:line:{$line->id}",
                     'user_id' => $user->id,
                     'remarks' => $receiving->delivery_ref_number ?: $receiving->notes,
                 ]);

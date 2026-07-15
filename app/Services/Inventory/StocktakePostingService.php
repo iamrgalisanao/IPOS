@@ -3,7 +3,6 @@
 namespace App\Services\Inventory;
 
 use App\Models\BranchInventory;
-use App\Models\InventoryMovement;
 use App\Models\StocktakeLine;
 use App\Models\StocktakeSession;
 use App\Services\AuditLogger;
@@ -17,7 +16,8 @@ class StocktakePostingService
     public function __construct(
         protected TenantContext $tenantContext,
         protected BranchContext $branchContext,
-        protected AuditLogger $auditLogger
+        protected AuditLogger $auditLogger,
+        protected InventoryMovementRecorder $movementRecorder
     ) {}
 
     /**
@@ -112,19 +112,16 @@ class StocktakePostingService
                     'last_counted_at' => $postedAt,
                 ]);
 
-                // Create Movement
-                InventoryMovement::create([
-                    'tenant_id' => $session->tenant_id,
-                    'branch_id' => $session->branch_id,
-                    'product_id' => $line->product_id,
-                    'branch_inventory_id' => $inventory->id,
-                    'movement_type' => 'STOCKTAKE_ADJUSTMENT',
+                $this->movementRecorder->record($inventory, [
+                    'movement_type' => 'stock_correction',
                     'quantity_change' => $variance,
                     'quantity_before' => $quantityBefore,
                     'quantity_after' => $quantityAfter,
                     'source_type' => 'stocktake_session',
                     'source_id' => $session->id,
                     'reference_number' => $session->stocktake_number,
+                    'source_reference' => $session->stocktake_number,
+                    'source_effect_key' => "stocktake:{$session->id}:line:{$line->id}",
                     'user_id' => $user->id,
                     'reason_code' => $line->reason_code,
                     'remarks' => $line->remarks,
