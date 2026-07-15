@@ -2,7 +2,7 @@
 
 ## 1. Status
 
-Ready for Review
+Done
 
 Date: 2026-07-15
 
@@ -585,7 +585,7 @@ Story 39.5 is done when:
 
 Implemented: 2026-07-15
 
-Status: Ready for Review
+Status: Done
 
 Summary:
 
