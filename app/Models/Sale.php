@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 
 class Sale extends Model
@@ -31,6 +32,7 @@ class Sale extends Model
         'tenant_id',
         'branch_id',
         'user_id',
+        'customer_financial_account_id',
         'client_request_uuid',
         'checkout_request_id',
         'sale_number',
@@ -121,6 +123,11 @@ class Sale extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function customerFinancialAccount(): BelongsTo
+    {
+        return $this->belongsTo(CustomerFinancialAccount::class);
+    }
+
     public function checkoutRequest(): BelongsTo
     {
         return $this->belongsTo(CheckoutRequest::class);
@@ -159,6 +166,11 @@ class Sale extends Model
     public function salePromotions(): HasMany
     {
         return $this->hasMany(SalePromotion::class);
+    }
+
+    public function loyaltyRedemption(): HasOne
+    {
+        return $this->hasOne(LoyaltyRedemption::class);
     }
 
     public function reversalOfSale(): BelongsTo
@@ -211,6 +223,7 @@ class Sale extends Model
                 'tenant_id',
                 'branch_id',
                 'user_id',
+                'customer_financial_account_id',
                 'client_request_uuid',
                 'checkout_request_id',
                 'sales_machine_profile_id',

@@ -4,6 +4,7 @@ namespace App\Services\Reports;
 
 use App\Models\AccountingOutbox;
 use App\Models\CustomerFinancialAccount;
+use App\Models\LoyaltyLedgerEntry;
 use App\Models\StoreCreditLedgerEntry;
 use App\Models\StoreCreditRedemption;
 use App\Models\StoreCreditRefundIssuance;
@@ -116,17 +117,46 @@ class Epic39ReportingService
             ->orderByDesc('id')
             ->get();
 
+        $loyaltyBase = LoyaltyLedgerEntry::query()
+            ->where('customer_financial_account_id', $account->id);
+        $this->applyVisibleBranchScope($loyaltyBase, $actor);
+        if (!empty($filters['branch_id'])) {
+            $loyaltyBase->where('branch_id', $filters['branch_id']);
+        }
+
+        $loyaltyOpeningQuery = (clone $loyaltyBase);
+        if (!empty($filters['business_date_from'])) {
+            $loyaltyOpeningQuery->whereDate('business_date', '<', $filters['business_date_from']);
+        } else {
+            $loyaltyOpeningQuery->whereRaw('1 = 0');
+        }
+
+        $loyaltyRowsQuery = (clone $loyaltyBase);
+        $this->applyDateFilters($loyaltyRowsQuery, $filters);
+
+        $loyaltyClosingQuery = (clone $loyaltyBase);
+        if (!empty($filters['business_date_to'])) {
+            $loyaltyClosingQuery->whereDate('business_date', '<=', $filters['business_date_to']);
+        }
+
+        $loyaltyRows = $loyaltyRowsQuery
+            ->with('branch:id,name')
+            ->orderByDesc('ledger_sequence')
+            ->orderByDesc('posted_at')
+            ->orderByDesc('id')
+            ->get();
+
         return array_merge($this->baseReport('customer_account_statement', $filters), [
             'customer_financial_account_id' => $account->id,
             'basis' => 'business_date',
             'ordering' => ['ledger_sequence DESC', 'posted_at DESC', 'id DESC'],
             'totals' => [
                 'store_credit_row_count' => $rows->count(),
-                'loyalty_row_count' => 0,
+                'loyalty_row_count' => $loyaltyRows->count(),
             ],
             'rows' => [
                 'store_credit' => $rows->map(fn (StoreCreditLedgerEntry $entry) => $this->ledgerRow($entry))->values()->all(),
-                'loyalty' => [],
+                'loyalty' => $loyaltyRows->map(fn (LoyaltyLedgerEntry $entry) => $this->loyaltyLedgerRow($entry))->values()->all(),
             ],
             'opening_balance' => [
                 'store_credit' => [
@@ -135,7 +165,7 @@ class Epic39ReportingService
                         'currency_code' => $account->currency_code,
                     ],
                 ],
-                'loyalty' => ['points' => 0],
+                'loyalty' => ['points' => $this->loyaltySignedBalance($loyaltyOpeningQuery->get())],
             ],
             'closing_balance' => [
                 'store_credit' => [
@@ -144,16 +174,15 @@ class Epic39ReportingService
                         'currency_code' => $account->currency_code,
                     ],
                 ],
-                'loyalty' => ['points' => 0],
+                'loyalty' => ['points' => $this->loyaltySignedBalance($loyaltyClosingQuery->get())],
             ],
             'sections' => [
                 'store_credit' => [
                     'rows' => $rows->map(fn (StoreCreditLedgerEntry $entry) => $this->ledgerRow($entry))->values()->all(),
                 ],
                 'loyalty' => [
-                    'totals' => ['points' => 0],
-                    'rows' => [],
-                    'note' => 'Loyalty ledger storage is not present in this codebase yet; points remain separate from store credit.',
+                    'totals' => $this->loyaltyTotals($loyaltyRows),
+                    'rows' => $loyaltyRows->map(fn (LoyaltyLedgerEntry $entry) => $this->loyaltyLedgerRow($entry))->values()->all(),
                 ],
             ],
         ]);
@@ -264,25 +293,20 @@ class Epic39ReportingService
 
     public function loyaltyActivity(User $actor, array $filters): array
     {
+        $paginator = $this->loyaltyLedgerQuery($actor, $filters)
+            ->with(['branch:id,name', 'customerFinancialAccount.customer'])
+            ->orderByDesc('ledger_sequence')
+            ->orderByDesc('posted_at')
+            ->orderByDesc('id')
+            ->paginate($this->perPage($filters));
+
+        $entries = $this->loyaltyLedgerQuery($actor, $filters)->get();
+        $totals = $this->loyaltyTotals($entries);
+
         return array_merge($this->baseReport('loyalty_activity', $filters), [
-            'totals' => [
-                'points_earned' => 0,
-                'points_redeemed' => 0,
-                'points_reversed' => 0,
-                'points_balance' => 0,
-            ],
-            'rows' => [
-                'data' => [],
-                'meta' => [
-                    'current_page' => 1,
-                    'from' => null,
-                    'last_page' => 1,
-                    'per_page' => $this->perPage($filters),
-                    'to' => null,
-                    'total' => 0,
-                ],
-            ],
-            'note' => 'Loyalty reports are points-only. No loyalty ledger table exists in this codebase yet.',
+            'ordering' => ['ledger_sequence DESC', 'posted_at DESC', 'id DESC'],
+            'totals' => $totals,
+            'rows' => $this->loyaltyLedgerPaginatorPayload($paginator),
         ]);
     }
 
@@ -328,6 +352,35 @@ class Epic39ReportingService
                     ->where('accounting_outbox.source_type', 'store_credit_ledger_entry')
                     ->where('accounting_outbox.sync_status', $filters['accounting_status']);
             });
+        }
+
+        return $query;
+    }
+
+    private function loyaltyLedgerQuery(User $actor, array $filters): Builder
+    {
+        $query = LoyaltyLedgerEntry::query();
+        $this->applyVisibleBranchScope($query, $actor);
+        $this->applyDateFilters($query, $filters);
+
+        foreach (['customer_financial_account_id', 'entry_type', 'ledger_category', 'direction', 'source_type'] as $filter) {
+            if (!empty($filters[$filter])) {
+                $query->where($filter, $filters[$filter]);
+            }
+        }
+
+        if (!empty($filters['customer_id'])) {
+            $query->whereExists(function ($subquery) use ($filters) {
+                $subquery->selectRaw('1')
+                    ->from('customer_financial_accounts')
+                    ->whereColumn('customer_financial_accounts.id', 'loyalty_ledger_entries.customer_financial_account_id')
+                    ->where('customer_financial_accounts.customer_id', $filters['customer_id']);
+            });
+        }
+
+        if (!empty($filters['branch_id'])) {
+            $this->assertBranchVisible($actor, (string) $filters['branch_id']);
+            $query->where('branch_id', $filters['branch_id']);
         }
 
         return $query;
@@ -445,11 +498,64 @@ class Epic39ReportingService
         });
     }
 
+    private function loyaltySignedBalance(Collection $entries): int
+    {
+        return $entries->sum(function (LoyaltyLedgerEntry $entry) {
+            return $entry->direction === LoyaltyLedgerEntry::DIRECTION_CREDIT
+                ? $entry->points
+                : -1 * $entry->points;
+        });
+    }
+
+    private function loyaltyTotals(Collection $entries): array
+    {
+        $earned = 0;
+        $redeemed = 0;
+        $reversed = 0;
+
+        foreach ($entries as $entry) {
+            match ($entry->entry_type) {
+                LoyaltyLedgerEntry::TYPE_SALE_ACCRUAL => $earned += $entry->points,
+                LoyaltyLedgerEntry::TYPE_REDEMPTION_DEBIT => $redeemed += $entry->points,
+                LoyaltyLedgerEntry::TYPE_REVERSAL_CREDIT,
+                LoyaltyLedgerEntry::TYPE_REVERSAL_DEBIT => $reversed += $entry->points,
+                default => null,
+            };
+        }
+
+        return [
+            'points' => $this->loyaltySignedBalance($entries),
+            'points_earned' => $earned,
+            'points_redeemed' => $redeemed,
+            'points_reversed' => $reversed,
+            'points_balance' => $this->loyaltySignedBalance($entries),
+            'row_count' => $entries->count(),
+        ];
+    }
+
     private function ledgerPaginatorPayload(LengthAwarePaginator $paginator): array
     {
         return [
             'data' => collect($paginator->items())
                 ->map(fn (StoreCreditLedgerEntry $entry) => $this->ledgerRow($entry))
+                ->values()
+                ->all(),
+            'meta' => [
+                'current_page' => $paginator->currentPage(),
+                'from' => $paginator->firstItem(),
+                'last_page' => $paginator->lastPage(),
+                'per_page' => $paginator->perPage(),
+                'to' => $paginator->lastItem(),
+                'total' => $paginator->total(),
+            ],
+        ];
+    }
+
+    private function loyaltyLedgerPaginatorPayload(LengthAwarePaginator $paginator): array
+    {
+        return [
+            'data' => collect($paginator->items())
+                ->map(fn (LoyaltyLedgerEntry $entry) => $this->loyaltyLedgerRow($entry))
                 ->values()
                 ->all(),
             'meta' => [
@@ -498,6 +604,26 @@ class Epic39ReportingService
             'direction' => $entry->direction,
             'amount_centavos' => $entry->amount_centavos,
             'currency_code' => $entry->currency_code,
+            'business_date' => $entry->business_date?->toDateString(),
+            'posted_at' => $entry->posted_at?->toISOString(),
+            'branch_id' => $entry->branch_id,
+            'branch_name' => $entry->branch?->name,
+            'source_type' => $entry->source_type,
+            'source_id' => $entry->source_id,
+            'source_reference' => $entry->source_reference,
+        ];
+    }
+
+    private function loyaltyLedgerRow(LoyaltyLedgerEntry $entry): array
+    {
+        return [
+            'ledger_entry_id' => $entry->id,
+            'customer_financial_account_id' => $entry->customer_financial_account_id,
+            'ledger_sequence' => $entry->ledger_sequence,
+            'entry_type' => $entry->entry_type,
+            'ledger_category' => $entry->ledger_category,
+            'direction' => $entry->direction,
+            'points' => $entry->points,
             'business_date' => $entry->business_date?->toDateString(),
             'posted_at' => $entry->posted_at?->toISOString(),
             'branch_id' => $entry->branch_id,

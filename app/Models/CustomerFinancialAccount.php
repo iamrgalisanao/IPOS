@@ -72,6 +72,17 @@ class CustomerFinancialAccount extends Model
             ->orderBy('ledger_sequence');
     }
 
+    public function loyaltyLedgerEntries(): HasMany
+    {
+        return $this->hasMany(LoyaltyLedgerEntry::class)
+            ->orderBy('ledger_sequence');
+    }
+
+    public function loyaltyRedemptions(): HasMany
+    {
+        return $this->hasMany(LoyaltyRedemption::class);
+    }
+
     public function scopeActive($query)
     {
         return $query->where('status', self::STATUS_ACTIVE);

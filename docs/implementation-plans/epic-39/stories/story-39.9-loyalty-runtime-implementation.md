@@ -2,7 +2,7 @@
 
 ## 1. Status
 
-Approved for Implementation
+Review
 
 Date: 2026-07-15
 
@@ -764,3 +764,32 @@ Review this story against five contracts:
 3. Payment finalization and point debit are transactionally safe.
 4. Store-credit and loyalty ledgers remain separate.
 5. Reporting switches from placeholder loyalty rows to real ledger evidence.
+
+## 23. Implementation Record
+
+Implemented on: 2026-07-15
+
+Summary:
+
+1. Added loyalty runtime tables, models, exceptions, and services.
+2. Added points-only ledger posting with per-account sequence, idempotency replay, drift rejection, append-only rows, and derived balances.
+3. Added `SalePaid` accrual job/service for retry-safe point accrual after paid sale finalization.
+4. Added loyalty redemption evidence and payment-finalization debit coordination without creating `SalePayment` rows.
+5. Wired checkout validation and sale creation to support customer-account linkage and loyalty redemption snapshots.
+6. Replaced loyalty report placeholders with real `loyalty_ledger_entries` reads for activity reports and customer statements.
+
+Validation:
+
+```bash
+php artisan test tests/Feature/Loyalty/LoyaltyRuntimeTest.php
+php artisan test tests/Feature/StoreCredit tests/Feature/Reports/Epic39ReportingReconciliationTest.php tests/Feature/Loyalty/LoyaltyRuntimeTest.php
+php artisan test tests/Feature/POS/PromotionCalculationTest.php tests/Feature/POS/SaleCreationFefoTest.php tests/Feature/POS/CheckoutTrainingModeTest.php
+php artisan test tests/Feature/Accounting/AccountingOutboxTest.php tests/Feature/Shift/ActiveShiftCheckoutGuardTest.php tests/Feature/StoreCredit tests/Feature/Reports/Epic39ReportingReconciliationTest.php tests/Feature/Loyalty/LoyaltyRuntimeTest.php
+php artisan test
+```
+
+Result:
+
+```text
+Full backend suite passed: 1846 tests, 9136 assertions.
+```
