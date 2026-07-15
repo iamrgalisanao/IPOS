@@ -2,7 +2,7 @@
 
 ## 1. Status
 
-Done
+Specification Done; Runtime Deferred
 
 Date: 2026-07-15
 

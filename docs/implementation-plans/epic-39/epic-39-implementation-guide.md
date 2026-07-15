@@ -2,7 +2,7 @@
 
 ## 1. Status
 
-Implementation Complete
+Store Credit Complete; Loyalty Runtime Deferred
 
 Date: 2026-07-15
 
@@ -45,8 +45,8 @@ Reason:
 | 39.3 | Done | - | - |
 | 39.4 | Done | - | - |
 | 39.5 | Done | - | - |
-| 39.6 | Done | - | - |
-| 39.7 | Done | - | - |
+| 39.6 | Specification Done; Runtime Deferred | - | - |
+| 39.7 | Specification Done; Runtime Deferred | - | - |
 | 39.8 | Done | - | - |
 
 ## 4. Story Dependencies and Complexity

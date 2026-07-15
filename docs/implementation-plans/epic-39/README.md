@@ -2,7 +2,7 @@
 
 ## Status
 
-Implementation Complete
+Store Credit Complete; Loyalty Runtime Deferred
 
 Date: 2026-07-14
 
@@ -11,6 +11,8 @@ Date: 2026-07-14
 Epic 39 introduces customer financial accounts, append-only store credit, and loyalty point ledgers for IPOS.
 
 The first implementation priority is store credit because it represents monetary value and touches refunds, payments, cashier controls, accounting liability, and customer balances. Loyalty points are planned later in the same epic and must remain separate from monetary store credit.
+
+Current closeout status: store-credit runtime flows are implemented. Loyalty ledger and loyalty redemption specifications are complete, but runtime storage and redemption execution are deferred until a follow-up implementation story.
 
 ## Documentation Map
 
