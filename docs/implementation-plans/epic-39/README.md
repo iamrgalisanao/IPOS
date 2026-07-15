@@ -32,6 +32,7 @@ Current closeout status: store-credit runtime flows are implemented. Loyalty led
 6. Story 39.6 Loyalty Ledger
 7. Story 39.7 Loyalty Redemption
 8. Story 39.8 Reporting and Reconciliation
+9. Story 39.9 Loyalty Runtime Implementation
 
 ## Related Epics
 
