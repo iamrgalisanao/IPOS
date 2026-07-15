@@ -681,6 +681,15 @@ Route::middleware(['auth', 'tenant'])->group(function () {
             Route::get('/{customerFinancialAccount}', [\App\Http\Controllers\Admin\CustomerFinancialAccountController::class, 'show'])
                 ->middleware('permission:customer-accounts.view')
                 ->name('show');
+            Route::get('/{customerFinancialAccount}/review', [\App\Http\Controllers\Admin\CustomerFinancialAccountController::class, 'review'])
+                ->middleware(['permission:customer-accounts.view', 'permission:store-credit.review'])
+                ->name('review');
+            Route::get('/{customerFinancialAccount}/ledger', [\App\Http\Controllers\Admin\CustomerFinancialAccountController::class, 'ledger'])
+                ->middleware(['permission:customer-accounts.view', 'permission:store-credit.review'])
+                ->name('ledger.index');
+            Route::get('/{customerFinancialAccount}/ledger/{storeCreditLedgerEntry}', [\App\Http\Controllers\Admin\CustomerFinancialAccountController::class, 'ledgerEntry'])
+                ->middleware(['permission:customer-accounts.view', 'permission:store-credit.review'])
+                ->name('ledger.show');
             Route::patch('/{customerFinancialAccount}/status', [\App\Http\Controllers\Admin\CustomerFinancialAccountController::class, 'status'])
                 ->middleware('permission:customer-accounts.manage')
                 ->name('status');

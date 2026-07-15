@@ -2,7 +2,7 @@
 
 ## 1. Status
 
-Approved for Implementation
+Ready for Review
 
 Date: 2026-07-15
 
@@ -580,3 +580,35 @@ Story 39.5 is done when:
 12. Operational review copy does not claim financial liability-report completeness.
 13. Code review is approved.
 14. Documentation is updated.
+
+## 23. Implementation Record
+
+Implemented: 2026-07-15
+
+Status: Ready for Review
+
+Summary:
+
+1. Added a read-only store credit admin review service.
+2. Added dedicated ledger review request validation.
+3. Added permission-gated account list summaries plus store credit account review, ledger history, and ledger detail endpoints under admin customer accounts.
+4. Added `store-credit.review` RBAC permission and assigned it to the default admin, branch manager, and accountant role templates.
+5. Added backend feature coverage for authorization, tenant isolation, derived balance, sequence ordering, source evidence, anonymized customer privacy, filters, pagination metadata, and no mutation side effects.
+
+Validation:
+
+```text
+php artisan test tests/Feature/StoreCredit/StoreCreditAdminReviewTest.php
+php artisan test tests/Feature/Customers/CustomerFinancialAccountFoundationTest.php tests/Feature/StoreCredit/StoreCreditLedgerFoundationTest.php tests/Feature/StoreCredit/StoreCreditRefundIssuanceTest.php tests/Feature/StoreCredit/StoreCreditRedemptionTest.php tests/Feature/StoreCredit/StoreCreditAdminReviewTest.php
+```
+
+Changed files:
+
+1. `app/Http/Controllers/Admin/CustomerFinancialAccountController.php`
+2. `app/Http/Requests/StoreCredit/StoreCreditLedgerReviewRequest.php`
+3. `app/Services/RbacSeeder.php`
+4. `app/Services/StoreCredit/StoreCreditAdminReviewService.php`
+5. `routes/web.php`
+6. `tests/Feature/StoreCredit/StoreCreditAdminReviewTest.php`
+7. `docs/implementation-plans/epic-39/epic-39-implementation-guide.md`
+8. `docs/implementation-plans/epic-39/stories/story-39.5-store-credit-admin-review.md`

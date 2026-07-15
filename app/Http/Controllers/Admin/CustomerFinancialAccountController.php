@@ -10,9 +10,12 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Customers\AnonymizeCustomerRequest;
 use App\Http\Requests\Customers\StoreCustomerFinancialAccountRequest;
 use App\Http\Requests\Customers\UpdateCustomerFinancialAccountStatusRequest;
+use App\Http\Requests\StoreCredit\StoreCreditLedgerReviewRequest;
 use App\Models\Customer;
 use App\Models\CustomerFinancialAccount;
+use App\Models\StoreCreditLedgerEntry;
 use App\Services\Customers\CustomerFinancialAccountService;
+use App\Services\StoreCredit\StoreCreditAdminReviewService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -20,6 +23,7 @@ class CustomerFinancialAccountController extends Controller
 {
     public function __construct(
         private readonly CustomerFinancialAccountService $service,
+        private readonly StoreCreditAdminReviewService $storeCreditReviewService,
     ) {
     }
 
@@ -41,8 +45,18 @@ class CustomerFinancialAccountController extends Controller
             });
         }
 
+        $accounts = $query->limit(100)->get();
+
+        if ($request->user()?->hasPermission('store-credit.review')) {
+            return response()->json([
+                'customer_financial_accounts' => $accounts
+                    ->map(fn (CustomerFinancialAccount $account) => $this->storeCreditReviewService->accountListItem($account))
+                    ->values(),
+            ]);
+        }
+
         return response()->json([
-            'customer_financial_accounts' => $query->limit(100)->get(),
+            'customer_financial_accounts' => $accounts,
         ]);
     }
 
@@ -69,6 +83,50 @@ class CustomerFinancialAccountController extends Controller
         return response()->json([
             'customer_financial_account' => $customerFinancialAccount->load('customer'),
         ]);
+    }
+
+    public function review(Request $request, CustomerFinancialAccount $customerFinancialAccount): JsonResponse
+    {
+        abort_unless(
+            $request->user()?->hasPermission('customer-accounts.view')
+            && $request->user()?->hasPermission('store-credit.review'),
+            403
+        );
+
+        return response()->json(
+            $this->storeCreditReviewService->accountReview($customerFinancialAccount)
+        );
+    }
+
+    public function ledger(
+        StoreCreditLedgerReviewRequest $request,
+        CustomerFinancialAccount $customerFinancialAccount
+    ): JsonResponse {
+        return response()->json(
+            $this->storeCreditReviewService->ledgerHistory(
+                $customerFinancialAccount,
+                $request->filters()
+            )
+        );
+    }
+
+    public function ledgerEntry(
+        Request $request,
+        CustomerFinancialAccount $customerFinancialAccount,
+        StoreCreditLedgerEntry $storeCreditLedgerEntry
+    ): JsonResponse {
+        abort_unless(
+            $request->user()?->hasPermission('customer-accounts.view')
+            && $request->user()?->hasPermission('store-credit.review'),
+            403
+        );
+
+        return response()->json(
+            $this->storeCreditReviewService->ledgerEntry(
+                $customerFinancialAccount,
+                $storeCreditLedgerEntry
+            )
+        );
     }
 
     public function status(
