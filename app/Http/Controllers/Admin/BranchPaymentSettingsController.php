@@ -64,6 +64,12 @@ class BranchPaymentSettingsController extends Controller
             $isCash = $paymentMethod->isCash();
             $isCustom = strtolower($paymentMethod->type) === 'custom' || strtolower($paymentMethod->type) === 'custom_offline';
 
+            if ($item['allow_offline'] && $paymentMethod->isStoreCredit()) {
+                return back()->withErrors([
+                    "settings" => "Store Credit cannot be enabled for offline use."
+                ]);
+            }
+
             if ($item['allow_offline'] && !$isCash && !$isCustom) {
                 return back()->withErrors([
                     "settings" => "Payment method {$paymentMethod->name} of type {$paymentMethod->type} cannot be enabled for offline use."

@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\PaymentMethod;
 use App\Models\PosAdjustmentRequest;
 use Closure;
 use Illuminate\Http\Request;
@@ -12,6 +13,12 @@ class VerifyIdempotency
     public function handle(Request $request, Closure $next): Response
     {
         $idempotencyKey = $request->header('Idempotency-Key');
+        $isPaymentRequest = str_contains($request->path(), '/payments');
+        $requiresIdempotency = !$isPaymentRequest || $this->containsStoreCreditTender($request);
+
+        if (!$requiresIdempotency) {
+            return $next($request);
+        }
 
         if (!$idempotencyKey) {
             return response()->json([
@@ -23,7 +30,7 @@ class VerifyIdempotency
 
         $requestHash = hash('sha256', json_encode($request->all()));
         $sale = $request->route('sale');
-        $saleId = is_object($sale) ? $sale->id : $sale;
+        $saleId = is_object($sale) ? $sale->id : ($sale ?: $request->route('sale_id'));
         $cashierId = $request->user()?->id;
 
         $existingRequest = PosAdjustmentRequest::where('idempotency_key', $idempotencyKey)->first();
@@ -58,7 +65,7 @@ class VerifyIdempotency
         } else {
             $posRequest = PosAdjustmentRequest::create([
                 'idempotency_key' => $idempotencyKey,
-                'action_type' => str_contains($request->url(), 'void') ? 'void' : 'refund',
+                'action_type' => $this->actionType($request),
                 'sale_id' => $saleId,
                 'cashier_id' => $cashierId,
                 'request_hash' => $requestHash,
@@ -85,5 +92,38 @@ class VerifyIdempotency
             $posRequest->update(['status' => 'failed']);
             throw $e;
         }
+    }
+
+    private function containsStoreCreditTender(Request $request): bool
+    {
+        $methodIds = collect($request->input('payments', []))
+            ->pluck('payment_method_id');
+
+        if ($request->filled('payment_method_id')) {
+            $methodIds->push($request->input('payment_method_id'));
+        }
+
+        $methodIds = $methodIds->filter()->unique()->values();
+        if ($methodIds->isEmpty()) {
+            return false;
+        }
+
+        return PaymentMethod::query()
+            ->whereIn('id', $methodIds->all())
+            ->get()
+            ->contains(fn (PaymentMethod $method) => $method->isStoreCredit());
+    }
+
+    private function actionType(Request $request): string
+    {
+        if (str_contains($request->path(), '/payments')) {
+            return 'payment';
+        }
+
+        if (str_contains($request->url(), 'void')) {
+            return 'void';
+        }
+
+        return 'refund';
     }
 }

@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\Dining\DiningTicketCheckoutService;
 use App\Services\InventoryService;
+use App\Services\StoreCredit\StoreCreditPaymentCoordinator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -21,14 +22,15 @@ class PaymentRecordingService
         protected \App\Services\Accounting\AccountingOutboxService $outboxService,
         protected \App\Services\Shift\ShiftService $shiftService,
         protected DiningTicketCheckoutService $diningTicketCheckoutService,
+        protected StoreCreditPaymentCoordinator $storeCreditPaymentCoordinator,
     ) {}
 
     /**
      * Record a single payment for a sale.
      */
-    public function record(string $saleId, array $data, User $user): SalePayment
+    public function record(string $saleId, array $data, User $user, ?string $idempotencyKey = null): SalePayment
     {
-        return $this->recordSplit($saleId, [$data], $user)->first();
+        return $this->recordSplit($saleId, [$data], $user, $idempotencyKey)->first();
     }
 
     /**
@@ -40,13 +42,13 @@ class PaymentRecordingService
      * @return Collection<SalePayment>
      * @throws ValidationException
      */
-    public function recordSplit(string $saleId, array $paymentsData, User $user): Collection
+    public function recordSplit(string $saleId, array $paymentsData, User $user, ?string $idempotencyKey = null): Collection
     {
         $auditContext = [];
         $sale = null;
 
         try {
-            return DB::transaction(function () use ($saleId, $paymentsData, $user, &$auditContext, &$sale) {
+            return DB::transaction(function () use ($saleId, $paymentsData, $user, $idempotencyKey, &$auditContext, &$sale) {
                 // 1. Manual Lookup (Ensuring tenant/branch context)
                 $sale = Sale::where('id', $saleId)->first();
 
@@ -76,6 +78,8 @@ class PaymentRecordingService
                         'status' => ['This sale has already been paid.'],
                     ]);
                 }
+
+                $storeCreditIntents = $this->storeCreditPaymentCoordinator->preflight($sale, $paymentsData, $user, $idempotencyKey);
 
                 $totalPaymentAmount = '0.0000';
                 $salePayments = collect();
@@ -152,6 +156,14 @@ class PaymentRecordingService
                     return SalePayment::create($paymentData);
                 });
 
+                foreach ($storeCreditIntents as $index => $intent) {
+                    $payment = $createdPayments->get($index);
+                    if ($payment instanceof SalePayment) {
+                        $redemption = $this->storeCreditPaymentCoordinator->redeem($sale, $payment->load('paymentMethod'), $intent);
+                        $payment->setRelation('storeCreditRedemption', $redemption);
+                    }
+                }
+
                 // 6. Final Status Update
                 $sale->status = 'paid';
                 $sale->save();
@@ -222,7 +234,12 @@ class PaymentRecordingService
                     'dining_finalization',
                     $this->diningTicketCheckoutService->finalizeSuccessfulPayment($sale, $user)
                 );
-                $createdPayments->each(fn (SalePayment $payment) => $payment->setRelation('sale', $sale));
+                $createdPayments->each(function (SalePayment $payment) use ($sale) {
+                    $payment->setRelation('sale', $sale);
+                    if (!$payment->relationLoaded('storeCreditRedemption')) {
+                        $payment->load('storeCreditRedemption.ledgerEntry');
+                    }
+                });
 
                 return $createdPayments;
             });

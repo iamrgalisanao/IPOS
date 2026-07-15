@@ -113,4 +113,9 @@ class StoreCreditLedgerEntry extends Model
     {
         return $this->hasOne(StoreCreditRefundIssuance::class);
     }
+
+    public function storeCreditRedemption(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(StoreCreditRedemption::class);
+    }
 }

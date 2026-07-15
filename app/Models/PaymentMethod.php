@@ -30,6 +30,29 @@ class PaymentMethod extends Model
         'is_default' => 'boolean',
     ];
 
+    protected static function booted(): void
+    {
+        static::saving(function (PaymentMethod $method) {
+            if (!$method->isActiveStoreCreditTender()) {
+                return;
+            }
+
+            $exists = self::query()
+                ->where('tenant_id', $method->tenant_id)
+                ->where('status', 'active')
+                ->when($method->exists, fn ($query) => $query->whereKeyNot($method->getKey()))
+                ->where(function ($query) {
+                    $query->whereRaw('LOWER(code) = ?', ['store_credit'])
+                        ->orWhereRaw('LOWER(type) = ?', ['store_credit']);
+                })
+                ->exists();
+
+            if ($exists) {
+                throw new \RuntimeException('Only one active Store Credit payment method may exist per tenant.');
+            }
+        });
+    }
+
     /**
      * Scope a query to only include active payment methods.
      */
@@ -44,6 +67,17 @@ class PaymentMethod extends Model
     public function isCash(): bool
     {
         return strtolower($this->code) === 'cash';
+    }
+
+    public function isStoreCredit(): bool
+    {
+        return strtolower((string) $this->code) === 'store_credit'
+            || strtolower((string) $this->type) === 'store_credit';
+    }
+
+    public function isActiveStoreCreditTender(): bool
+    {
+        return $this->status === 'active' && $this->isStoreCredit();
     }
 
     /**

@@ -62,4 +62,9 @@ class SalePayment extends Model
     {
         return $this->belongsTo(User::class, 'created_by');
     }
+
+    public function storeCreditRedemption(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(StoreCreditRedemption::class);
+    }
 }

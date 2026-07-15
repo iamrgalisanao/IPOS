@@ -368,9 +368,11 @@ Route::middleware(['auth', 'tenant'])->group(function () {
              ->name('pos.sales.receipt');
 
         Route::post('/pos/sales/{sale_id}/payments', [\App\Http\Controllers\POS\PaymentController::class, 'store'])
+             ->middleware('idempotent')
              ->name('pos.sales.payments');
 
         Route::post('/pos/sales/{sale_id}/payments/split', [\App\Http\Controllers\POS\PaymentController::class, 'storeSplit'])
+             ->middleware('idempotent')
              ->name('pos.sales.payments.split');
     });
 
