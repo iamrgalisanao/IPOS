@@ -30,6 +30,10 @@ class LoyaltyLedgerEntry extends Model
     public const TYPE_ADMIN_DEBIT_ADJUSTMENT = 'admin_debit_adjustment';
     public const TYPE_REVERSAL_CREDIT = 'reversal_credit';
     public const TYPE_REVERSAL_DEBIT = 'reversal_debit';
+    public const TYPE_VOID_EARN_REVERSAL = 'void_earn_reversal';
+    public const TYPE_REFUND_EARN_REVERSAL = 'refund_earn_reversal';
+    public const TYPE_VOID_REDEMPTION_RESTORE = 'void_redemption_restore';
+    public const TYPE_REFUND_REDEMPTION_RESTORE = 'refund_redemption_restore';
     public const TYPE_EXPIRATION_DEBIT = 'expiration_debit';
     public const TYPE_FORFEITURE_DEBIT = 'forfeiture_debit';
 
@@ -87,7 +91,11 @@ class LoyaltyLedgerEntry extends Model
             self::TYPE_ADMIN_CREDIT_ADJUSTMENT,
             self::TYPE_ADMIN_DEBIT_ADJUSTMENT => self::CATEGORY_ADJUSTMENT,
             self::TYPE_REVERSAL_CREDIT,
-            self::TYPE_REVERSAL_DEBIT => self::CATEGORY_REVERSAL,
+            self::TYPE_REVERSAL_DEBIT,
+            self::TYPE_VOID_EARN_REVERSAL,
+            self::TYPE_REFUND_EARN_REVERSAL,
+            self::TYPE_VOID_REDEMPTION_RESTORE,
+            self::TYPE_REFUND_REDEMPTION_RESTORE => self::CATEGORY_REVERSAL,
             self::TYPE_EXPIRATION_DEBIT,
             self::TYPE_FORFEITURE_DEBIT => self::CATEGORY_EXPIRATION,
             default => throw new RuntimeException('Unsupported loyalty ledger entry type.'),

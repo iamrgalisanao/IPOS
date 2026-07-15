@@ -14,6 +14,7 @@ use App\Services\AuditLogger;
 use App\Services\TenantContext;
 use App\Services\BranchContext;
 use App\Services\InventoryService;
+use App\Services\Loyalty\LoyaltyReversalService;
 use App\Services\StoreCredit\StoreCreditRefundIssuer;
 use App\Values\POS\RefundPayoutCommand;
 use Illuminate\Support\Facades\DB;
@@ -27,7 +28,8 @@ class RefundService
         protected BranchContext $branchContext,
         protected InventoryService $inventoryService,
         protected \App\Services\Accounting\AccountingOutboxService $outboxService,
-        protected StoreCreditRefundIssuer $storeCreditRefundIssuer
+        protected StoreCreditRefundIssuer $storeCreditRefundIssuer,
+        protected LoyaltyReversalService $loyaltyReversalService
     ) {}
 
     /**
@@ -183,6 +185,18 @@ class RefundService
             if ($payoutCommand?->isStoreCredit()) {
                 $this->storeCreditRefundIssuer->issue($refund, $payoutCommand);
             }
+
+            $refund->load('items');
+            $loyaltyReversal = $this->loyaltyReversalService->reverseForRefund($sale->refresh(), $refund, $refund->items, $user);
+
+            $this->auditLogger->log(
+                action: 'loyalty_reversal_processed_refund',
+                auditable: $refund,
+                metadata: [
+                    'sale_id' => $sale->id,
+                    'loyalty_reversal' => $loyaltyReversal,
+                ]
+            );
 
             return $refund->fresh(['items', 'storeCreditIssuance.ledgerEntry']);
         });

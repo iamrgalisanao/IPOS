@@ -11,6 +11,7 @@ use App\Services\AuditLogger;
 use App\Services\TenantContext;
 use App\Services\BranchContext;
 use App\Services\InventoryService;
+use App\Services\Loyalty\LoyaltyReversalService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 
@@ -21,7 +22,8 @@ class VoidService
         protected TenantContext $tenantContext,
         protected BranchContext $branchContext,
         protected InventoryService $inventoryService,
-        protected \App\Services\Accounting\AccountingOutboxService $outboxService
+        protected \App\Services\Accounting\AccountingOutboxService $outboxService,
+        protected LoyaltyReversalService $loyaltyReversalService
     ) {}
 
     /**
@@ -96,6 +98,8 @@ class VoidService
             // 4b. Reverse Commercial Promotion Totals while retaining promotion snapshots.
             $this->reverseCommercialPromotionOnVoid($sale, $void);
 
+            $loyaltyReversal = $this->loyaltyReversalService->reverseForVoid($sale->refresh(), $void, $user);
+
             // 5. Audit Logging
             $this->auditLogger->log(
                 action: 'sale_voided',
@@ -103,7 +107,8 @@ class VoidService
                 metadata: [
                     'void_id' => $void->id,
                     'reason_code' => $reasonCode,
-                    'payment_count' => $sale->payments->count()
+                    'payment_count' => $sale->payments->count(),
+                    'loyalty_reversal' => $loyaltyReversal,
                 ]
             );
 
