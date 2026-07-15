@@ -172,6 +172,8 @@ class CheckoutController extends Controller
             userId: $userId,
             isTrainingMode: $isTrainingMode,
             statutoryDiscount: $request->input('statutory_discount', []),
+            loyaltyRedemption: $request->input('loyalty_redemption', []),
+            customerFinancialAccountId: $request->input('customer_financial_account_id'),
         );
 
         // --- 2. Idempotency Lookup ---
@@ -359,7 +361,9 @@ class CheckoutController extends Controller
         string $branchId,
         string $userId,
         bool $isTrainingMode = false,
-        array $statutoryDiscount = []
+        array $statutoryDiscount = [],
+        array $loyaltyRedemption = [],
+        ?string $customerFinancialAccountId = null
     ): string {
         $canonicalItems = collect($items)
             ->map(fn($item) => [
@@ -379,6 +383,14 @@ class CheckoutController extends Controller
             'is_training_mode'    => $isTrainingMode,
             'statutory_discount'  => $statutoryDiscount,
         ];
+
+        if (!empty($loyaltyRedemption)) {
+            $canonical['loyalty_redemption'] = $loyaltyRedemption;
+        }
+
+        if ($customerFinancialAccountId) {
+            $canonical['customer_financial_account_id'] = $customerFinancialAccountId;
+        }
 
         return hash('sha256', json_encode($canonical));
     }
@@ -428,6 +440,8 @@ class CheckoutController extends Controller
                 clientRequestUuid: $clientUuid,
                 rawItems: $rawItems,
                 statutoryDiscount: $request->input('statutory_discount', []),
+                loyaltyRedemption: $request->input('loyalty_redemption', []),
+                customerFinancialAccountId: $request->input('customer_financial_account_id'),
                 isTrainingMode: $isTrainingMode,
                 terminalId: $request->attributes->get('terminal_profile')?->id,
             );

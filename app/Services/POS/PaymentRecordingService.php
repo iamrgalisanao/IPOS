@@ -6,9 +6,12 @@ use App\Models\PaymentMethod;
 use App\Models\Sale;
 use App\Models\SalePayment;
 use App\Models\User;
+use App\Events\SalePaid;
+use App\Jobs\Loyalty\AccrueLoyaltyForSaleJob;
 use App\Services\AuditLogger;
 use App\Services\Dining\DiningTicketCheckoutService;
 use App\Services\InventoryService;
+use App\Services\Loyalty\LoyaltyCheckoutRedemptionCoordinator;
 use App\Services\StoreCredit\StoreCreditPaymentCoordinator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -23,6 +26,7 @@ class PaymentRecordingService
         protected \App\Services\Shift\ShiftService $shiftService,
         protected DiningTicketCheckoutService $diningTicketCheckoutService,
         protected StoreCreditPaymentCoordinator $storeCreditPaymentCoordinator,
+        protected LoyaltyCheckoutRedemptionCoordinator $loyaltyCheckoutRedemptionCoordinator,
     ) {}
 
     /**
@@ -164,6 +168,8 @@ class PaymentRecordingService
                     }
                 }
 
+                $loyaltyRedemption = $this->loyaltyCheckoutRedemptionCoordinator->finalizeForSale($sale, $user);
+
                 // 6. Final Status Update
                 $sale->status = 'paid';
                 $sale->save();
@@ -180,6 +186,7 @@ class PaymentRecordingService
                         'payment_count' => $createdPayments->count(),
                         'total_amount' => $totalPaymentAmount,
                         'payment_ids' => $createdPayments->pluck('id')->toArray(),
+                        'loyalty_redemption_id' => $loyaltyRedemption?->id,
                         'is_training_mode' => (bool)$sale->is_training_mode,
                     ]
                 );
@@ -187,6 +194,10 @@ class PaymentRecordingService
                 // 8. Inventory Deduction (Skip for training mode)
                 if (!$sale->is_training_mode) {
                     \App\Jobs\Inventory\ProcessSaleInventoryDeductionJob::dispatch($sale->id)->afterCommit();
+                }
+
+                if (!$sale->is_training_mode && $sale->customer_financial_account_id) {
+                    AccrueLoyaltyForSaleJob::dispatch(SalePaid::fromSale($sale)->payload)->afterCommit();
                 }
 
                 // 9. Accounting Outbox (Skip for training mode)
@@ -254,6 +265,11 @@ class PaymentRecordingService
                     null,
                     $auditContext['metadata'] ?? []
                 );
+            }
+            throw $e;
+        } catch (\RuntimeException $e) {
+            if ($sale) {
+                $this->loyaltyCheckoutRedemptionCoordinator->markFailedForSale($sale, $e->getMessage());
             }
             throw $e;
         }

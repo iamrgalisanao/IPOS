@@ -6,6 +6,7 @@ use App\Models\CheckoutRequest;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Services\Loyalty\LoyaltyCheckoutRedemptionCoordinator;
 use App\Values\Dining\DiningCheckoutSnapshot;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -18,6 +19,7 @@ class SaleCreationService
         protected \App\Services\POS\ApprovalRuleResolver $approvalRuleResolver,
         protected \App\Services\POS\ManagerAuthorizationService $managerAuthorizationService,
         protected \App\Services\POS\PromotionCalculationService $promotionService,
+        protected LoyaltyCheckoutRedemptionCoordinator $loyaltyRedemptionCoordinator,
     ) {}
     /**
      * Attempt to create a sale from a validated payload.
@@ -48,8 +50,20 @@ class SaleCreationService
         array $statutoryDiscount = [],
         bool $isTrainingMode = false,
         ?string $terminalId = null,
+        array $loyaltyRedemption = [],
+        ?string $customerFinancialAccountId = null,
     ): array {
-        $hash = $this->computePayloadHash($clientRequestUuid, $rawItems, $tenantId, $branchId, $userId, $isTrainingMode, $statutoryDiscount);
+        $hash = $this->computePayloadHash(
+            $clientRequestUuid,
+            $rawItems,
+            $tenantId,
+            $branchId,
+            $userId,
+            $isTrainingMode,
+            $statutoryDiscount,
+            $loyaltyRedemption,
+            $customerFinancialAccountId
+        );
 
         // ---- 1. Idempotency: look up existing CheckoutRequest ----
         $checkoutRequest = CheckoutRequest::where('tenant_id', $tenantId)
@@ -347,7 +361,22 @@ class SaleCreationService
         if ($statutoryResult && $statutoryResult['is_valid']) {
             $discountTotal = $statutoryResult['discount_amount'];
         }
-        $total         = $subtotal - $discountTotal;
+        $commercialDiscountTotal = (float) ($promoResult->promotionDiscountCentavos / 100);
+        $preLoyaltyTotalCentavos = max(0, (int) round(($subtotal - $discountTotal - $commercialDiscountTotal) * 100));
+        $preparedLoyaltyRedemption = $this->loyaltyRedemptionCoordinator->prepareForSaleCreation(
+            $tenantId,
+            $branchId,
+            $loyaltyRedemption,
+            $preLoyaltyTotalCentavos,
+            $isTrainingMode,
+            $statutoryResult && $statutoryResult['is_valid']
+        );
+        $loyaltyDiscountTotal = $preparedLoyaltyRedemption
+            ? (float) (((int) $preparedLoyaltyRedemption['benefit_centavos']) / 100)
+            : 0.0;
+        $customerFinancialAccountId = $preparedLoyaltyRedemption
+            ? $preparedLoyaltyRedemption['account']->id
+            : $customerFinancialAccountId;
 
         // Resolve branch active SalesMachineProfile if exists
         $machineProfile = \App\Models\SalesMachineProfile::where('tenant_id', $tenantId)
@@ -373,7 +402,8 @@ class SaleCreationService
             $rawItems, $products, $isTrainingMode,
             $statutoryResult, $statutoryDiscount, $discountType, $approvalRequired,
             $promoResult, $terminalId, $saleItemIdsByLineIndex, $suppressedPromotions,
-            $discountPolicySnapshot
+            $discountPolicySnapshot, $loyaltyDiscountTotal, $preparedLoyaltyRedemption,
+            $customerFinancialAccountId
         ) {
             $principalInvoiceNumber = null;
             if ($machineProfile) {
@@ -385,13 +415,25 @@ class SaleCreationService
             }
 
             $commercialDiscountTotal = (float) ($promoResult->promotionDiscountCentavos / 100);
-            $total = $subtotal - $discountTotal - $commercialDiscountTotal;
+            $total = $subtotal - $discountTotal - $commercialDiscountTotal - $loyaltyDiscountTotal;
+            $policySnapshot = $discountPolicySnapshot;
+            if ($preparedLoyaltyRedemption) {
+                $policySnapshot = array_merge($policySnapshot ?? [], [
+                    'loyalty_redemption' => [
+                        'source' => 'loyalty_checkout_runtime',
+                        'points' => (int) $preparedLoyaltyRedemption['points'],
+                        'benefit_centavos' => (int) $preparedLoyaltyRedemption['benefit_centavos'],
+                        'rule_snapshot' => $preparedLoyaltyRedemption['rule_snapshot'],
+                    ],
+                ]);
+            }
 
             $sale = Sale::create([
                 'id'                           => Str::uuid()->toString(),
                 'tenant_id'                    => $tenantId,
                 'branch_id'                    => $branchId,
                 'user_id'                      => $userId,
+                'customer_financial_account_id' => $customerFinancialAccountId,
                 'client_request_uuid'          => $clientRequestUuid,
                 'checkout_request_id'          => $checkoutRequest->id,
                 'sales_machine_profile_id'     => $machineProfile?->id,
@@ -402,7 +444,7 @@ class SaleCreationService
                 'status'                       => 'created',
                 'subtotal'                     => number_format($subtotal, 4, '.', ''),
                 'tax_total'                    => number_format($taxTotal, 4, '.', ''),
-                'discount_total'               => number_format($discountTotal + $commercialDiscountTotal, 4, '.', ''),
+                'discount_total'               => number_format($discountTotal + $commercialDiscountTotal + $loyaltyDiscountTotal, 4, '.', ''),
                 'total'                        => number_format($total, 4, '.', ''),
                 'gross_sales_amount'           => number_format($grossSalesAmount, 4, '.', ''),
                 'vatable_sales_amount'         => number_format($vatableSalesAmount, 4, '.', ''),
@@ -412,8 +454,8 @@ class SaleCreationService
                 'vat_amount'                   => number_format($vatAmountTotal, 4, '.', ''),
                 'statutory_discount_total'     => number_format($discountTotal, 4, '.', ''),
                 'commercial_discount_total'    => number_format($commercialDiscountTotal, 4, '.', ''),
-                'other_adjustment_total'       => '0.0000',
-                'discount_policy_snapshot'     => $discountPolicySnapshot,
+                'other_adjustment_total'       => number_format($loyaltyDiscountTotal, 4, '.', ''),
+                'discount_policy_snapshot'     => $policySnapshot,
                 'contains_statutory_discount'  => $statutoryResult && $statutoryResult['is_valid'],
                 'compliance_version'           => 'EPIC14_V1',
                 'tax_source_version'           => 'BIR_VAT_2026_BASELINE',
@@ -476,6 +518,11 @@ class SaleCreationService
                         $machineProfile, $discountType, $rawItems, $statutoryDiscount['options'] ?? [], $sale,
                     );
                 }
+            }
+
+            if ($preparedLoyaltyRedemption) {
+                $actor = \App\Models\User::find($userId);
+                $this->loyaltyRedemptionCoordinator->persistPending($sale, $preparedLoyaltyRedemption, $actor);
             }
 
             // Inject the sale_id into each line item row
@@ -930,7 +977,9 @@ class SaleCreationService
         string $branchId,
         string $userId,
         bool $isTrainingMode = false,
-        array $statutoryDiscount = []
+        array $statutoryDiscount = [],
+        array $loyaltyRedemption = [],
+        ?string $customerFinancialAccountId = null
     ): string {
         $canonicalItems = collect($items)
             ->map(fn($item) => [
@@ -950,6 +999,14 @@ class SaleCreationService
             'is_training_mode'    => $isTrainingMode,
             'statutory_discount'  => $statutoryDiscount,
         ];
+
+        if (!empty($loyaltyRedemption)) {
+            $canonical['loyalty_redemption'] = $loyaltyRedemption;
+        }
+
+        if ($customerFinancialAccountId) {
+            $canonical['customer_financial_account_id'] = $customerFinancialAccountId;
+        }
 
         return hash('sha256', json_encode($canonical));
     }

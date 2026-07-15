@@ -26,6 +26,7 @@ Recommended order:
 6. Story 39.6
 7. Story 39.7
 8. Story 39.8
+9. Story 39.9
 
 Reason:
 
@@ -35,6 +36,7 @@ Reason:
 4. Admin review should follow first financial mutations.
 5. Loyalty points should build on the customer/account foundation after store credit boundaries are proven.
 6. Reporting should consume stable ledger events instead of temporary projections.
+7. Story 39.9 implements the loyalty runtime that was deferred at Epic 39 closeout.
 
 ## 3. Story Status
 
@@ -48,6 +50,7 @@ Reason:
 | 39.6 | Specification Done; Runtime Deferred | - | - |
 | 39.7 | Specification Done; Runtime Deferred | - | - |
 | 39.8 | Done | - | - |
+| 39.9 | Approved for Implementation | - | - |
 
 ## 4. Story Dependencies and Complexity
 
@@ -61,6 +64,7 @@ Reason:
 | 39.6 | 39.1, 39.2, existing `SaleCreationService` finalized sale event | Large |
 | 39.7 | 39.6, payment boundary decision | Large |
 | 39.8 | 39.2, 39.3, 39.4, 39.6, 39.7 | Medium |
+| 39.9 | 39.6, 39.7, 39.8, payment boundary decision | Very Large |
 
 ## 5. Common Definition of Done
 

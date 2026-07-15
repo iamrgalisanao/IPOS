@@ -11,6 +11,11 @@ use App\Exceptions\StoreCredit\StoreCreditLedgerCurrencyMismatchException;
 use App\Exceptions\StoreCredit\StoreCreditLedgerIdempotencyDriftException;
 use App\Exceptions\StoreCredit\StoreCreditLedgerInsufficientBalanceException;
 use App\Exceptions\StoreCredit\StoreCreditLedgerSourceConflictException;
+use App\Exceptions\Loyalty\LoyaltyLedgerAccountStateException;
+use App\Exceptions\Loyalty\LoyaltyLedgerIdempotencyDriftException;
+use App\Exceptions\Loyalty\LoyaltyLedgerInsufficientBalanceException;
+use App\Exceptions\Loyalty\LoyaltyLedgerSourceConflictException;
+use App\Exceptions\Loyalty\LoyaltyRedemptionException;
 use App\Services\POS\PaymentRecordingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
@@ -53,6 +58,14 @@ class PaymentController extends Controller
             | StoreCreditLedgerSourceConflictException $e
         ) {
             return $this->handleStoreCreditException($e);
+        } catch (
+            LoyaltyLedgerAccountStateException
+            | LoyaltyLedgerIdempotencyDriftException
+            | LoyaltyLedgerInsufficientBalanceException
+            | LoyaltyLedgerSourceConflictException
+            | LoyaltyRedemptionException $e
+        ) {
+            return $this->handleLoyaltyException($e);
         } catch (\RuntimeException $e) {
             return $this->handleInventoryException($e);
         }
@@ -99,6 +112,14 @@ class PaymentController extends Controller
             | StoreCreditLedgerSourceConflictException $e
         ) {
             return $this->handleStoreCreditException($e);
+        } catch (
+            LoyaltyLedgerAccountStateException
+            | LoyaltyLedgerIdempotencyDriftException
+            | LoyaltyLedgerInsufficientBalanceException
+            | LoyaltyLedgerSourceConflictException
+            | LoyaltyRedemptionException $e
+        ) {
+            return $this->handleLoyaltyException($e);
         } catch (\RuntimeException $e) {
             return $this->handleInventoryException($e);
         }
@@ -152,6 +173,22 @@ class PaymentController extends Controller
             $e instanceof StoreCreditAlreadyRedeemedException,
             $e instanceof StoreCreditLedgerSourceConflictException => 'STORE_CREDIT_REDEMPTION_ALREADY_POSTED',
             default => 'STORE_CREDIT_REDEMPTION_FAILED',
+        };
+
+        return response()->json([
+            'message' => $e->getMessage(),
+            'code' => $code,
+        ], 409);
+    }
+
+    protected function handleLoyaltyException(\RuntimeException $e): JsonResponse
+    {
+        $code = match (true) {
+            $e instanceof LoyaltyLedgerInsufficientBalanceException => 'INSUFFICIENT_LOYALTY_POINTS',
+            $e instanceof LoyaltyLedgerAccountStateException => 'LOYALTY_ACCOUNT_NOT_REDEEMABLE',
+            $e instanceof LoyaltyLedgerIdempotencyDriftException => 'IDEMPOTENCY_DRIFT',
+            $e instanceof LoyaltyLedgerSourceConflictException => 'LOYALTY_REDEMPTION_ALREADY_POSTED',
+            default => 'LOYALTY_REDEMPTION_FAILED',
         };
 
         return response()->json([

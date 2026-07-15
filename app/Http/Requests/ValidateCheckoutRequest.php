@@ -32,6 +32,7 @@ class ValidateCheckoutRequest extends FormRequest
             'client_request_uuid'      => ['required', 'uuid'],
             'cart_state'               => ['sometimes', 'string'],
             'is_training_mode'         => ['sometimes', 'boolean'],
+            'customer_financial_account_id' => ['sometimes', 'nullable', 'uuid', 'exists:customer_financial_accounts,id'],
             'items'                    => ['required', 'array', 'min:1'],
             'items.*.product_id'       => ['required', 'uuid'],
             'items.*.quantity'         => ['required', 'numeric', 'gt:0'],
@@ -53,6 +54,11 @@ class ValidateCheckoutRequest extends FormRequest
             'statutory_discount.options.total_pax_count' => ['sometimes', 'nullable', 'integer', 'min:1'],
             'statutory_discount.options.memc_base_value' => ['sometimes', 'numeric', 'min:0'],
             'statutory_discount.options.beneficiaries' => ['sometimes', 'array'],
+            'loyalty_redemption' => ['sometimes', 'array'],
+            'loyalty_redemption.customer_financial_account_id' => ['required_with:loyalty_redemption', 'uuid', 'exists:customer_financial_accounts,id'],
+            'loyalty_redemption.points_to_redeem' => ['required_with:loyalty_redemption', 'integer', 'min:1'],
+            'loyalty_redemption.redemption_rule_code' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'loyalty_redemption.client_request_uuid' => ['required_with:loyalty_redemption', 'uuid'],
         ];
     }
 
@@ -80,6 +86,13 @@ class ValidateCheckoutRequest extends FormRequest
                 if ($this->has($unsafeField)) {
                     $validator->errors()->add($unsafeField, "Field [{$unsafeField}] is not permitted.");
                 }
+            }
+
+            if ($this->filled('statutory_discount') && $this->filled('loyalty_redemption')) {
+                $validator->errors()->add(
+                    'loyalty_redemption',
+                    'Loyalty redemption cannot be combined with statutory discounts.'
+                );
             }
         });
     }
