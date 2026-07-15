@@ -27,6 +27,7 @@ Recommended order:
 7. Story 39.7
 8. Story 39.8
 9. Story 39.9
+10. Story 39.10
 
 Reason:
 
@@ -37,6 +38,7 @@ Reason:
 5. Loyalty points should build on the customer/account foundation after store credit boundaries are proven.
 6. Reporting should consume stable ledger events instead of temporary projections.
 7. Story 39.9 implements the loyalty runtime that was deferred during the first closeout pass.
+8. Story 39.10 closes the loyalty reversal gap for void/refund behavior.
 
 ## 3. Story Status
 
@@ -51,6 +53,7 @@ Reason:
 | 39.7 | Runtime Completed by 39.9 | - | - |
 | 39.8 | Done | - | - |
 | 39.9 | Done | - | - |
+| 39.10 | Done | - | - |
 
 ## 4. Story Dependencies and Complexity
 
@@ -65,6 +68,7 @@ Reason:
 | 39.7 | 39.6, payment boundary decision | Large |
 | 39.8 | 39.2, 39.3, 39.4, 39.6, 39.7 | Medium |
 | 39.9 | 39.6, 39.7, 39.8, payment boundary decision | Very Large |
+| 39.10 | 39.9, existing `VoidService`, existing `RefundService` | Large |
 
 ## 5. Common Definition of Done
 

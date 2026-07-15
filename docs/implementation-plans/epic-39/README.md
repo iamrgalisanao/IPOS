@@ -12,7 +12,7 @@ Epic 39 introduces customer financial accounts, append-only store credit, and lo
 
 The first implementation priority was store credit because it represents monetary value and touches refunds, payments, cashier controls, accounting liability, and customer balances. Loyalty points are now implemented as a separate non-monetary runtime using append-only loyalty ledger rows.
 
-Current closeout status: store-credit runtime flows, loyalty ledger storage, loyalty accrual, loyalty redemption evidence, and loyalty reporting are implemented. Automatic loyalty reversal for void/refund remains deferred to a separate policy-driven follow-up.
+Current closeout status: store-credit runtime flows, loyalty ledger storage, loyalty accrual, loyalty redemption evidence, loyalty reporting, and automatic loyalty reversal for void/refund are implemented.
 
 ## Documentation Map
 
@@ -33,6 +33,7 @@ Current closeout status: store-credit runtime flows, loyalty ledger storage, loy
 7. Story 39.7 Loyalty Redemption
 8. Story 39.8 Reporting and Reconciliation
 9. Story 39.9 Loyalty Runtime Implementation
+10. Story 39.10 Loyalty Reversal on Void and Refund
 
 ## Related Epics
 
