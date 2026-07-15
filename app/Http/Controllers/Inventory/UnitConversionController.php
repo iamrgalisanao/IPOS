@@ -5,12 +5,16 @@ namespace App\Http\Controllers\Inventory;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Models\UnitConversion;
+use App\Services\Inventory\UnitConversionGovernanceService;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 class UnitConversionController extends Controller
 {
+    public function __construct(
+        protected UnitConversionGovernanceService $governanceService
+    ) {}
+
     /**
      * Display a listing of the resource.
      */
@@ -60,40 +64,17 @@ class UnitConversionController extends Controller
      */
     public function store(Request $request)
     {
-        $tenantId = app(\App\Services\TenantContext::class)->getTenantId();
-
         $validated = $request->validate([
             'product_id' => ['nullable', 'uuid', 'exists:products,id'],
             'from_unit' => ['required', 'string', 'max:50'],
             'to_unit' => ['required', 'string', 'max:50', 'different:from_unit'],
             'conversion_factor' => ['required', 'numeric', 'gt:0'],
+            'source_unit_kind' => ['nullable', 'string', 'in:mass,volume,count,package,custom'],
+            'target_unit_kind' => ['nullable', 'string', 'in:mass,volume,count,package,custom'],
             'is_active' => ['boolean'],
         ]);
 
-        // Custom composite uniqueness check to avoid DB exceptions
-        $existsQuery = UnitConversion::where('from_unit', $validated['from_unit'])
-            ->where('to_unit', $validated['to_unit']);
-
-        if (!empty($validated['product_id'])) {
-            $existsQuery->where('product_id', $validated['product_id']);
-        } else {
-            $existsQuery->whereNull('product_id');
-        }
-
-        if ($existsQuery->exists()) {
-            return back()->withErrors([
-                'from_unit' => 'A conversion rule for these units already exists for this scope.',
-            ]);
-        }
-
-        UnitConversion::create([
-            'tenant_id' => $tenantId,
-            'product_id' => $validated['product_id'] ?? null,
-            'from_unit' => $validated['from_unit'],
-            'to_unit' => $validated['to_unit'],
-            'conversion_factor' => $validated['conversion_factor'],
-            'is_active' => $validated['is_active'] ?? true,
-        ]);
+        $this->governanceService->create($validated, $request->user()?->id);
 
         return redirect()->back()->with('success', 'Unit conversion rule created successfully.');
     }
@@ -108,35 +89,14 @@ class UnitConversionController extends Controller
             'from_unit' => ['required', 'string', 'max:50'],
             'to_unit' => ['required', 'string', 'max:50', 'different:from_unit'],
             'conversion_factor' => ['required', 'numeric', 'gt:0'],
+            'source_unit_kind' => ['nullable', 'string', 'in:mass,volume,count,package,custom'],
+            'target_unit_kind' => ['nullable', 'string', 'in:mass,volume,count,package,custom'],
             'is_active' => ['boolean'],
         ]);
 
-        // Custom composite uniqueness check (excluding current record)
-        $existsQuery = UnitConversion::where('id', '!=', $unitConversion->id)
-            ->where('from_unit', $validated['from_unit'])
-            ->where('to_unit', $validated['to_unit']);
+        $this->governanceService->replace($unitConversion, $validated, $request->user()?->id);
 
-        if (!empty($validated['product_id'])) {
-            $existsQuery->where('product_id', $validated['product_id']);
-        } else {
-            $existsQuery->whereNull('product_id');
-        }
-
-        if ($existsQuery->exists()) {
-            return back()->withErrors([
-                'from_unit' => 'A conversion rule for these units already exists for this scope.',
-            ]);
-        }
-
-        $unitConversion->update([
-            'product_id' => $validated['product_id'] ?? null,
-            'from_unit' => $validated['from_unit'],
-            'to_unit' => $validated['to_unit'],
-            'conversion_factor' => $validated['conversion_factor'],
-            'is_active' => $validated['is_active'] ?? true,
-        ]);
-
-        return redirect()->back()->with('success', 'Unit conversion rule updated successfully.');
+        return redirect()->back()->with('success', 'Unit conversion rule version created successfully.');
     }
 
     /**
@@ -144,7 +104,7 @@ class UnitConversionController extends Controller
      */
     public function destroy(UnitConversion $unitConversion)
     {
-        $unitConversion->update(['is_active' => false]);
+        $this->governanceService->deactivate($unitConversion, request()->user()?->id);
 
         return redirect()->back()->with('success', 'Unit conversion rule deactivated successfully.');
     }

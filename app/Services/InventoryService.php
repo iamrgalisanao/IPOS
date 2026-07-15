@@ -291,10 +291,26 @@ class InventoryService
         $deductQty = (float) $recipe->quantity * $parentQuantity;
         $recipeUnit = $recipe->unit;
         $ingredientUnit = $recipe->ingredient->unit_of_measure;
+        $conversionResolution = null;
 
         // Apply Unit Conversion if units differ
         if ($recipeUnit !== $ingredientUnit) {
-            $deductQty = $this->convertUnit($deductQty, $recipeUnit, $ingredientUnit, $recipe->ingredient_id);
+            $conversionResolution = $this->unitConversionResolver->resolve(
+                quantity: $deductQty,
+                fromUnit: $recipeUnit,
+                toUnit: $ingredientUnit,
+                productId: $recipe->ingredient_id,
+                strict: true
+            );
+            $deductQty = (float) $conversionResolution['value'];
+        } else {
+            $conversionResolution = $this->unitConversionResolver->resolve(
+                quantity: $deductQty,
+                fromUnit: $recipeUnit,
+                toUnit: $ingredientUnit,
+                productId: $recipe->ingredient_id,
+                strict: true
+            );
         }
 
         $inventory = BranchInventory::where('branch_id', $sale->branch_id)
@@ -308,7 +324,7 @@ class InventoryService
             throw new \RuntimeException("Ingredient {$recipe->ingredient->name} not found in inventory for branch {$sale->branch_id}.");
         }
 
-        $this->performDeduction($inventory, $deductQty, $sale, "Recipe component for {$recipe->product->name}", $parentProductId, $saleItemId);
+        $this->performDeduction($inventory, $deductQty, $sale, "Recipe component for {$recipe->product->name}", $parentProductId, $saleItemId, $conversionResolution);
     }
 
     /**
@@ -328,7 +344,7 @@ class InventoryService
     /**
      * Internal helper to perform the actual stock decrement and movement logging.
      */
-    protected function performDeduction(BranchInventory $inventory, float $quantityChange, \App\Models\Sale $sale, ?string $extraRemarks = null, ?string $parentProductId = null, ?string $saleItemId = null): void
+    protected function performDeduction(BranchInventory $inventory, float $quantityChange, \App\Models\Sale $sale, ?string $extraRemarks = null, ?string $parentProductId = null, ?string $saleItemId = null, ?array $conversionResolution = null): void
     {
         $quantityBefore = (float) $inventory->current_stock;
         $quantityAfter = $quantityBefore - $quantityChange;
@@ -397,6 +413,10 @@ class InventoryService
             'source_effect_key' => $parentProductId
                 ? "sale:{$sale->id}:sale_item:{$saleItemId}:ingredient:{$inventory->product_id}"
                 : "sale:{$sale->id}:sale_item:{$saleItemId}:product:{$inventory->product_id}",
+            'base_unit_id' => $conversionResolution['to_unit'] ?? $inventory->product->unit_of_measure ?? null,
+            'source_unit_id' => $conversionResolution['from_unit'] ?? $inventory->product->unit_of_measure ?? null,
+            'source_quantity' => $conversionResolution['source_quantity'] ?? $quantityChange,
+            'conversion_snapshot' => $conversionResolution['snapshot'] ?? null,
             'user_id' => $sale->user_id,
             'remarks' => $remarks,
         ]);
