@@ -42,8 +42,8 @@ Reason:
 
 | Story | Status | Owner | Sprint |
 | --- | --- | --- | --- |
-| 40.1 | Approved for Implementation | - | - |
-| 40.2 | Planned | - | - |
+| 40.1 | Done | - | - |
+| 40.2 | Approved for Implementation | - | - |
 | 40.3 | Planned | - | - |
 | 40.4 | Planned | - | - |
 | 40.5 | Planned | - | - |
