@@ -2,7 +2,7 @@
 
 ## 1. Status
 
-Store Credit Complete; Loyalty Runtime Deferred
+Store Credit and Loyalty Runtime Complete
 
 Date: 2026-07-15
 
@@ -36,7 +36,7 @@ Reason:
 4. Admin review should follow first financial mutations.
 5. Loyalty points should build on the customer/account foundation after store credit boundaries are proven.
 6. Reporting should consume stable ledger events instead of temporary projections.
-7. Story 39.9 implements the loyalty runtime that was deferred at Epic 39 closeout.
+7. Story 39.9 implements the loyalty runtime that was deferred during the first closeout pass.
 
 ## 3. Story Status
 
@@ -47,10 +47,10 @@ Reason:
 | 39.3 | Done | - | - |
 | 39.4 | Done | - | - |
 | 39.5 | Done | - | - |
-| 39.6 | Specification Done; Runtime Deferred | - | - |
-| 39.7 | Specification Done; Runtime Deferred | - | - |
+| 39.6 | Runtime Completed by 39.9 | - | - |
+| 39.7 | Runtime Completed by 39.9 | - | - |
 | 39.8 | Done | - | - |
-| 39.9 | Approved for Implementation | - | - |
+| 39.9 | Done | - | - |
 
 ## 4. Story Dependencies and Complexity
 

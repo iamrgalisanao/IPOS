@@ -2,7 +2,7 @@
 
 ## 1. Status
 
-Review
+Done
 
 Date: 2026-07-15
 
@@ -48,13 +48,13 @@ so that customers can earn and use rewards without weakening sale, payment, stor
 
 ## 5. Closeout Context
 
-Epic 39 closeout found that store-credit runtime flows are implemented, but loyalty runtime storage and redemption execution are deferred.
+Epic 39 closeout originally found that store-credit runtime flows were implemented while loyalty runtime storage and redemption execution were deferred.
 
-Current code evidence:
+Original code evidence before Story 39.9 implementation:
 
 1. `Epic39ReportingService::loyaltyActivity()` returns empty point activity.
 2. Customer statements include a loyalty section with zero rows.
-3. The reporting service explicitly notes that no loyalty ledger table exists yet.
+3. The reporting service explicitly noted that no loyalty ledger table existed yet.
 4. Store-credit ledger patterns are implemented and should be mirrored where appropriate.
 
 Story 39.9 closes that runtime gap.
