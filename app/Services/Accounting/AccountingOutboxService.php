@@ -32,6 +32,7 @@ class AccountingOutboxService
             \App\Models\Sale::class => 'sale',
             \App\Models\SaleVoid::class => 'sale_void',
             \App\Models\SaleRefund::class => 'sale_refund',
+            \App\Models\StoreCreditLedgerEntry::class => 'store_credit_ledger_entry',
             \App\Models\SupplierReturn::class => 'supplier_return',
             \App\Models\SupplierInvoice::class => 'supplier_invoice',
             default => strtolower(class_basename($model)),

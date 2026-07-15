@@ -4,16 +4,21 @@ namespace Tests\Feature\POS;
 
 use App\Models\Branch;
 use App\Models\BranchInventory;
+use App\Models\Customer;
+use App\Models\CustomerFinancialAccount;
 use App\Models\PaymentMethod;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\SalePayment;
+use App\Models\SaleRefund;
 use App\Models\Shift;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Models\ManualRefundRequest;
 use App\Models\PosAdjustmentRequest;
+use App\Models\StoreCreditLedgerEntry;
+use App\Models\StoreCreditRefundIssuance;
 use App\Services\BranchContext;
 use App\Services\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -249,6 +254,93 @@ class VoidRefundControllerTest extends TestCase
             'status' => 'pending_approval',
             'requested_refund_amount' => 50.00
         ]);
+    }
+
+    public function test_refund_to_store_credit_returns_ledger_details_and_skips_cash_drawer_payout()
+    {
+        $sale = $this->createSale('paid', 'Cash');
+        $item = $sale->items->first();
+        $customer = Customer::factory()->create(['tenant_id' => $this->tenant->id]);
+        $account = CustomerFinancialAccount::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'customer_id' => $customer->id,
+            'currency_code' => 'PHP',
+        ]);
+        $idempotencyKey = (string) Str::uuid();
+
+        $response = $this->postWithContext(route('pos.sales.refund', $sale->id), [
+            'items' => [
+                ['sale_item_id' => $item->id, 'quantity' => 1]
+            ],
+            'payout_method' => 'store_credit',
+            'customer_financial_account_id' => $account->id,
+            'reason_code' => 'RETURN',
+            'reason_notes' => 'Store credit requested',
+            'supervisor_email' => $this->supervisor->email,
+            'supervisor_password' => 'superpassword123',
+        ], ['Idempotency-Key' => $idempotencyKey]);
+
+        $response->assertOk()
+            ->assertJsonPath('data.payout_method', 'store_credit')
+            ->assertJsonPath('data.store_credit.customer_financial_account_id', $account->id)
+            ->assertJsonPath('data.store_credit.amount_centavos', 5000)
+            ->assertJsonPath('data.store_credit.currency_code', 'PHP');
+
+        $this->assertDatabaseHas('store_credit_ledger_entries', [
+            'customer_financial_account_id' => $account->id,
+            'entry_type' => StoreCreditLedgerEntry::TYPE_REFUND_CREDIT,
+            'amount_centavos' => 5000,
+        ]);
+        $this->assertDatabaseHas('store_credit_refund_issuances', [
+            'customer_financial_account_id' => $account->id,
+            'amount_centavos' => 5000,
+        ]);
+        $this->assertDatabaseHas('accounting_outbox', ['event_type' => 'store_credit_issued']);
+        $this->assertDatabaseCount('cash_drawer_events', 0);
+    }
+
+    public function test_refund_to_store_credit_replay_does_not_duplicate_ledger_or_issuance()
+    {
+        $sale = $this->createSale('paid', 'Cash');
+        $item = $sale->items->first();
+        $customer = Customer::factory()->create(['tenant_id' => $this->tenant->id]);
+        $account = CustomerFinancialAccount::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'customer_id' => $customer->id,
+            'currency_code' => 'PHP',
+        ]);
+        $idempotencyKey = (string) Str::uuid();
+        $payload = [
+            'items' => [
+                ['sale_item_id' => $item->id, 'quantity' => 1]
+            ],
+            'payout_method' => 'store_credit',
+            'customer_financial_account_id' => $account->id,
+            'reason_code' => 'RETURN',
+            'reason_notes' => 'Store credit requested',
+            'supervisor_email' => $this->supervisor->email,
+            'supervisor_password' => 'superpassword123',
+        ];
+
+        $first = $this->postWithContext(route('pos.sales.refund', $sale->id), $payload, [
+            'Idempotency-Key' => $idempotencyKey,
+        ]);
+        $first->assertOk();
+
+        $second = $this->postWithContext(route('pos.sales.refund', $sale->id), $payload, [
+            'Idempotency-Key' => $idempotencyKey,
+        ]);
+
+        $second->assertOk()
+            ->assertHeader('X-Cache-Lookup', 'HIT - Idempotent response')
+            ->assertJsonPath('data.refund_id', $first->json('data.refund_id'))
+            ->assertJsonPath('data.store_credit.ledger_entry_id', $first->json('data.store_credit.ledger_entry_id'));
+
+        $this->assertSame(1, SaleRefund::where('sale_id', $sale->id)->count());
+        $this->assertSame(1, StoreCreditLedgerEntry::where('customer_financial_account_id', $account->id)->count());
+        $this->assertSame(1, StoreCreditRefundIssuance::where('customer_financial_account_id', $account->id)->count());
+        $this->assertDatabaseCount('cash_drawer_events', 0);
+        $this->assertDatabaseCount('accounting_outbox', 2);
     }
 
     protected function postWithContext(string $route, array $payload = [], array $headers = [])

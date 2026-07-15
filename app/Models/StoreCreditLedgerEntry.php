@@ -108,4 +108,9 @@ class StoreCreditLedgerEntry extends Model
     {
         return $this->belongsTo(User::class, 'posted_by');
     }
+
+    public function storeCreditRefundIssuance(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(StoreCreditRefundIssuance::class);
+    }
 }
