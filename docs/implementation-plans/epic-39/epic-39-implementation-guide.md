@@ -41,7 +41,7 @@ Reason:
 | Story | Status | Owner | Sprint |
 | --- | --- | --- | --- |
 | 39.1 | Done | - | - |
-| 39.2 | Blocked by 39.1 and accounting liability decision | - | - |
+| 39.2 | Approved for Implementation | - | - |
 | 39.3 | Blocked by 39.2 | - | - |
 | 39.4 | Blocked by 39.2, 39.3 | - | - |
 | 39.5 | Blocked by 39.1, 39.2, 39.3, 39.4 | - | - |
