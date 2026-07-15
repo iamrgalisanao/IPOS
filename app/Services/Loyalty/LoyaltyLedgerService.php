@@ -149,6 +149,7 @@ class LoyaltyLedgerService
             'source_snapshot' => $snapshot,
             'idempotency_key' => $idempotencyKey,
             'business_date' => Carbon::parse($data['business_date'] ?? now())->toDateString(),
+            'allow_negative_balance' => (bool) ($data['allow_negative_balance'] ?? false),
             'ledger_schema_version' => LoyaltyLedgerEntry::LEDGER_SCHEMA_VERSION,
             'fingerprint_version' => LoyaltyLedgerEntry::FINGERPRINT_VERSION,
         ];
@@ -159,10 +160,14 @@ class LoyaltyLedgerService
         return match ($entryType) {
             LoyaltyLedgerEntry::TYPE_SALE_ACCRUAL,
             LoyaltyLedgerEntry::TYPE_ADMIN_CREDIT_ADJUSTMENT,
-            LoyaltyLedgerEntry::TYPE_REVERSAL_CREDIT => LoyaltyLedgerEntry::DIRECTION_CREDIT,
+            LoyaltyLedgerEntry::TYPE_REVERSAL_CREDIT,
+            LoyaltyLedgerEntry::TYPE_VOID_REDEMPTION_RESTORE,
+            LoyaltyLedgerEntry::TYPE_REFUND_REDEMPTION_RESTORE => LoyaltyLedgerEntry::DIRECTION_CREDIT,
             LoyaltyLedgerEntry::TYPE_REDEMPTION_DEBIT,
             LoyaltyLedgerEntry::TYPE_ADMIN_DEBIT_ADJUSTMENT,
             LoyaltyLedgerEntry::TYPE_REVERSAL_DEBIT,
+            LoyaltyLedgerEntry::TYPE_VOID_EARN_REVERSAL,
+            LoyaltyLedgerEntry::TYPE_REFUND_EARN_REVERSAL,
             LoyaltyLedgerEntry::TYPE_EXPIRATION_DEBIT,
             LoyaltyLedgerEntry::TYPE_FORFEITURE_DEBIT => LoyaltyLedgerEntry::DIRECTION_DEBIT,
             default => throw new InvalidArgumentException('Unsupported loyalty ledger entry type.'),
@@ -182,6 +187,7 @@ class LoyaltyLedgerService
             'source_id' => $payload['source_id'],
             'source_reference' => $payload['source_reference'],
             'business_date' => $payload['business_date'],
+            'allow_negative_balance' => $payload['allow_negative_balance'],
             'ledger_schema_version' => $payload['ledger_schema_version'],
             'fingerprint_version' => $payload['fingerprint_version'],
         ];
@@ -211,6 +217,10 @@ class LoyaltyLedgerService
             return;
         }
 
+        if ($this->isReversalEntryType($payload['entry_type'])) {
+            return;
+        }
+
         $exists = LoyaltyLedgerEntry::query()
             ->where('customer_financial_account_id', $account->id)
             ->where('source_type', $payload['source_type'])
@@ -228,9 +238,33 @@ class LoyaltyLedgerService
             return;
         }
 
+        if ($payload['allow_negative_balance'] && $this->isNegativeBalanceAllowedEntryType($payload['entry_type'])) {
+            return;
+        }
+
         if ($this->balanceService->availablePoints($account) - $payload['points'] < 0) {
             throw new LoyaltyLedgerInsufficientBalanceException('Loyalty debit cannot create a negative points balance.');
         }
+    }
+
+    private function isReversalEntryType(string $entryType): bool
+    {
+        return in_array($entryType, [
+            LoyaltyLedgerEntry::TYPE_REVERSAL_CREDIT,
+            LoyaltyLedgerEntry::TYPE_REVERSAL_DEBIT,
+            LoyaltyLedgerEntry::TYPE_VOID_EARN_REVERSAL,
+            LoyaltyLedgerEntry::TYPE_REFUND_EARN_REVERSAL,
+            LoyaltyLedgerEntry::TYPE_VOID_REDEMPTION_RESTORE,
+            LoyaltyLedgerEntry::TYPE_REFUND_REDEMPTION_RESTORE,
+        ], true);
+    }
+
+    private function isNegativeBalanceAllowedEntryType(string $entryType): bool
+    {
+        return in_array($entryType, [
+            LoyaltyLedgerEntry::TYPE_VOID_EARN_REVERSAL,
+            LoyaltyLedgerEntry::TYPE_REFUND_EARN_REVERSAL,
+        ], true);
     }
 
     private function audit(string $action, LoyaltyLedgerEntry $entry, ?User $actor): void

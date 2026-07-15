@@ -512,13 +512,18 @@ class Epic39ReportingService
         $earned = 0;
         $redeemed = 0;
         $reversed = 0;
+        $restored = 0;
 
         foreach ($entries as $entry) {
             match ($entry->entry_type) {
                 LoyaltyLedgerEntry::TYPE_SALE_ACCRUAL => $earned += $entry->points,
                 LoyaltyLedgerEntry::TYPE_REDEMPTION_DEBIT => $redeemed += $entry->points,
+                LoyaltyLedgerEntry::TYPE_VOID_EARN_REVERSAL,
+                LoyaltyLedgerEntry::TYPE_REFUND_EARN_REVERSAL,
                 LoyaltyLedgerEntry::TYPE_REVERSAL_CREDIT,
                 LoyaltyLedgerEntry::TYPE_REVERSAL_DEBIT => $reversed += $entry->points,
+                LoyaltyLedgerEntry::TYPE_VOID_REDEMPTION_RESTORE,
+                LoyaltyLedgerEntry::TYPE_REFUND_REDEMPTION_RESTORE => $restored += $entry->points,
                 default => null,
             };
         }
@@ -528,6 +533,7 @@ class Epic39ReportingService
             'points_earned' => $earned,
             'points_redeemed' => $redeemed,
             'points_reversed' => $reversed,
+            'points_restored' => $restored,
             'points_balance' => $this->loyaltySignedBalance($entries),
             'row_count' => $entries->count(),
         ];
