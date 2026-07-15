@@ -205,6 +205,21 @@ Route::middleware(['auth', 'tenant'])->group(function () {
             ->name('export');
     });
 
+    Route::prefix('reports/epic-39')->name('reports.epic39.')->group(function () {
+        Route::get('/customer-accounts/{account}/statement', [\App\Http\Controllers\Reports\Epic39ReportingController::class, 'customerStatement'])
+            ->name('customer-accounts.statement');
+        Route::get('/store-credit/liability', [\App\Http\Controllers\Reports\Epic39ReportingController::class, 'storeCreditLiability'])
+            ->name('store-credit.liability');
+        Route::get('/store-credit/movements', [\App\Http\Controllers\Reports\Epic39ReportingController::class, 'storeCreditMovements'])
+            ->name('store-credit.movements');
+        Route::get('/store-credit/reconciliation', [\App\Http\Controllers\Reports\Epic39ReportingController::class, 'storeCreditReconciliation'])
+            ->name('store-credit.reconciliation');
+        Route::get('/loyalty/activity', [\App\Http\Controllers\Reports\Epic39ReportingController::class, 'loyaltyActivity'])
+            ->name('loyalty.activity');
+        Route::get('/reconciliation-exceptions', [\App\Http\Controllers\Reports\Epic39ReportingController::class, 'reconciliationExceptions'])
+            ->name('reconciliation-exceptions');
+    });
+
     Route::prefix('sales/history')->name('sales.history.')->group(function () {
         Route::get('/', [\App\Http\Controllers\Sales\SalesHistoryController::class, 'index'])
             ->middleware('permission:view_sales_history')
