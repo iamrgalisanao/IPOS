@@ -923,6 +923,17 @@ class OfflineReconciliationService
                     return false;
                 }
 
+                if ($method->isStoreCredit()) {
+                    $reason = 'STORE_CREDIT_OFFLINE_REDEMPTION_NOT_ALLOWED';
+                    $context = [
+                        'payment_method_code' => $method->code,
+                        'payment_method_id' => $method->id,
+                        'amount_centavos' => (int) round(($paymentData['amount'] ?? 0) * 100),
+                        'payment_methods_version_hash' => $clientHash,
+                    ];
+                    return false;
+                }
+
                 $settings = $method->getSettingsForBranch($branchId);
 
                 // Is allowed offline?

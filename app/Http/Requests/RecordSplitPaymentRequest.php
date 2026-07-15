@@ -18,6 +18,10 @@ class RecordSplitPaymentRequest extends FormRequest
             'payments.*.payment_method_id' => ['required', 'uuid', 'exists:payment_methods,id'],
             'payments.*.amount' => ['required', 'numeric', 'gt:0'],
             'payments.*.reference_number' => ['nullable', 'string', 'max:100'],
+            'payments.*.customer_financial_account_id' => ['nullable', 'uuid'],
+            'payments.*.store_credit_authorization' => ['nullable', 'array'],
+            'payments.*.store_credit_authorization.verification_method' => ['nullable', 'string', 'max:100'],
+            'payments.*.store_credit_authorization.verification_reference' => ['nullable', 'string', 'max:100'],
         ];
     }
 
