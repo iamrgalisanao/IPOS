@@ -1,0 +1,6 @@
+@startuml
+title Epic 39 Ledger State Machine Placeholder
+note as N
+To be finalized after ledger state decisions are approved.
+end note
+@enduml
