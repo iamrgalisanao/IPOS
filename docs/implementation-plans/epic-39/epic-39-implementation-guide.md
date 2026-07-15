@@ -46,8 +46,8 @@ Reason:
 | 39.4 | Done | - | - |
 | 39.5 | Done | - | - |
 | 39.6 | Done | - | - |
-| 39.7 | Approved for Implementation | - | - |
-| 39.8 | Blocked by 39.2, 39.3, 39.4, 39.6, 39.7 | - | - |
+| 39.7 | Done | - | - |
+| 39.8 | Approved for Implementation | - | - |
 
 ## 4. Story Dependencies and Complexity
 

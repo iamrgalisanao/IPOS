@@ -173,6 +173,13 @@ class RbacSeeder
             'customer-accounts.view' => 'Can view customer financial accounts',
             'customer-accounts.manage' => 'Can create and manage customer financial accounts',
             'store-credit.review' => 'Can review store credit balances, ledger history, and source evidence',
+            'reports.customer_accounts.view' => 'Can view customer financial account statements',
+            'reports.store_credit.view' => 'Can view store credit operational reports',
+            'reports.store_credit.financial.view' => 'Can view store credit financial liability reports',
+            'reports.store_credit.export' => 'Can export store credit reports',
+            'reports.loyalty.view' => 'Can view loyalty activity reports',
+            'reports.loyalty.export' => 'Can export loyalty reports',
+            'reports.epic39_reconciliation.view' => 'Can view Epic 39 reconciliation exception reports',
         ];
     }
 
@@ -201,6 +208,7 @@ class RbacSeeder
                     'approve_void', 'approve_refund', 'view_branch_reports',
                     'close_branch_day', 'view_reports',
                     'customer-accounts.view', 'store-credit.review',
+                    'reports.customer_accounts.view', 'reports.store_credit.view', 'reports.loyalty.view',
                     'view_sales_history', 'view_sale_details',
                     'pos-layouts.view',
                     'inventory.stocktake.view', 'inventory.stocktake.create', 'inventory.stocktake.count',                     'inventory.stocktake.review', 'inventory.stocktake.cancel', 'inventory.stocktake.post',
@@ -235,6 +243,9 @@ class RbacSeeder
                     'view_reconciliation_reports', 'export_accounting_reports',
                     'view_branch_reports', 'export_reports', 'view_multi_branch_dashboard', 'view_reports',
                     'customer-accounts.view', 'store-credit.review',
+                    'reports.customer_accounts.view', 'reports.store_credit.view', 'reports.store_credit.financial.view',
+                    'reports.store_credit.export', 'reports.loyalty.view', 'reports.loyalty.export',
+                    'reports.epic39_reconciliation.view',
                     'view_sales_history', 'view_sale_details', 'export_sales_history',
                     'reports.cashier-accountability.view', 'reports.cashier-accountability.export',
                     'reports.shift-summary.view', 'reports.shift-summary.export',

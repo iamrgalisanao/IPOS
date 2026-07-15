@@ -20,3 +20,4 @@ These ADRs will capture the final decisions for Epic 39 after the Architecture L
 8. ADR-008 Offline Policy
 9. ADR-009 Ledger Snapshots
 10. ADR-010 Customer Identity
+11. ADR-039 Reporting and Reconciliation
