@@ -172,6 +172,7 @@ class RbacSeeder
             // Epic 39: Customer Financial Accounts
             'customer-accounts.view' => 'Can view customer financial accounts',
             'customer-accounts.manage' => 'Can create and manage customer financial accounts',
+            'store-credit.review' => 'Can review store credit balances, ledger history, and source evidence',
         ];
     }
 
@@ -199,7 +200,7 @@ class RbacSeeder
                     'pos.approve_discount',
                     'approve_void', 'approve_refund', 'view_branch_reports',
                     'close_branch_day', 'view_reports',
-                    'customer-accounts.view',
+                    'customer-accounts.view', 'store-credit.review',
                     'view_sales_history', 'view_sale_details',
                     'pos-layouts.view',
                     'inventory.stocktake.view', 'inventory.stocktake.create', 'inventory.stocktake.count',                     'inventory.stocktake.review', 'inventory.stocktake.cancel', 'inventory.stocktake.post',
@@ -233,7 +234,7 @@ class RbacSeeder
                     'manually_resolve_sync', 'ignore_sync_exception',
                     'view_reconciliation_reports', 'export_accounting_reports',
                     'view_branch_reports', 'export_reports', 'view_multi_branch_dashboard', 'view_reports',
-                    'customer-accounts.view',
+                    'customer-accounts.view', 'store-credit.review',
                     'view_sales_history', 'view_sale_details', 'export_sales_history',
                     'reports.cashier-accountability.view', 'reports.cashier-accountability.export',
                     'reports.shift-summary.view', 'reports.shift-summary.export',

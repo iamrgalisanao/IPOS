@@ -43,8 +43,8 @@ Reason:
 | 39.1 | Done | - | - |
 | 39.2 | Done | - | - |
 | 39.3 | Done | - | - |
-| 39.4 | Approved for Implementation | - | - |
-| 39.5 | Blocked by 39.1, 39.2, 39.3, 39.4 | - | - |
+| 39.4 | Done | - | - |
+| 39.5 | Ready for Review | - | - |
 | 39.6 | Blocked by 39.1, 39.2 | - | - |
 | 39.7 | Blocked by 39.6 | - | - |
 | 39.8 | Blocked by 39.2, 39.3, 39.4, 39.6, 39.7 | - | - |
