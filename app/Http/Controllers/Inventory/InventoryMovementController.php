@@ -59,9 +59,14 @@ class InventoryMovementController extends Controller
             'data' => $movements->map(function ($m) {
                 return [
                     'id' => $m->id,
+                    'movement_uuid' => $m->movement_uuid,
+                    'movement_schema_version' => $m->movement_schema_version,
+                    'movement_sequence' => $m->movement_sequence,
                     'movement_type' => $m->movement_type,
                     'source_type' => $m->source_type,
                     'source_id' => $m->source_id,
+                    'source_reference' => $m->source_reference,
+                    'source_effect_key' => $m->source_effect_key,
                     'tenant_id' => $m->tenant_id,
                     'branch_id' => $m->branch_id,
                     'product_id' => $m->product_id,
@@ -69,7 +74,10 @@ class InventoryMovementController extends Controller
                     'sku' => $m->product->sku ?? null,
                     'quantity_before' => (float) $m->quantity_before,
                     'quantity_change' => (float) $m->quantity_change,
+                    'quantity_delta' => (float) $m->quantity_change,
                     'quantity_after' => (float) $m->quantity_after,
+                    'business_date' => $m->business_date?->toDateString(),
+                    'posted_at' => $m->posted_at?->toIso8601String(),
                     'created_at' => $m->created_at->toIso8601String(),
                 ];
             }),

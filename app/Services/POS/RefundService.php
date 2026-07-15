@@ -414,6 +414,8 @@ class RefundService
             'quantity_after' => $quantityAfter,
             'source_type' => 'sale_refund',
             'source_id' => $refund->id,
+            'source_reference' => $refund->refund_number ?? $refund->id,
+            'source_effect_key' => "refund:{$refund->id}:sale_item:{$item->id}:product:{$item->product_id}",
             'original_movement_id' => $originalMovement?->id,
             'user_id' => $refund->refunded_by,
             'remarks' => "Refund return for Sale #{$item->sale->sale_number}",

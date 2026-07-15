@@ -3,13 +3,13 @@
 namespace App\Services\Procurement;
 
 use App\Models\BranchInventory;
-use App\Models\InventoryMovement;
 use App\Models\SupplierReturn;
 use App\Models\SupplierReturnLine;
 use App\Models\Product;
 use App\Models\ExpiryLot;
 use App\Services\AuditLogger;
 use App\Services\Inventory\FefoAllocationService;
+use App\Services\Inventory\InventoryMovementRecorder;
 use App\Exceptions\Inventory\InsufficientStockException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -19,7 +19,8 @@ class SupplierReturnPostingService
     public function __construct(
         protected FefoAllocationService $fefoAllocationService,
         protected AuditLogger $auditLogger,
-        protected \App\Services\Accounting\AccountingOutboxService $outboxService
+        protected \App\Services\Accounting\AccountingOutboxService $outboxService,
+        protected InventoryMovementRecorder $movementRecorder
     ) {}
 
     /**
@@ -136,12 +137,7 @@ class SupplierReturnPostingService
                     'average_cost' => $newWac,
                 ]);
 
-                // Record Inventory Movement
-                InventoryMovement::create([
-                    'tenant_id' => $supplierReturn->tenant_id,
-                    'branch_id' => $supplierReturn->branch_id,
-                    'product_id' => $line->product_id,
-                    'branch_inventory_id' => $inventory->id,
+                $this->movementRecorder->record($inventory, [
                     'movement_type' => 'supplier_return',
                     'quantity_change' => bcmul($qtyToReturn, '-1', 4),
                     'quantity_before' => $currentStock,
@@ -149,6 +145,8 @@ class SupplierReturnPostingService
                     'source_type' => SupplierReturn::class,
                     'source_id' => $supplierReturn->id,
                     'reference_number' => $supplierReturn->document_number,
+                    'source_reference' => $supplierReturn->document_number,
+                    'source_effect_key' => "supplier_return:{$supplierReturn->id}:line:{$line->id}",
                     'user_id' => $postedBy,
                     'remarks' => $supplierReturn->notes,
                 ]);

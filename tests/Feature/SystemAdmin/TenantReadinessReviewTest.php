@@ -482,7 +482,7 @@ class TenantReadinessReviewTest extends TestCase
             ->assertHeader('Content-Type', 'text/html; charset=UTF-8');
 
         $response->assertSee('Tenant Readiness Summary', false)
-            ->assertSee($this->company->name, false)
+            ->assertSee($this->company->name)
             ->assertSee('ready_for_operations', false)
             ->assertSee('No sign-off history recorded.', false);
     }

@@ -5,7 +5,6 @@ namespace App\Services\Procurement;
 use App\Models\InterBranchTransfer;
 use App\Models\InterBranchTransferLine;
 use App\Models\BranchInventory;
-use App\Models\InventoryMovement;
 use App\Models\Product;
 use App\Models\ExpiryLot;
 use App\Models\User;
@@ -15,6 +14,7 @@ use App\Services\AuditLogger;
 use App\Services\TenantContext;
 use App\Services\BranchContext;
 use App\Services\Inventory\FefoAllocationService;
+use App\Services\Inventory\InventoryMovementRecorder;
 use App\Exceptions\Inventory\InsufficientStockException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -25,7 +25,8 @@ class IbtStockMovementService
         protected TenantContext $tenantContext,
         protected BranchContext $branchContext,
         protected AuditLogger $auditLogger,
-        protected FefoAllocationService $fefoAllocationService
+        protected FefoAllocationService $fefoAllocationService,
+        protected InventoryMovementRecorder $movementRecorder
     ) {}
 
     /**
@@ -182,12 +183,7 @@ class IbtStockMovementService
                 $line->line_total = bcmul($qtyToTransfer, $frozenWac, 4);
                 $line->save();
 
-                // Create source inventory movement record
-                InventoryMovement::create([
-                    'tenant_id' => $ibt->tenant_id,
-                    'branch_id' => $ibt->source_branch_id,
-                    'product_id' => $line->product_id,
-                    'branch_inventory_id' => $inventory->id,
+                $this->movementRecorder->record($inventory, [
                     'movement_type' => 'ibt_dispatch',
                     'quantity_change' => bcmul($qtyToTransfer, '-1', 4),
                     'quantity_before' => $currentStock,
@@ -195,6 +191,8 @@ class IbtStockMovementService
                     'source_type' => InterBranchTransfer::class,
                     'source_id' => $ibt->id,
                     'reference_number' => $ibt->reference_number,
+                    'source_reference' => $ibt->reference_number,
+                    'source_effect_key' => "ibt_dispatch:{$ibt->id}:line:{$line->id}",
                     'user_id' => $user->id,
                     'remarks' => $ibt->notes ?: "IBT dispatch to branch " . $destBranch->branch_code,
                 ]);
@@ -317,12 +315,7 @@ class IbtStockMovementService
                     'average_cost' => $newWac,
                 ]);
 
-                // Create destination inventory movement record
-                InventoryMovement::create([
-                    'tenant_id' => $ibt->tenant_id,
-                    'branch_id' => $ibt->destination_branch_id,
-                    'product_id' => $line->product_id,
-                    'branch_inventory_id' => $inventory->id,
+                $this->movementRecorder->record($inventory, [
                     'movement_type' => 'ibt_receipt',
                     'quantity_change' => $receivedQty,
                     'quantity_before' => $qtyBefore,
@@ -330,6 +323,8 @@ class IbtStockMovementService
                     'source_type' => InterBranchTransfer::class,
                     'source_id' => $ibt->id,
                     'reference_number' => $ibt->reference_number,
+                    'source_reference' => $ibt->reference_number,
+                    'source_effect_key' => "ibt_receipt:{$ibt->id}:line:{$line->id}",
                     'user_id' => $user->id,
                     'remarks' => $ibt->notes ?: "IBT receipt from branch " . $ibt->sourceBranch->branch_code,
                 ]);
