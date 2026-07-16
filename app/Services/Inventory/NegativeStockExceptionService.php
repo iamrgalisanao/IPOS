@@ -135,6 +135,8 @@ class NegativeStockExceptionService
                 'metadata' => [
                     'sale_number' => $sale->sale_number,
                     'recipe_parent_id' => $parentProductId,
+                    'recipe_batch_uuid' => $movement->recipe_batch_uuid,
+                    'recipe_line_uuid' => $movement->recipe_line_uuid,
                     'severity' => $severity,
                 ],
                 'policy_snapshot' => $this->policySnapshot($policy),
@@ -285,6 +287,11 @@ class NegativeStockExceptionService
             'business_date' => $movement->business_date?->toDateString(),
             'posted_at' => $movement->posted_at?->toISOString(),
             'actor_id' => $sale->user_id,
+            'recipe_batch_uuid' => $movement->recipe_batch_uuid,
+            'recipe_line_uuid' => $movement->recipe_line_uuid,
+            'recipe_snapshot' => $movement->metadata['recipe_deduction_snapshot'] ?? null,
+            'configuration_source' => data_get($movement->metadata, 'recipe_deduction_snapshot.configuration_source'),
+            'modifier_context' => data_get($movement->metadata, 'recipe_deduction_snapshot.modifier_context'),
         ];
     }
 

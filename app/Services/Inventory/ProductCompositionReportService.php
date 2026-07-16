@@ -66,6 +66,7 @@ class ProductCompositionReportService
             ->get(['id', 'name', 'sku']);
 
         $recipeMap = ProductRecipe::query()
+            ->active()
             ->with([
                 'ingredient' => function ($query) {
                     $query->select('id', 'name', 'sku', 'unit_of_measure', 'product_type', 'cost_price', 'status');

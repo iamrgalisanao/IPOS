@@ -21,6 +21,8 @@ use App\Models\User;
 use App\Services\BranchContext;
 use App\Services\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class InventoryDeductionPolicyTest extends TestCase
@@ -774,5 +776,323 @@ class InventoryDeductionPolicyTest extends TestCase
         $this->assertNotNull($c1);
         $this->assertNotNull($c2);
         $this->assertNotNull($c3);
+    }
+
+    public function test_recipe_deduction_records_recipe_snapshot_and_line_source_effect(): void
+    {
+        $burger = Product::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'product_category_id' => $this->category->id,
+            'is_inventory_tracked' => false,
+            'status' => 'active',
+        ]);
+
+        $sauce = Product::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'product_category_id' => $this->category->id,
+            'is_inventory_tracked' => true,
+            'unit_of_measure' => 'ml',
+            'status' => 'active',
+        ]);
+
+        $recipe = ProductRecipe::create([
+            'tenant_id' => $this->tenant->id,
+            'product_id' => $burger->id,
+            'ingredient_id' => $sauce->id,
+            'quantity' => 2.00,
+            'unit' => 'ml',
+        ]);
+
+        BranchInventory::create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branch->id,
+            'product_id' => $sauce->id,
+            'current_stock' => 10.00,
+            'status' => 'active',
+        ]);
+
+        $sale = $this->createSale([[
+            'product_id' => $burger->id,
+            'product_name' => $burger->name,
+            'quantity' => 2.00,
+            'unit_price' => 100.00,
+            'line_total' => 200.00,
+            'is_inventory_tracked' => false,
+        ]]);
+
+        app(\App\Services\InventoryService::class)->deductFromSale($sale->load('items'));
+
+        $movement = InventoryMovement::where('source_id', $sale->id)->firstOrFail();
+        $snapshot = $movement->metadata['recipe_deduction_snapshot'];
+
+        $this->assertSame($sale->items->first()->id, $movement->sale_item_id);
+        $this->assertSame($burger->id, $movement->parent_product_id);
+        $this->assertSame($recipe->recipe_line_uuid, $movement->recipe_line_uuid);
+        $this->assertNotEmpty($movement->recipe_batch_uuid);
+        $this->assertSame(
+            "sale:{$sale->id}:sale_item:{$sale->items->first()->id}:recipe_line:{$recipe->recipe_line_uuid}:ingredient:{$sauce->id}",
+            $movement->source_effect_key
+        );
+        $this->assertSame('parent_recipe', $snapshot['configuration_source']);
+        $this->assertNull($snapshot['modifier_context']);
+        $this->assertSame($recipe->recipe_line_uuid, $snapshot['recipe_line']['recipe_line_uuid']);
+        $this->assertSame('4.0000', $snapshot['deduction']['resolved_quantity']);
+        $this->assertSame('6.0000', $snapshot['deduction']['quantity_after']);
+    }
+
+    public function test_recipe_deduction_replay_does_not_duplicate_after_recipe_change(): void
+    {
+        $burger = Product::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'product_category_id' => $this->category->id,
+            'is_inventory_tracked' => false,
+            'status' => 'active',
+        ]);
+
+        $sauce = Product::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'product_category_id' => $this->category->id,
+            'is_inventory_tracked' => true,
+            'unit_of_measure' => 'ml',
+            'status' => 'active',
+        ]);
+
+        $recipe = ProductRecipe::create([
+            'tenant_id' => $this->tenant->id,
+            'product_id' => $burger->id,
+            'ingredient_id' => $sauce->id,
+            'quantity' => 2.00,
+            'unit' => 'ml',
+        ]);
+
+        BranchInventory::create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branch->id,
+            'product_id' => $sauce->id,
+            'current_stock' => 10.00,
+            'status' => 'active',
+        ]);
+
+        $sale = $this->createSale([[
+            'product_id' => $burger->id,
+            'product_name' => $burger->name,
+            'quantity' => 1.00,
+            'unit_price' => 100.00,
+            'line_total' => 100.00,
+            'is_inventory_tracked' => false,
+        ]]);
+
+        $service = app(\App\Services\InventoryService::class);
+        $service->deductFromSale($sale->load('items'));
+
+        $recipe->forceFill([
+            'is_active' => false,
+            'active_slot' => 'inactive:' . $recipe->id,
+        ])->save();
+
+        ProductRecipe::create([
+            'tenant_id' => $this->tenant->id,
+            'product_id' => $burger->id,
+            'ingredient_id' => $sauce->id,
+            'quantity' => 9.00,
+            'unit' => 'ml',
+            'recipe_line_uuid' => $recipe->recipe_line_uuid,
+            'recipe_version' => 2,
+            'supersedes_recipe_id' => $recipe->id,
+        ]);
+
+        $service->deductFromSale($sale->fresh('items'));
+
+        $this->assertSame(1, InventoryMovement::where('source_id', $sale->id)->count());
+        $this->assertEquals(8.00, (float) BranchInventory::where('product_id', $sauce->id)->firstOrFail()->current_stock);
+    }
+
+    public function test_direct_product_deduction_replay_does_not_fail_after_later_stock_changes(): void
+    {
+        $product = Product::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'product_category_id' => $this->category->id,
+            'is_inventory_tracked' => true,
+            'status' => 'active',
+        ]);
+
+        $inventory = BranchInventory::create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branch->id,
+            'product_id' => $product->id,
+            'current_stock' => 2.00,
+            'status' => 'active',
+        ]);
+
+        $sale = $this->createSale([[
+            'product_id' => $product->id,
+            'product_name' => $product->name,
+            'quantity' => 2.00,
+            'unit_price' => 100.00,
+            'line_total' => 200.00,
+            'is_inventory_tracked' => true,
+        ]]);
+
+        $service = app(\App\Services\InventoryService::class);
+        $service->deductFromSale($sale->load('items'));
+
+        $inventory->refresh()->forceFill(['current_stock' => 0])->save();
+
+        $service->deductFromSale($sale->fresh('items'));
+
+        $this->assertSame(1, InventoryMovement::where('source_id', $sale->id)->count());
+        $this->assertEquals(0.00, (float) $inventory->refresh()->current_stock);
+    }
+
+    public function test_legacy_recipe_deduction_replay_is_not_deducted_again(): void
+    {
+        $burger = Product::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'product_category_id' => $this->category->id,
+            'is_inventory_tracked' => false,
+            'status' => 'active',
+        ]);
+
+        $sauce = Product::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'product_category_id' => $this->category->id,
+            'is_inventory_tracked' => true,
+            'unit_of_measure' => 'ml',
+            'status' => 'active',
+        ]);
+
+        ProductRecipe::create([
+            'tenant_id' => $this->tenant->id,
+            'product_id' => $burger->id,
+            'ingredient_id' => $sauce->id,
+            'quantity' => 2.00,
+            'unit' => 'ml',
+        ]);
+
+        BranchInventory::create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branch->id,
+            'product_id' => $sauce->id,
+            'current_stock' => 8.00,
+            'status' => 'active',
+        ]);
+
+        $sale = $this->createSale([[
+            'product_id' => $burger->id,
+            'product_name' => $burger->name,
+            'quantity' => 1.00,
+            'unit_price' => 100.00,
+            'line_total' => 100.00,
+            'is_inventory_tracked' => false,
+        ]])->load('items');
+
+        $saleItem = $sale->items->first();
+
+        DB::table('inventory_movements')->insert([
+            'id' => (string) Str::orderedUuid(),
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branch->id,
+            'product_id' => $sauce->id,
+            'movement_type' => 'sale_deduction',
+            'quantity_change' => -2,
+            'quantity_before' => 10,
+            'quantity_after' => 8,
+            'source_type' => 'sale',
+            'source_id' => $sale->id,
+            'source_effect_key' => "sale:{$sale->id}:sale_item:{$saleItem->id}:ingredient:{$sauce->id}",
+            'created_at' => now(),
+        ]);
+
+        app(\App\Services\InventoryService::class)->deductFromSale($sale);
+
+        $this->assertSame(1, InventoryMovement::where('source_id', $sale->id)->count());
+        $this->assertEquals(8.00, (float) BranchInventory::where('product_id', $sauce->id)->firstOrFail()->current_stock);
+    }
+
+    public function test_partial_recipe_replay_is_rejected_without_new_movements(): void
+    {
+        $burger = Product::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'product_category_id' => $this->category->id,
+            'is_inventory_tracked' => false,
+            'status' => 'active',
+        ]);
+
+        $sauce = Product::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'product_category_id' => $this->category->id,
+            'is_inventory_tracked' => true,
+            'unit_of_measure' => 'ml',
+            'status' => 'active',
+        ]);
+
+        ProductRecipe::create([
+            'tenant_id' => $this->tenant->id,
+            'product_id' => $burger->id,
+            'ingredient_id' => $sauce->id,
+            'quantity' => 2.00,
+            'unit' => 'ml',
+        ]);
+
+        BranchInventory::create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branch->id,
+            'product_id' => $sauce->id,
+            'current_stock' => 10.00,
+            'status' => 'active',
+        ]);
+
+        $sale = $this->createSale([[
+            'product_id' => $burger->id,
+            'product_name' => $burger->name,
+            'quantity' => 1.00,
+            'unit_price' => 100.00,
+            'line_total' => 100.00,
+            'is_inventory_tracked' => false,
+        ]])->load('items');
+
+        $saleItem = $sale->items->first();
+        $batchUuid = $this->recipeBatchUuid($sale->tenant_id, $sale->id, $saleItem->id);
+
+        DB::table('inventory_movements')->insert([
+            'id' => (string) Str::orderedUuid(),
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branch->id,
+            'product_id' => $sauce->id,
+            'sale_item_id' => $saleItem->id,
+            'parent_product_id' => $burger->id,
+            'recipe_batch_uuid' => $batchUuid,
+            'movement_type' => 'sale_deduction',
+            'quantity_change' => -1,
+            'quantity_before' => 10,
+            'quantity_after' => 9,
+            'source_type' => 'sale',
+            'source_id' => $sale->id,
+            'source_effect_key' => 'partial-replay-fixture',
+            'metadata' => json_encode([
+                'recipe_deduction_snapshot' => [
+                    'recipe_batch_uuid' => $batchUuid,
+                    'recipe_batch_expected_line_count' => 2,
+                ],
+            ]),
+            'created_at' => now(),
+        ]);
+
+        try {
+            app(\App\Services\Inventory\RecipeDeductionService::class)->deductSaleItem($sale, $saleItem, $burger);
+            $this->fail('Expected partial replay to be rejected.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('Recipe deduction partial replay detected.', $exception->getMessage());
+        }
+
+        $this->assertSame(1, InventoryMovement::where('source_id', $sale->id)->count());
+        $this->assertEquals(10.00, (float) BranchInventory::where('product_id', $sauce->id)->firstOrFail()->current_stock);
+    }
+
+    private function recipeBatchUuid(string $tenantId, string $saleId, string $saleItemId): string
+    {
+        $hash = md5(implode('|', [$tenantId, $saleId, $saleItemId]));
+
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split($hash, 4));
     }
 }
