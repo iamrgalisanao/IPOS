@@ -41,15 +41,18 @@ class StocktakeReportController extends Controller
             ->get();
 
         // Summary Statistics
+        $varianceValue = fn ($line) => $line->posted_variance_quantity ?? $line->variance_quantity;
+        $linesWithVariance = $lines->filter(fn ($line) => $varianceValue($line) !== null);
+
         $stats = [
             'total_lines' => $lines->count(),
             'counted_lines' => $lines->whereNotNull('counted_quantity')->count(),
-            'zero_variance' => $lines->filter(fn($l) => abs($l->variance_quantity) < 0.0001)->count(),
-            'positive_variance' => $lines->filter(fn($l) => $l->variance_quantity > 0.0001)->count(),
-            'negative_variance' => $lines->filter(fn($l) => $l->variance_quantity < -0.0001)->count(),
-            'total_positive_adjustment' => $lines->where('variance_quantity', '>', 0)->sum('variance_quantity'),
-            'total_negative_adjustment' => $lines->where('variance_quantity', '<', 0)->sum('variance_quantity'),
-            'net_adjustment' => $lines->sum('variance_quantity'),
+            'zero_variance' => $linesWithVariance->filter(fn($l) => abs((float) $varianceValue($l)) < 0.0001)->count(),
+            'positive_variance' => $linesWithVariance->filter(fn($l) => (float) $varianceValue($l) > 0.0001)->count(),
+            'negative_variance' => $linesWithVariance->filter(fn($l) => (float) $varianceValue($l) < -0.0001)->count(),
+            'total_positive_adjustment' => $linesWithVariance->sum(fn ($line) => max(0, (float) $varianceValue($line))),
+            'total_negative_adjustment' => $linesWithVariance->sum(fn ($line) => min(0, (float) $varianceValue($line))),
+            'net_adjustment' => $linesWithVariance->sum(fn ($line) => (float) $varianceValue($line)),
         ];
 
         return Inertia::render('Inventory/Stocktake/Summary', [

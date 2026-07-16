@@ -11,15 +11,18 @@ use App\Services\BranchContext;
 use App\Services\TenantContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 
 use App\Services\Inventory\StocktakePostingService;
+use App\Services\Inventory\StocktakeReconciliationService;
 use App\Services\AuditLogger;
 
 class StocktakeController extends Controller
 {
     public function __construct(
         protected StocktakePostingService $postingService,
+        protected StocktakeReconciliationService $reconciliationService,
         protected AuditLogger $auditLogger
     ) {}
     public function index()
@@ -46,6 +49,15 @@ class StocktakeController extends Controller
 
     public function store(Request $request)
     {
+        $validated = $request->validate([
+            'notes' => 'nullable|string',
+            'stocktake_operation_mode' => 'nullable|string|in:' . StocktakeSession::MODE_MOVEMENT_AWARE,
+            'stocktake_scope_type' => 'nullable|string|in:' . implode(',', [
+                StocktakeSession::SCOPE_SELECTED_PRODUCTS,
+                StocktakeSession::SCOPE_FULL_BRANCH,
+            ]),
+        ]);
+
         $tenantId = app(TenantContext::class)->getTenantId();
         $branchId = app(BranchContext::class)->getBranchId();
         $userId = auth()->id();
@@ -58,7 +70,10 @@ class StocktakeController extends Controller
             'stocktake_number' => $stocktakeNumber,
             'status' => StocktakeSession::STATUS_DRAFT,
             'started_by' => $userId,
-            'notes' => $request->input('notes'),
+            'stocktake_operation_mode' => $validated['stocktake_operation_mode'] ?? StocktakeSession::MODE_MOVEMENT_AWARE,
+            'stocktake_scope_type' => $validated['stocktake_scope_type'] ?? StocktakeSession::SCOPE_SELECTED_PRODUCTS,
+            'posting_evidence_quality' => 'legacy',
+            'notes' => $validated['notes'] ?? null,
         ]);
 
         return redirect()->route('inventory.stocktakes.show', $session->id)
@@ -90,11 +105,20 @@ class StocktakeController extends Controller
                 'counted_quantity' => $line->counted_quantity,
                 'remarks' => $line->remarks,
                 'counted_at' => $line->counted_at,
+                'physically_counted_at' => $line->physically_counted_at,
+                'count_snapshot_uuid' => $line->count_snapshot_uuid,
             ];
 
             if ($canReview) {
                 $data['expected_quantity'] = $line->expected_quantity;
+                $data['expected_quantity_at_count_start'] = $line->expected_quantity_at_count_start;
+                $data['expected_quantity_at_count_time'] = $line->expected_quantity_at_count_time;
                 $data['variance_quantity'] = $line->variance_quantity;
+                $data['physical_count_variance_quantity'] = $line->physical_count_variance_quantity;
+                $data['movement_during_count_delta'] = $line->movement_during_count_delta;
+                $data['movement_after_count_delta'] = $line->movement_after_count_delta;
+                $data['posted_variance_quantity'] = $line->posted_variance_quantity;
+                $data['posting_outcome'] = $line->posting_outcome;
                 $data['reason_code'] = $line->reason_code;
             }
 
@@ -123,19 +147,32 @@ class StocktakeController extends Controller
         }
 
         DB::transaction(function () use ($stocktakeSession) {
-            $stocktakeSession->update([
-                'status' => StocktakeSession::STATUS_COUNTING,
-                'started_at' => now(),
-            ]);
+            $startedAt = now();
 
-            // Snapshot all active products in this branch
+            // Lock the branch stock rows before taking the movement watermark so the
+            // full-branch snapshot and sequence evidence are captured together.
             $inventories = BranchInventory::query()
+                ->where('tenant_id', $stocktakeSession->tenant_id)
                 ->where('branch_id', $stocktakeSession->branch_id)
                 ->where('status', 'active')
+                ->orderBy('product_id')
+                ->lockForUpdate()
                 ->get();
 
+            $watermark = $this->reconciliationService->latestBranchSequence($stocktakeSession->tenant_id, $stocktakeSession->branch_id);
+
+            $stocktakeSession->update([
+                'status' => StocktakeSession::STATUS_COUNTING,
+                'started_at' => $startedAt,
+                'count_started_at' => $startedAt,
+                'count_start_movement_sequence' => $watermark,
+                'stocktake_operation_mode' => $stocktakeSession->stocktake_operation_mode ?: StocktakeSession::MODE_MOVEMENT_AWARE,
+                'stocktake_scope_type' => StocktakeSession::SCOPE_FULL_BRANCH,
+                'session_revision' => ($stocktakeSession->session_revision ?? 1) + 1,
+            ]);
+
             foreach ($inventories as $inventory) {
-                StocktakeLine::create([
+                $line = StocktakeLine::create([
                     'tenant_id' => $stocktakeSession->tenant_id,
                     'branch_id' => $stocktakeSession->branch_id,
                     'stocktake_session_id' => $stocktakeSession->id,
@@ -144,6 +181,8 @@ class StocktakeController extends Controller
                     'counted_quantity' => null,
                     'variance_quantity' => null,
                 ]);
+
+                $this->reconciliationService->initializeLineSnapshot($line, $inventory, $watermark, $startedAt);
             }
         });
 
@@ -173,6 +212,7 @@ class StocktakeController extends Controller
             'lines.*.id' => 'required|uuid|exists:stocktake_lines,id',
             'lines.*.counted_quantity' => 'nullable|numeric|min:0',
             'lines.*.remarks' => 'nullable|string',
+            'lines.*.physically_counted_at' => 'nullable|date',
         ]);
 
         DB::transaction(function () use ($validated, $stocktakeSession) {
@@ -182,17 +222,52 @@ class StocktakeController extends Controller
                 // Security check
                 if ($line->stocktake_session_id !== $stocktakeSession->id) continue;
 
-                $updateData = [
-                    'counted_quantity' => $lineData['counted_quantity'],
+                $inventory = BranchInventory::where('tenant_id', $stocktakeSession->tenant_id)
+                    ->where('branch_id', $stocktakeSession->branch_id)
+                    ->where('product_id', $line->product_id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($inventory) {
+                    $countSnapshot = $this->reconciliationService->acceptCountSnapshot(
+                        $line,
+                        $inventory,
+                        $lineData['counted_quantity'] === null ? null : (float) $lineData['counted_quantity'],
+                        isset($lineData['physically_counted_at']) ? \Illuminate\Support\Carbon::parse($lineData['physically_counted_at']) : null
+                    );
+                } else {
+                    $countedQuantity = $lineData['counted_quantity'] === null ? null : (float) $lineData['counted_quantity'];
+                    $expectedQuantity = (float) ($line->expected_quantity_at_count_start ?? $line->expected_quantity ?? 0);
+                    $variance = $countedQuantity === null ? null : $countedQuantity - $expectedQuantity;
+
+                    $countSnapshot = [
+                        'counted_quantity' => $countedQuantity,
+                        'variance_quantity' => $variance,
+                        'raw_count_start_difference' => $variance,
+                        'count_snapshot_uuid' => $countedQuantity === null ? null : (string) Str::orderedUuid(),
+                        'count_snapshot_schema_version' => 1,
+                        'physically_counted_at' => $countedQuantity === null ? null : now(),
+                        'count_recorded_at' => $countedQuantity === null ? null : now(),
+                        'counted_inventory_revision' => null,
+                        'counted_movement_sequence' => $this->reconciliationService->latestBranchSequence($stocktakeSession->tenant_id, $stocktakeSession->branch_id),
+                        'expected_quantity_at_count_time' => $expectedQuantity,
+                        'physical_count_variance_quantity' => $variance,
+                        'movement_during_count_delta' => '0.0000',
+                        'movement_during_count_summary' => null,
+                        'movement_during_count_sequence_from' => null,
+                        'movement_during_count_sequence_to' => null,
+                        'movement_during_count_count' => 0,
+                    ];
+                }
+
+                $updateData = array_merge($countSnapshot, [
                     'remarks' => $lineData['remarks'] ?? null,
-                ];
+                ]);
 
                 if ($lineData['counted_quantity'] !== null) {
-                    $updateData['variance_quantity'] = $lineData['counted_quantity'] - $line->expected_quantity;
                     $updateData['counted_by'] = auth()->id();
                     $updateData['counted_at'] = now();
                 } else {
-                    $updateData['variance_quantity'] = null;
                     $updateData['counted_by'] = null;
                     $updateData['counted_at'] = null;
                 }
@@ -278,6 +353,26 @@ class StocktakeController extends Controller
         return back()->with('success', 'Variance reasons updated.');
     }
 
+    public function postingPreview(StocktakeSession $stocktakeSession)
+    {
+        $this->authorizeAccess($stocktakeSession);
+
+        $user = auth()->user();
+        if (!$user->hasPermission('inventory.stocktake.post')) {
+            abort(403, 'Unauthorized to preview stocktake posting.');
+        }
+
+        if (!$stocktakeSession->isInReview()) {
+            return response()->json(['error' => 'Session must be in review state to preview posting.'], 409);
+        }
+
+        try {
+            return response()->json($this->reconciliationService->preview($stocktakeSession));
+        } catch (\RuntimeException $exception) {
+            return response()->json(['error' => $exception->getMessage()], 409);
+        }
+    }
+
     public function reject(StocktakeSession $stocktakeSession)
     {
         $this->authorizeAccess($stocktakeSession);
@@ -336,7 +431,7 @@ class StocktakeController extends Controller
             ->with('success', 'Stocktake session has been cancelled.');
     }
 
-    public function post(StocktakeSession $stocktakeSession)
+    public function post(Request $request, StocktakeSession $stocktakeSession)
     {
         $this->authorizeAccess($stocktakeSession);
 
@@ -346,9 +441,26 @@ class StocktakeController extends Controller
         }
 
         try {
+            $wasAlreadyPosted = $stocktakeSession->isPosted();
+
+            if (!$request->boolean('post_using_latest_movement_state') && $request->filled('preview_latest_movement_sequence')) {
+                $latestSequence = $this->reconciliationService->latestBranchSequence(
+                    $stocktakeSession->tenant_id,
+                    $stocktakeSession->branch_id
+                );
+
+                if ((int) $request->input('preview_latest_movement_sequence') !== $latestSequence) {
+                    return back()->with('error', 'STOCKTAKE_PREVIEW_STALE');
+                }
+            }
+
             $this->postingService->post($stocktakeSession);
-            return redirect()->route('inventory.stocktakes.index')
-                ->with('success', 'Stocktake posted successfully. Inventory has been updated.');
+
+            $message = $wasAlreadyPosted
+                ? 'Stocktake was already posted. No inventory changes were made.'
+                : 'Stocktake posted successfully. Inventory has been updated.';
+
+            return redirect()->route('inventory.stocktakes.index')->with('success', $message);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return back()->withErrors($e->errors());
         } catch (\Exception $e) {
@@ -401,21 +513,13 @@ class StocktakeController extends Controller
         }
 
         DB::transaction(function () use ($stocktakeSession, $productId) {
-            // 1. Ensure BranchInventory exists (or at least get current stock)
-            $inventory = BranchInventory::firstOrCreate(
-                [
-                    'tenant_id' => $stocktakeSession->tenant_id,
-                    'branch_id' => $stocktakeSession->branch_id,
-                    'product_id' => $productId,
-                ],
-                [
-                    'current_stock' => 0,
-                    'status' => 'active',
-                ]
-            );
+            $inventory = BranchInventory::where('tenant_id', $stocktakeSession->tenant_id)
+                ->where('branch_id', $stocktakeSession->branch_id)
+                ->where('product_id', $productId)
+                ->firstOrFail();
 
             // 2. Add Stocktake Line
-            StocktakeLine::create([
+            $line = StocktakeLine::create([
                 'tenant_id' => $stocktakeSession->tenant_id,
                 'branch_id' => $stocktakeSession->branch_id,
                 'stocktake_session_id' => $stocktakeSession->id,
@@ -424,6 +528,13 @@ class StocktakeController extends Controller
                 'counted_quantity' => null,
                 'variance_quantity' => null,
             ]);
+
+            $this->reconciliationService->initializeLineSnapshot(
+                $line,
+                $inventory,
+                $this->reconciliationService->latestBranchSequence($stocktakeSession->tenant_id, $stocktakeSession->branch_id),
+                now()
+            );
         });
 
         return back()->with('success', 'Product added to session.');

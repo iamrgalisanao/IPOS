@@ -127,6 +127,12 @@ class StocktakeCountingTest extends TestCase
             'product_id' => $product->id,
             'expected_quantity' => 50.0000,
         ]);
+
+        $line = StocktakeLine::where('stocktake_session_id', $session->id)->first();
+        $this->assertEquals('50.0000', $line->expected_quantity_at_count_start);
+        $this->assertNotNull($line->count_start_movement_sequence);
+        $this->assertNotNull($line->count_start_stock_snapshot_at);
+        $this->assertEquals(StocktakeSession::SCOPE_FULL_BRANCH, $session->fresh()->stocktake_scope_type);
     }
 
     public function test_blind_count_payload_shaping()
@@ -235,6 +241,12 @@ class StocktakeCountingTest extends TestCase
         $this->assertEquals(-1.5000, $line->variance_quantity);
         $this->assertEquals($this->counter->id, $line->counted_by);
         $this->assertNotNull($line->counted_at);
+        $this->assertNotNull($line->count_snapshot_uuid);
+        $this->assertNotNull($line->count_recorded_at);
+        $this->assertNotNull($line->physically_counted_at);
+        $this->assertNotNull($line->counted_movement_sequence);
+        $this->assertEquals('10.0000', $line->expected_quantity_at_count_time);
+        $this->assertEquals('-1.5000', $line->physical_count_variance_quantity);
     }
 
     public function test_cross_tenant_access_is_blocked()

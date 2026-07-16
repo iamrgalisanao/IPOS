@@ -20,6 +20,10 @@ class StocktakeSession extends Model
     public const STATUS_POSTED = 'posted';
     public const STATUS_CANCELLED = 'cancelled';
     public const STATUS_REJECTED = 'rejected';
+    public const MODE_MOVEMENT_AWARE = 'movement_aware';
+    public const MODE_FROZEN_WINDOW = 'frozen_window';
+    public const SCOPE_FULL_BRANCH = 'full_branch';
+    public const SCOPE_SELECTED_PRODUCTS = 'selected_products';
 
     protected $fillable = [
         'tenant_id',
@@ -38,6 +42,20 @@ class StocktakeSession extends Model
         'cancelled_at',
         'rejected_at',
         'notes',
+        'count_started_at',
+        'count_start_movement_sequence',
+        'stocktake_operation_mode',
+        'stocktake_scope_type',
+        'session_revision',
+        'posting_preview_generated_at',
+        'posting_preview_latest_movement_sequence',
+        'posting_preview_inventory_revision',
+        'posted_movement_sequence_min',
+        'posted_movement_sequence_max',
+        'posting_schema_version',
+        'projection_policy_version',
+        'posting_evidence_quality',
+        'posting_summary_snapshot',
     ];
 
     protected $casts = [
@@ -48,6 +66,17 @@ class StocktakeSession extends Model
         'posted_at' => 'datetime',
         'cancelled_at' => 'datetime',
         'rejected_at' => 'datetime',
+        'count_started_at' => 'datetime',
+        'posting_preview_generated_at' => 'datetime',
+        'count_start_movement_sequence' => 'integer',
+        'session_revision' => 'integer',
+        'posting_preview_latest_movement_sequence' => 'integer',
+        'posting_preview_inventory_revision' => 'integer',
+        'posted_movement_sequence_min' => 'integer',
+        'posted_movement_sequence_max' => 'integer',
+        'posting_schema_version' => 'integer',
+        'projection_policy_version' => 'integer',
+        'posting_summary_snapshot' => 'array',
     ];
 
     /**

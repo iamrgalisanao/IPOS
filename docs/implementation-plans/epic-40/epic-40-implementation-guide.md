@@ -45,8 +45,8 @@ Reason:
 | 40.1 | Done | - | - |
 | 40.2 | Done | - | - |
 | 40.3 | Done | - | - |
-| 40.4 | Implemented - Pending Review | - | - |
-| 40.5 | Planned | - | - |
+| 40.4 | Done | - | - |
+| 40.5 | Implemented - Pending Review | - | - |
 | 40.6 | Planned | - | - |
 | 40.7 | Planned | - | - |
 | 40.8 | Planned | - | - |

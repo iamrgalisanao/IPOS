@@ -33,13 +33,21 @@ class StocktakeVarianceCsvExportService
             'Remarks',
             'Counted By',
             'Counted At',
-            'Posted At'
+            'Posted At',
+            'Expected At Count Start',
+            'Expected At Count Time',
+            'Physical Count Variance',
+            'Movement After Count',
+            'Posted Variance',
+            'Posting Outcome',
+            'Evidence Quality',
+            'Projection Policy Version',
         ]);
 
         $query = $session->lines()->with(['product', 'counter']);
 
         if (!$includeZeroVariance) {
-            $query->whereRaw('ABS(variance_quantity) > 0.0001');
+            $query->whereRaw('ABS(COALESCE(posted_variance_quantity, variance_quantity, 0)) > 0.0001');
         }
 
         $query->chunk(100, function ($lines) use ($handle, $session) {
@@ -57,7 +65,15 @@ class StocktakeVarianceCsvExportService
                     $line->remarks ?? '',
                     $line->counter->name ?? 'System',
                     $line->counted_at ? $line->counted_at->toDateTimeString() : '',
-                    $session->posted_at ? $session->posted_at->toDateTimeString() : ''
+                    $session->posted_at ? $session->posted_at->toDateTimeString() : '',
+                    $line->expected_quantity_at_count_start ?? $line->expected_quantity,
+                    $line->expected_quantity_at_count_time ?? $line->expected_quantity,
+                    $line->physical_count_variance_quantity ?? $line->variance_quantity,
+                    $line->movement_after_count_delta ?? '0.0000',
+                    $line->posted_variance_quantity ?? $line->variance_quantity,
+                    $line->posting_outcome ?? '',
+                    $line->posting_evidence_quality ?? 'legacy',
+                    $line->projection_policy_version ?? '',
                 ]);
             }
         });
