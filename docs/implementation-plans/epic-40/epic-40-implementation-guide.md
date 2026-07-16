@@ -48,8 +48,8 @@ Reason:
 | 40.4 | Done | - | - |
 | 40.5 | Done | - | - |
 | 40.6 | Done | - | - |
-| 40.7 | Approved for Implementation | - | - |
-| 40.8 | Planned | - | - |
+| 40.7 | Done | - | - |
+| 40.8 | Done | - | - |
 
 ## 4. Story Dependencies and Complexity
 
@@ -318,30 +318,43 @@ Acceptance checks:
 
 Objective:
 
-Validate the hardened inventory lifecycle against pilot branch workflows.
+Validate the hardened inventory lifecycle against controlled UAT, pilot governance, operational recovery, and post-activation hypercare.
 
 Deliverables:
 
 1. UAT checklist.
-2. Demo data validation.
-3. Recovery playbook for conversion errors, negative stock, and stocktake mismatches.
-4. Support diagnostics checklist.
-5. Replay validation for sale deductions and partial refunds.
-6. Stocktake activity-during-count validation.
-7. Adjustment approval denial validation.
-8. Movement/current-stock mismatch detection.
-9. Recipe ingredient lineage investigation.
-10. Documentation updates.
+2. Pilot entry criteria and scope record.
+3. Controlled UAT versus live pilot stage definitions.
+4. Defect severity, disposition, waiver, and retest rules.
+5. Go/no-go, signoff, hypercare, and exit criteria.
+6. Operational containment and recovery playbook.
+7. Support diagnostics checklist.
+8. Replay validation for sale deductions and partial refunds.
+9. Offline sale synchronization validation.
+10. Stocktake activity-during-count validation.
+11. Adjustment approval denial validation.
+12. Movement/current-stock mismatch detection.
+13. Recipe ingredient lineage investigation.
+14. Evidence manifest and privacy rules.
+15. Hypercare thresholds and stop triggers.
+16. Documentation updates.
 
 Out of scope:
 
 1. New runtime features.
 2. Production deployment automation.
 3. External ERP integration.
+4. Deleting, rewriting, or directly rolling back committed inventory evidence.
 
 Acceptance checks:
 
 1. Pilot walkthrough covers sale deduction, refund return, void reversal, stocktake posting, and variance review.
-2. Recovery steps are documented.
-3. User guide reflects implemented behavior.
-4. Support diagnostics identify source evidence for inventory mismatches.
+2. Pilot entry, go/no-go, and exit criteria are explicit.
+3. Severity 1 and Severity 2 defects block rollout.
+4. Exact replay validation proves no movement, stock, revision, approval, or exception drift.
+5. Offline sale synchronization remains server-authoritative and idempotent.
+6. Recovery steps route users through governed workflows and classified containment.
+7. Containment modes identify whether they are system-enforced, feature-flag-enforced, procedural, or unavailable.
+8. Hypercare monitoring includes thresholds and immediate stop conditions.
+9. User guide reflects implemented behavior.
+10. Support diagnostics identify source evidence for inventory mismatches.
