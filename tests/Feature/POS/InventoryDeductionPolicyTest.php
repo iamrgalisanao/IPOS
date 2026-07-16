@@ -277,10 +277,10 @@ class InventoryDeductionPolicyTest extends TestCase
             'unit' => 'gram'
         ]);
 
-        // Global unit conversion: 1 gram = 1.5 ml
+        // Product-specific unit conversion: 1 gram = 1.5 ml
         UnitConversion::create([
             'tenant_id' => $this->tenant->id,
-            'product_id' => null,
+            'product_id' => $sauce->id,
             'from_unit' => 'gram',
             'to_unit' => 'ml',
             'conversion_factor' => 1.5000,
@@ -311,6 +311,13 @@ class InventoryDeductionPolicyTest extends TestCase
         // Verify stock is 10.0 - 6.0 = 4.0
         $inventory = BranchInventory::where('product_id', $sauce->id)->first();
         $this->assertEquals(4.00, (float)$inventory->current_stock);
+
+        $movement = \App\Models\InventoryMovement::where('product_id', $sauce->id)->firstOrFail();
+        $this->assertSame('gram', $movement->source_unit_id);
+        $this->assertSame('ml', $movement->base_unit_id);
+        $this->assertSame('direct', $movement->conversion_snapshot['conversion_path']);
+        $this->assertSame('product_rule', $movement->conversion_snapshot['resolution_source']);
+        $this->assertNotEmpty($movement->conversion_snapshot['conversion_rule_uuid']);
     }
 
     public function test_product_specific_conversion_override_precedence(): void
@@ -415,10 +422,10 @@ class InventoryDeductionPolicyTest extends TestCase
             'unit' => 'gram'
         ]);
 
-        // Global unit conversion: 1 gram = 1.5 ml (INACTIVE)
+        // Product-specific unit conversion: 1 gram = 1.5 ml (INACTIVE)
         UnitConversion::create([
             'tenant_id' => $this->tenant->id,
-            'product_id' => null,
+            'product_id' => $sauce->id,
             'from_unit' => 'gram',
             'to_unit' => 'ml',
             'conversion_factor' => 1.5000,
@@ -433,7 +440,7 @@ class InventoryDeductionPolicyTest extends TestCase
             'status' => 'active'
         ]);
 
-        // Sell 2 Burgers (should fallback to standard metric 1g = 1ml, requiring 2 * 2 * 1.0 = 4ml of sauce)
+        // Sell 2 Burgers. Cross-dimension gram -> ml must fail closed when the only rule is inactive.
         $sale = $this->createSale([[
             'product_id' => $burger->id,
             'product_name' => $burger->name,
@@ -444,11 +451,11 @@ class InventoryDeductionPolicyTest extends TestCase
         ]]);
 
         $response = $this->postPayment($sale, 200.00);
-        $response->assertStatus(200);
+        $response->assertStatus(422);
 
-        // Verify stock is 10.0 - 4.0 = 6.0
+        // Verify stock remains unchanged.
         $inventory = BranchInventory::where('product_id', $sauce->id)->first();
-        $this->assertEquals(6.00, (float)$inventory->current_stock);
+        $this->assertEquals(10.00, (float)$inventory->current_stock);
     }
 
     public function test_unknown_conversion_throws_and_fails(): void

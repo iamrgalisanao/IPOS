@@ -72,9 +72,9 @@ class UnitConversionManagementTest extends TestCase
         $response = $this->actingAs($this->owner)
             ->withHeader('X-Tenant-ID', $this->tenant->id)
             ->post(route('inventory.unit-conversions.store'), [
-                'from_unit' => 'Bag',
-                'to_unit' => 'kg',
-                'conversion_factor' => 25.5,
+                'from_unit' => 'dozen',
+                'to_unit' => 'piece',
+                'conversion_factor' => 12,
                 'is_active' => true,
             ]);
 
@@ -84,9 +84,9 @@ class UnitConversionManagementTest extends TestCase
         $this->assertDatabaseHas('unit_conversions', [
             'tenant_id' => $this->tenant->id,
             'product_id' => null,
-            'from_unit' => 'Bag',
-            'to_unit' => 'kg',
-            'conversion_factor' => 25.5,
+            'from_unit' => 'dozen',
+            'to_unit' => 'piece',
+            'conversion_factor' => 12,
             'is_active' => true,
         ]);
     }
@@ -121,9 +121,9 @@ class UnitConversionManagementTest extends TestCase
         app(TenantContext::class)->setTenant($this->tenant);
         UnitConversion::create([
             'tenant_id' => $this->tenant->id,
-            'from_unit' => 'Bag',
-            'to_unit' => 'kg',
-            'conversion_factor' => 25.5,
+            'from_unit' => 'dozen',
+            'to_unit' => 'piece',
+            'conversion_factor' => 12,
             'is_active' => true
         ]);
         app(TenantContext::class)->clear();
@@ -131,13 +131,27 @@ class UnitConversionManagementTest extends TestCase
         $response = $this->actingAs($this->owner)
             ->withHeader('X-Tenant-ID', $this->tenant->id)
             ->post(route('inventory.unit-conversions.store'), [
-                'from_unit' => 'Bag',
-                'to_unit' => 'kg',
+                'from_unit' => 'dozen',
+                'to_unit' => 'piece',
                 'conversion_factor' => 10.0,
                 'is_active' => true,
             ]);
 
         $response->assertSessionHasErrors(['from_unit']);
+    }
+
+    public function test_tenant_wide_business_package_conversion_is_rejected(): void
+    {
+        $response = $this->actingAs($this->owner)
+            ->withHeader('X-Tenant-ID', $this->tenant->id)
+            ->post(route('inventory.unit-conversions.store'), [
+                'from_unit' => 'Bag',
+                'to_unit' => 'kg',
+                'conversion_factor' => 25.5,
+                'is_active' => true,
+            ]);
+
+        $response->assertSessionHasErrors(['product_id']);
     }
 
     public function test_product_uniqueness_is_enforced(): void
@@ -189,6 +203,47 @@ class UnitConversionManagementTest extends TestCase
         $this->assertDatabaseHas('unit_conversions', [
             'id' => $conversion->id,
             'is_active' => false
+        ]);
+    }
+
+    public function test_material_update_creates_new_version_and_deactivates_old_rule(): void
+    {
+        app(TenantContext::class)->setTenant($this->tenant);
+        $conversion = UnitConversion::create([
+            'tenant_id' => $this->tenant->id,
+            'product_id' => $this->productA->id,
+            'from_unit' => 'Bag',
+            'to_unit' => 'kg',
+            'conversion_factor' => 25.5,
+            'is_active' => true
+        ]);
+        app(TenantContext::class)->clear();
+
+        $response = $this->actingAs($this->owner)
+            ->withHeader('X-Tenant-ID', $this->tenant->id)
+            ->put(route('inventory.unit-conversions.update', $conversion->id), [
+                'product_id' => $this->productA->id,
+                'from_unit' => 'Bag',
+                'to_unit' => 'kg',
+                'conversion_factor' => 50.0,
+                'is_active' => true,
+            ]);
+
+        $response->assertRedirect();
+
+        app(TenantContext::class)->setTenant($this->tenant);
+        $this->assertDatabaseHas('unit_conversions', [
+            'id' => $conversion->id,
+            'is_active' => false,
+        ]);
+        $this->assertDatabaseHas('unit_conversions', [
+            'product_id' => $this->productA->id,
+            'from_unit' => 'Bag',
+            'to_unit' => 'kg',
+            'conversion_factor' => 50.0,
+            'version' => 2,
+            'supersedes_conversion_id' => $conversion->id,
+            'is_active' => true,
         ]);
     }
 }
