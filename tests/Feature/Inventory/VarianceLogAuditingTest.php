@@ -3,7 +3,11 @@
 namespace Tests\Feature\Inventory;
 
 use App\Models\Branch;
+use App\Models\BranchInventory;
+use App\Models\InventoryMovement;
+use App\Models\InventoryVarianceCorrectionLink;
 use App\Models\InventoryVarianceLog;
+use App\Models\InventoryVarianceStatusEvent;
 use App\Models\Product;
 use App\Models\Role;
 use App\Models\Sale;
@@ -205,5 +209,211 @@ class VarianceLogAuditingTest extends TestCase
         
         // Should not leak other tenant's logs
         $this->assertStringNotContainsString('Other tenant log', $content);
+    }
+
+    public function test_lifecycle_acknowledgement_creates_append_only_status_event(): void
+    {
+        app(TenantContext::class)->setTenant($this->tenant);
+
+        $sale = Sale::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branchA->id,
+        ]);
+
+        $log = InventoryVarianceLog::create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branchA->id,
+            'sale_id' => $sale->id,
+            'ingredient_id' => $this->product->id,
+            'required_quantity' => 10.0,
+            'available_quantity_before' => 5.0,
+            'shortage_quantity' => 5.0,
+            'resulting_quantity' => -5.0,
+            'unit' => 'pcs',
+            'policy' => 'allow_negative_with_warning',
+            'reason' => 'Sale auto-deduction shortage'
+        ]);
+
+        app(TenantContext::class)->clear();
+
+        $response = $this->actingAs($this->owner)
+            ->withHeader('X-Tenant-ID', $this->tenant->id)
+            ->post(route('inventory.variance-logs.acknowledge', $log), [
+                'request_uuid' => 'ack-001',
+                'reason_code' => 'reviewed',
+                'notes' => 'Checked by manager',
+            ]);
+
+        $response->assertRedirect();
+
+        $this->assertSame('acknowledged', $log->refresh()->current_status);
+        $this->assertDatabaseHas('inventory_variance_status_events', [
+            'inventory_variance_log_id' => $log->id,
+            'event_type' => 'acknowledged',
+            'to_status' => 'acknowledged',
+            'request_uuid' => 'ack-001',
+        ]);
+
+        $this->expectException(\RuntimeException::class);
+        InventoryVarianceStatusEvent::firstOrFail()->update(['notes' => 'tamper']);
+    }
+
+    public function test_correction_link_is_append_only_and_does_not_resolve_exception(): void
+    {
+        app(TenantContext::class)->setTenant($this->tenant);
+
+        $sale = Sale::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branchA->id,
+        ]);
+
+        $inventory = BranchInventory::create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branchA->id,
+            'product_id' => $this->product->id,
+            'current_stock' => -5.0000,
+            'status' => 'active',
+        ]);
+
+        $log = InventoryVarianceLog::create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branchA->id,
+            'sale_id' => $sale->id,
+            'ingredient_id' => $this->product->id,
+            'ingredient_product_id' => $this->product->id,
+            'required_quantity' => 10.0,
+            'available_quantity_before' => 5.0,
+            'shortage_quantity' => 5.0,
+            'resulting_quantity' => -5.0,
+            'unit' => 'pcs',
+            'policy' => 'allow_negative_with_warning',
+            'reason' => 'Sale auto-deduction shortage'
+        ]);
+
+        $movement = InventoryMovement::create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branchA->id,
+            'product_id' => $this->product->id,
+            'branch_inventory_id' => $inventory->id,
+            'movement_type' => 'stock_in',
+            'quantity_change' => 3.0000,
+            'quantity_before' => -5.0000,
+            'quantity_after' => -2.0000,
+            'source_type' => 'stock_in',
+            'source_id' => 'receipt-001',
+            'source_reference' => 'receipt-001',
+        ]);
+
+        $secondMovement = InventoryMovement::create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branchA->id,
+            'product_id' => $this->product->id,
+            'branch_inventory_id' => $inventory->id,
+            'movement_type' => 'stock_in',
+            'quantity_change' => 2.0000,
+            'quantity_before' => -2.0000,
+            'quantity_after' => 0.0000,
+            'source_type' => 'stock_in',
+            'source_id' => 'receipt-002',
+            'source_reference' => 'receipt-002',
+        ]);
+
+        app(TenantContext::class)->clear();
+
+        $response = $this->actingAs($this->owner)
+            ->withHeader('X-Tenant-ID', $this->tenant->id)
+            ->post(route('inventory.variance-logs.link-correction', $log), [
+                'inventory_movement_id' => $movement->id,
+                'relationship_type' => 'partially_addresses',
+                'linked_quantity' => 3.0000,
+                'reason_code' => 'receiving_posted',
+            ]);
+
+        $response->assertRedirect();
+
+        $this->assertSame('linked_to_correction', $log->refresh()->current_status);
+        $this->assertDatabaseHas('inventory_variance_correction_links', [
+            'inventory_variance_log_id' => $log->id,
+            'inventory_movement_id' => $movement->id,
+            'relationship_type' => 'partially_addresses',
+        ]);
+        $this->assertDatabaseHas('inventory_variance_status_events', [
+            'inventory_variance_log_id' => $log->id,
+            'event_type' => 'linked_to_correction',
+        ]);
+
+        $secondResponse = $this->actingAs($this->owner)
+            ->withHeader('X-Tenant-ID', $this->tenant->id)
+            ->post(route('inventory.variance-logs.link-correction', $log), [
+                'inventory_movement_id' => $secondMovement->id,
+                'relationship_type' => 'addresses',
+                'linked_quantity' => 2.0000,
+                'reason_code' => 'second_receiving_posted',
+            ]);
+
+        $secondResponse->assertRedirect();
+        $this->assertSame('linked_to_correction', $log->refresh()->current_status);
+        $this->assertDatabaseCount('inventory_variance_correction_links', 2);
+        $this->assertDatabaseCount('inventory_variance_status_events', 2);
+
+        $this->expectException(\RuntimeException::class);
+        InventoryVarianceCorrectionLink::firstOrFail()->delete();
+    }
+
+    public function test_report_filters_by_status_category_and_policy(): void
+    {
+        app(TenantContext::class)->setTenant($this->tenant);
+
+        $sale = Sale::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branchA->id,
+        ]);
+
+        InventoryVarianceLog::create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branchA->id,
+            'sale_id' => $sale->id,
+            'ingredient_id' => $this->product->id,
+            'required_quantity' => 10.0,
+            'available_quantity_before' => 5.0,
+            'shortage_quantity' => 5.0,
+            'resulting_quantity' => -5.0,
+            'unit' => 'pcs',
+            'policy' => 'allow_negative_with_warning',
+            'current_status' => 'acknowledged',
+            'reason' => 'Included'
+        ]);
+
+        InventoryVarianceLog::create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branchA->id,
+            'sale_id' => $sale->id,
+            'ingredient_id' => $this->product->id,
+            'required_quantity' => 2.0,
+            'available_quantity_before' => 1.0,
+            'shortage_quantity' => 1.0,
+            'resulting_quantity' => -1.0,
+            'unit' => 'pcs',
+            'policy' => 'allow_negative_with_warning',
+            'current_status' => 'open',
+            'reason' => 'Excluded'
+        ]);
+
+        app(TenantContext::class)->clear();
+
+        $response = $this->actingAs($this->owner)
+            ->withHeader('X-Tenant-ID', $this->tenant->id)
+            ->get(route('inventory.reports.variance-logs.index', [
+                'status' => 'acknowledged',
+                'category' => 'negative_stock',
+                'policy' => 'allow_negative_with_warning',
+            ]));
+
+        $response->assertOk();
+        $response->assertInertia(fn (Assert $page) => $page
+            ->component('Inventory/VarianceLogs/Index')
+            ->has('logs.data', 1)
+            ->where('logs.data.0.reason', 'Included')
+        );
     }
 }

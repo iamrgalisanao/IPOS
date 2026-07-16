@@ -940,6 +940,21 @@ Route::middleware(['auth', 'tenant'])->group(function () {
         Route::get('/inventory/reports/product-composition/export', [\App\Http\Controllers\Inventory\ProductCompositionReportController::class, 'export'])
             ->name('inventory.reports.product-composition.export');
     });
+
+    Route::middleware(['permission:audit_inventory'])->group(function () {
+        Route::post('/inventory/variance-logs/{varianceLog}/acknowledge', [\App\Http\Controllers\Inventory\VarianceLogController::class, 'acknowledge'])
+            ->name('inventory.variance-logs.acknowledge');
+        Route::post('/inventory/variance-logs/{varianceLog}/plan-action', [\App\Http\Controllers\Inventory\VarianceLogController::class, 'planAction'])
+            ->name('inventory.variance-logs.plan-action');
+        Route::post('/inventory/variance-logs/{varianceLog}/link-correction', [\App\Http\Controllers\Inventory\VarianceLogController::class, 'linkCorrection'])
+            ->name('inventory.variance-logs.link-correction');
+        Route::post('/inventory/variance-logs/{varianceLog}/resolve', [\App\Http\Controllers\Inventory\VarianceLogController::class, 'resolve'])
+            ->name('inventory.variance-logs.resolve');
+        Route::post('/inventory/variance-logs/{varianceLog}/dismiss', [\App\Http\Controllers\Inventory\VarianceLogController::class, 'dismiss'])
+            ->name('inventory.variance-logs.dismiss');
+        Route::post('/inventory/variance-logs/{varianceLog}/void', [\App\Http\Controllers\Inventory\VarianceLogController::class, 'void'])
+            ->name('inventory.variance-logs.void');
+    });
 });
 
 Route::post('/pos/timecard/toggle', [\App\Http\Controllers\POS\TimecardController::class, 'toggle'])

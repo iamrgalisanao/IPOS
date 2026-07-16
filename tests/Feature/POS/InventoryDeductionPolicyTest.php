@@ -5,6 +5,7 @@ namespace Tests\Feature\POS;
 use App\Models\Branch;
 use App\Models\BranchInventory;
 use App\Models\InventoryMovement;
+use App\Models\InventoryVarianceStatusEvent;
 use App\Models\InventoryVarianceLog;
 use App\Models\UnitConversion;
 use App\Models\ProductRecipe;
@@ -161,10 +162,14 @@ class InventoryDeductionPolicyTest extends TestCase
             'sale_id' => $sale->id,
             'product_id' => null, // direct sale
             'ingredient_id' => $product->id,
+            'variance_category' => 'negative_stock',
+            'current_status' => 'open',
             'required_quantity' => 3.00,
             'available_quantity_before' => 1.00,
             'shortage_quantity' => 2.00,
             'resulting_quantity' => -2.00,
+            'incremental_shortage_quantity' => 2.00,
+            'resulting_negative_quantity' => 2.00,
             'policy' => 'allow_negative_with_warning',
             'reason' => 'POS Checkout stock shortage deduction.',
         ]);
@@ -176,6 +181,96 @@ class InventoryDeductionPolicyTest extends TestCase
             'quantity_change' => -3.00,
             'quantity_before' => 1.00,
             'quantity_after' => -2.00
+        ]);
+
+        $variance = InventoryVarianceLog::where('sale_id', $sale->id)->firstOrFail();
+        $movement = InventoryMovement::where('source_id', $sale->id)->where('product_id', $product->id)->firstOrFail();
+        $this->assertSame($movement->id, $variance->movement_id);
+        $this->assertSame((string) $movement->movement_sequence, (string) $variance->movement_sequence);
+        $this->assertDatabaseHas('inventory_variance_status_events', [
+            'inventory_variance_log_id' => $variance->id,
+            'event_type' => 'created',
+            'to_status' => 'open',
+        ]);
+    }
+
+    public function test_low_stock_above_zero_does_not_create_negative_stock_exception(): void
+    {
+        $this->branch->update(['inventory_deduction_policy' => 'allow_negative_with_warning']);
+
+        $product = Product::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'product_category_id' => $this->category->id,
+            'is_inventory_tracked' => true,
+            'status' => 'active'
+        ]);
+
+        BranchInventory::create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branch->id,
+            'product_id' => $product->id,
+            'current_stock' => 5.00,
+            'reorder_level' => 10.00,
+            'status' => 'active'
+        ]);
+
+        $sale = $this->createSale([[
+            'product_id' => $product->id,
+            'product_name' => $product->name,
+            'quantity' => 4.00,
+            'unit_price' => 50.00,
+            'line_total' => 200.00,
+            'is_inventory_tracked' => true
+        ]]);
+
+        $this->postPayment($sale, 200.00)->assertStatus(200);
+
+        $inventory = BranchInventory::where('product_id', $product->id)->firstOrFail();
+        $this->assertEquals(1.00, (float) $inventory->current_stock);
+        $this->assertTrue($inventory->isLowStock());
+        $this->assertDatabaseMissing('inventory_variance_logs', [
+            'sale_id' => $sale->id,
+            'variance_category' => 'negative_stock',
+        ]);
+    }
+
+    public function test_existing_negative_stock_records_incremental_shortage_and_total_exposure(): void
+    {
+        $this->branch->update(['inventory_deduction_policy' => 'allow_negative_with_warning']);
+
+        $product = Product::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'product_category_id' => $this->category->id,
+            'is_inventory_tracked' => true,
+            'status' => 'active'
+        ]);
+
+        BranchInventory::create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branch->id,
+            'product_id' => $product->id,
+            'current_stock' => -2.00,
+            'status' => 'active'
+        ]);
+
+        $sale = $this->createSale([[
+            'product_id' => $product->id,
+            'product_name' => $product->name,
+            'quantity' => 5.00,
+            'unit_price' => 50.00,
+            'line_total' => 250.00,
+            'is_inventory_tracked' => true
+        ]]);
+
+        $this->postPayment($sale, 250.00)->assertStatus(200);
+
+        $this->assertDatabaseHas('inventory_variance_logs', [
+            'sale_id' => $sale->id,
+            'quantity_before' => -2.00,
+            'quantity_required' => 5.00,
+            'quantity_after' => -7.00,
+            'incremental_shortage_quantity' => 5.00,
+            'resulting_negative_quantity' => 7.00,
         ]);
     }
 

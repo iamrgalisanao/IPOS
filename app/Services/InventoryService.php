@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\BranchInventory;
 use App\Models\InventoryMovement;
 use App\Services\Inventory\InventoryMovementRecorder;
+use App\Services\Inventory\NegativeStockExceptionService;
 use App\Services\Inventory\UnitConversionResolver;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -21,19 +22,22 @@ class InventoryService
     protected BranchContext $branchContext;
     protected UnitConversionResolver $unitConversionResolver;
     protected InventoryMovementRecorder $movementRecorder;
+    protected NegativeStockExceptionService $negativeStockExceptionService;
 
     public function __construct(
         AuditLogger $auditLogger,
         TenantContext $tenantContext,
         BranchContext $branchContext,
         UnitConversionResolver $unitConversionResolver,
-        ?InventoryMovementRecorder $movementRecorder = null
+        ?InventoryMovementRecorder $movementRecorder = null,
+        ?NegativeStockExceptionService $negativeStockExceptionService = null
     ) {
         $this->auditLogger = $auditLogger;
         $this->tenantContext = $tenantContext;
         $this->branchContext = $branchContext;
         $this->unitConversionResolver = $unitConversionResolver;
         $this->movementRecorder = $movementRecorder ?? App::make(InventoryMovementRecorder::class);
+        $this->negativeStockExceptionService = $negativeStockExceptionService ?? App::make(NegativeStockExceptionService::class);
     }
 
     /**
@@ -353,46 +357,8 @@ class InventoryService
             $policy = 'strict_block';
         }
 
-        if ($quantityAfter < 0) {
-            if ($policy === 'allow_negative_with_warning') {
-                $shortage = abs($quantityAfter);
-                
-                \App\Models\InventoryVarianceLog::create([
-                    'tenant_id' => $sale->tenant_id,
-                    'branch_id' => $sale->branch_id,
-                    'sale_id' => $sale->id,
-                    'product_id' => $parentProductId,
-                    'ingredient_id' => $inventory->product_id,
-                    'required_quantity' => $quantityChange,
-                    'available_quantity_before' => $quantityBefore,
-                    'shortage_quantity' => $shortage,
-                    'resulting_quantity' => $quantityAfter,
-                    'unit' => $inventory->product->unit_of_measure ?? 'piece',
-                    'policy' => $policy,
-                    'reason' => 'POS Checkout stock shortage deduction.',
-                    'metadata' => [
-                        'sale_number' => $sale->sale_number,
-                        'recipe_parent_id' => $parentProductId,
-                    ],
-                    'created_by' => $sale->user_id,
-                ]);
-
-                if ($this->auditLogger) {
-                    $this->auditLogger->log(
-                        action: 'inventory_negative_deduction_warning',
-                        auditable: $sale,
-                        metadata: [
-                            'sale_id' => $sale->id,
-                            'product_id' => $inventory->product_id,
-                            'shortage_quantity' => $shortage,
-                            'available_quantity_before' => $quantityBefore,
-                            'required_quantity' => $quantityChange,
-                        ]
-                    );
-                }
-            } else {
+        if ($quantityAfter < 0 && $policy !== 'allow_negative_with_warning') {
                 throw new \RuntimeException("Insufficient stock for product {$inventory->product->name}. Available: {$quantityBefore}, Required: {$quantityChange}.");
-            }
         }
 
         $inventory->update(['current_stock' => $quantityAfter]);
@@ -402,7 +368,7 @@ class InventoryService
             $remarks .= " ({$extraRemarks})";
         }
 
-        $this->recordMovement($inventory, [
+        $movement = $this->recordMovement($inventory, [
             'movement_type' => 'sale_deduction',
             'quantity_change' => -$quantityChange,
             'quantity_before' => $quantityBefore,
@@ -420,6 +386,21 @@ class InventoryService
             'user_id' => $sale->user_id,
             'remarks' => $remarks,
         ]);
+
+        if ($quantityAfter < 0) {
+            $this->negativeStockExceptionService->createForSaleDeduction(
+                sale: $sale,
+                inventory: $inventory,
+                movement: $movement,
+                quantityRequired: $quantityChange,
+                quantityBefore: $quantityBefore,
+                quantityAfter: $quantityAfter,
+                policy: $policy,
+                parentProductId: $parentProductId,
+                saleItemId: $saleItemId,
+                conversionResolution: $conversionResolution
+            );
+        }
     }
 
     /**
