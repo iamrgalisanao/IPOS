@@ -24,7 +24,7 @@ This epic does not recreate the existing inventory module. IPOS already has inve
 
 1. Story 40.1 Inventory Evidence and Movement Ledger Hardening
 2. Story 40.2 Unit Conversion Governance
-3. Story 40.3 Negative Stock Variance Lifecycle
+3. Story 40.3 Negative Stock Exception and Resolution Lifecycle
 4. Story 40.4 Recipe Deduction Snapshot Integrity
 5. Story 40.5 Stocktake Reconciliation Integration
 6. Story 40.6 Inventory Adjustment Authorization

@@ -4,19 +4,26 @@ namespace App\Http\Controllers\Inventory;
 
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
+use App\Models\InventoryMovement;
 use App\Models\InventoryVarianceLog;
+use App\Services\Inventory\InventoryVarianceLifecycleService;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class VarianceLogController extends Controller
 {
+    public function __construct(protected InventoryVarianceLifecycleService $lifecycleService) {}
+
     /**
      * Display a listing of inventory variance logs with filtering.
      */
     public function index(Request $request)
     {
-        $query = InventoryVarianceLog::with(['branch', 'sale', 'product', 'ingredient']);
+        $query = InventoryVarianceLog::with(['branch', 'sale', 'product', 'ingredient', 'movement', 'correctionLinks'])
+            ->withCount('correctionLinks');
 
         $query = $this->applyFilters($query, $request);
 
@@ -27,7 +34,7 @@ class VarianceLogController extends Controller
         return Inertia::render('Inventory/VarianceLogs/Index', [
             'logs' => $logs,
             'branches' => $branches,
-            'filters' => $request->only(['start_date', 'end_date', 'branch_id', 'search']),
+            'filters' => $request->only(['start_date', 'end_date', 'branch_id', 'status', 'category', 'policy', 'search']),
         ]);
     }
 
@@ -36,7 +43,7 @@ class VarianceLogController extends Controller
      */
     public function export(Request $request): StreamedResponse
     {
-        $query = InventoryVarianceLog::with(['branch', 'sale', 'product', 'ingredient']);
+        $query = InventoryVarianceLog::with(['branch', 'sale', 'product', 'ingredient', 'movement', 'correctionLinks']);
         $query = $this->applyFilters($query, $request);
         
         // Fetch ordered by latest
@@ -69,6 +76,13 @@ class VarianceLogController extends Controller
                 'Unit',
                 'Policy',
                 'Reason'
+                ,
+                'Category',
+                'Status',
+                'Movement Sequence',
+                'New Shortage',
+                'Total Negative Exposure',
+                'Correction Links'
             ]);
 
             foreach ($logs as $log) {
@@ -87,6 +101,12 @@ class VarianceLogController extends Controller
                     $this->escapeCsvValue($log->unit),
                     $this->escapeCsvValue($log->policy),
                     $this->escapeCsvValue($log->reason),
+                    $this->escapeCsvValue($log->variance_category),
+                    $this->escapeCsvValue($log->current_status),
+                    $this->escapeCsvValue($log->movement_sequence),
+                    $this->escapeCsvValue($log->incremental_shortage_quantity),
+                    $this->escapeCsvValue($log->resulting_negative_quantity),
+                    $this->escapeCsvValue($log->correctionLinks->count()),
                 ]);
             }
 
@@ -113,12 +133,24 @@ class VarianceLogController extends Controller
             $query->where('branch_id', $request->branch_id);
         }
 
+        if ($request->filled('status')) {
+            $query->where('current_status', $request->status);
+        }
+
+        if ($request->filled('category')) {
+            $query->where('variance_category', $request->category);
+        }
+
+        if ($request->filled('policy')) {
+            $query->where('policy', $request->policy);
+        }
+
         if ($request->filled('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->whereHas('ingredient', function ($iq) use ($search) {
                     $iq->where('name', 'like', "%{$search}%")
-                       ->where('sku', 'like', "%{$search}%");
+                       ->orWhere('sku', 'like', "%{$search}%");
                 })
                 ->orWhereHas('product', function ($pq) use ($search) {
                     $pq->where('name', 'like', "%{$search}%")
@@ -126,11 +158,93 @@ class VarianceLogController extends Controller
                 })
                 ->orWhereHas('sale', function ($sq) use ($search) {
                     $sq->where('sale_number', 'like', "%{$search}%");
+                })
+                ->orWhereHas('movement', function ($mq) use ($search) {
+                    $mq->where('source_reference', 'like', "%{$search}%")
+                        ->orWhere('movement_sequence', $search);
                 });
             });
         }
 
         return $query;
+    }
+
+    public function acknowledge(Request $request, InventoryVarianceLog $varianceLog): RedirectResponse
+    {
+        return $this->transition($request, $varianceLog, 'acknowledge');
+    }
+
+    public function planAction(Request $request, InventoryVarianceLog $varianceLog): RedirectResponse
+    {
+        return $this->transition($request, $varianceLog, 'planAction');
+    }
+
+    public function resolve(Request $request, InventoryVarianceLog $varianceLog): RedirectResponse
+    {
+        return $this->transition($request, $varianceLog, 'resolve');
+    }
+
+    public function dismiss(Request $request, InventoryVarianceLog $varianceLog): RedirectResponse
+    {
+        return $this->transition($request, $varianceLog, 'dismiss');
+    }
+
+    public function linkCorrection(Request $request, InventoryVarianceLog $varianceLog): RedirectResponse
+    {
+        $validated = $request->validate([
+            'inventory_movement_id' => ['required', 'uuid', 'exists:inventory_movements,id'],
+            'relationship_type' => ['sometimes', 'string', 'in:addresses,partially_addresses,reverses_source,informational'],
+            'correction_type' => ['sometimes', 'string', 'max:80'],
+            'linked_quantity' => ['sometimes', 'nullable', 'numeric', 'gt:0'],
+            'reason_code' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'notes' => ['sometimes', 'nullable', 'string', 'max:1000'],
+            'request_uuid' => ['sometimes', 'nullable', 'string', 'max:120'],
+        ]);
+
+        try {
+            $movement = InventoryMovement::findOrFail($validated['inventory_movement_id']);
+            $this->lifecycleService->linkCorrection($varianceLog, $movement, $request->user(), $validated);
+        } catch (RuntimeException $exception) {
+            return back()->withErrors(['variance' => $exception->getMessage()]);
+        }
+
+        return back()->with('success', 'Correction evidence linked.');
+    }
+
+    public function void(Request $request, InventoryVarianceLog $varianceLog): RedirectResponse
+    {
+        $validated = $request->validate([
+            'inventory_movement_id' => ['required', 'uuid', 'exists:inventory_movements,id'],
+            'reason_code' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'notes' => ['sometimes', 'nullable', 'string', 'max:1000'],
+            'request_uuid' => ['sometimes', 'nullable', 'string', 'max:120'],
+        ]);
+
+        try {
+            $movement = InventoryMovement::findOrFail($validated['inventory_movement_id']);
+            $this->lifecycleService->void($varianceLog, $request->user(), $movement, $validated);
+        } catch (RuntimeException $exception) {
+            return back()->withErrors(['variance' => $exception->getMessage()]);
+        }
+
+        return back()->with('success', 'Negative stock exception voided.');
+    }
+
+    private function transition(Request $request, InventoryVarianceLog $varianceLog, string $method): RedirectResponse
+    {
+        $validated = $request->validate([
+            'reason_code' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'notes' => ['sometimes', 'nullable', 'string', 'max:1000'],
+            'request_uuid' => ['sometimes', 'nullable', 'string', 'max:120'],
+        ]);
+
+        try {
+            $this->lifecycleService->{$method}($varianceLog, $request->user(), $validated);
+        } catch (RuntimeException $exception) {
+            return back()->withErrors(['variance' => $exception->getMessage()]);
+        }
+
+        return back()->with('success', 'Negative stock exception updated.');
     }
 
     /**

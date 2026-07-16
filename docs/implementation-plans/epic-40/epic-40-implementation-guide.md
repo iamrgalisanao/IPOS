@@ -31,7 +31,7 @@ Reason:
 
 1. Movement evidence, branch sequencing, and before/delta/after snapshots must be hardened before deeper reconciliation work.
 2. Unit conversion governance and unit roles must be stable before recipe deduction is tightened.
-3. Negative stock variance lifecycle depends on movement, conversion, and reconciliation evidence.
+3. Negative stock exception and resolution lifecycle depends on movement, conversion, and reconciliation evidence.
 4. Recipe deduction snapshots depend on conversion versions and variance rules.
 5. Stocktake reconciliation should consume stable movement sequencing and variance behavior.
 6. Manual adjustment authorization should come after stocktake and opening-balance boundaries are clear.
@@ -43,8 +43,8 @@ Reason:
 | Story | Status | Owner | Sprint |
 | --- | --- | --- | --- |
 | 40.1 | Done | - | - |
-| 40.2 | Approved for Implementation | - | - |
-| 40.3 | Planned | - | - |
+| 40.2 | Done | - | - |
+| 40.3 | Implemented - Pending Review | - | - |
 | 40.4 | Planned | - | - |
 | 40.5 | Planned | - | - |
 | 40.6 | Planned | - | - |
@@ -151,11 +151,11 @@ Acceptance checks:
 5. Historical movement snapshots keep the original conversion version.
 6. Ratio changes create new conversion versions instead of rewriting used rules.
 
-## 8. Story 40.3 Negative Stock Variance Lifecycle
+## 8. Story 40.3 Negative Stock Exception and Resolution Lifecycle
 
 Objective:
 
-Formalize negative stock variance evidence and follow-up lifecycle.
+Formalize negative-stock exception evidence and follow-up lifecycle.
 
 Deliverables:
 

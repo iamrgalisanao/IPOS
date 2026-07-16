@@ -16,6 +16,9 @@ export default function Index({ auth, logs, branches, filters }) {
     const [branchId, setBranchId] = useState(filters.branch_id || '');
     const [startDate, setStartDate] = useState(filters.start_date || '');
     const [endDate, setEndDate] = useState(filters.end_date || '');
+    const [status, setStatus] = useState(filters.status || '');
+    const [category, setCategory] = useState(filters.category || '');
+    const [policy, setPolicy] = useState(filters.policy || '');
 
     const handleFilterChange = (key, value) => {
         const queryParams = {
@@ -23,6 +26,9 @@ export default function Index({ auth, logs, branches, filters }) {
             branch_id: branchId,
             start_date: startDate,
             end_date: endDate,
+            status,
+            category,
+            policy,
             [key]: value
         };
         
@@ -37,6 +43,9 @@ export default function Index({ auth, logs, branches, filters }) {
         setBranchId('');
         setStartDate('');
         setEndDate('');
+        setStatus('');
+        setCategory('');
+        setPolicy('');
         router.get(route('inventory.reports.variance-logs.index'));
     };
 
@@ -45,7 +54,10 @@ export default function Index({ auth, logs, branches, filters }) {
             search: searchQuery,
             branch_id: branchId,
             start_date: startDate,
-            end_date: endDate
+            end_date: endDate,
+            status,
+            category,
+            policy
         }).toString();
         
         window.location.href = `${route('inventory.reports.variance-logs.export')}?${queryParams}`;
@@ -61,8 +73,8 @@ export default function Index({ auth, logs, branches, filters }) {
             header={
                 <div className="flex items-center justify-between">
                     <div>
-                        <h2 className="font-extrabold text-2xl text-slate-800 leading-tight tracking-tight">Inventory Variance Logs</h2>
-                        <p className="text-sm text-slate-500 font-medium mt-1">Audit log records of POS recipe inventory shortfalls under Soft-Negative policies.</p>
+                        <h2 className="font-extrabold text-2xl text-slate-800 leading-tight tracking-tight">Negative Stock Exceptions</h2>
+                        <p className="text-sm text-slate-500 font-medium mt-1">Operational queue for policy-permitted stock exceptions and resolution evidence.</p>
                     </div>
                     <div className="flex items-center gap-2 print:hidden">
                         <button
@@ -83,12 +95,12 @@ export default function Index({ auth, logs, branches, filters }) {
                 </div>
             }
         >
-            <Head title="Inventory Variance Logs" />
+            <Head title="Negative Stock Exceptions" />
 
             <div className="py-8 print:py-0">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="hidden print:block mb-4 border-b border-slate-300 pb-3">
-                        <h1 className="text-lg font-black text-slate-900">Inventory Variance Logs</h1>
+                        <h1 className="text-lg font-black text-slate-900">Negative Stock Exceptions</h1>
                         <p className="text-xs text-slate-500 mt-1">
                             Generated {new Date().toLocaleString()} • This report reflects current filter scope.
                         </p>
@@ -162,6 +174,54 @@ export default function Index({ auth, logs, branches, filters }) {
                             </div>
                         </div>
 
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <select
+                                className="block w-full py-2.5 bg-slate-50 border-none rounded-2xl text-sm font-medium text-slate-600 focus:ring-2 focus:ring-indigo-500/20 focus:bg-white transition-all"
+                                value={status}
+                                onChange={(e) => {
+                                    setStatus(e.target.value);
+                                    handleFilterChange('status', e.target.value);
+                                }}
+                            >
+                                <option value="">All Statuses</option>
+                                <option value="open">Open</option>
+                                <option value="acknowledged">Acknowledged</option>
+                                <option value="action_planned">Action Planned</option>
+                                <option value="linked_to_correction">Linked</option>
+                                <option value="resolved">Resolved</option>
+                                <option value="voided">Voided</option>
+                                <option value="dismissed">Dismissed</option>
+                            </select>
+
+                            <select
+                                className="block w-full py-2.5 bg-slate-50 border-none rounded-2xl text-sm font-medium text-slate-600 focus:ring-2 focus:ring-indigo-500/20 focus:bg-white transition-all"
+                                value={category}
+                                onChange={(e) => {
+                                    setCategory(e.target.value);
+                                    handleFilterChange('category', e.target.value);
+                                }}
+                            >
+                                <option value="">All Categories</option>
+                                <option value="negative_stock">Negative Stock</option>
+                                <option value="physical_count">Physical Count</option>
+                                <option value="system_reconciliation">System Reconciliation</option>
+                                <option value="configuration">Configuration</option>
+                            </select>
+
+                            <select
+                                className="block w-full py-2.5 bg-slate-50 border-none rounded-2xl text-sm font-medium text-slate-600 focus:ring-2 focus:ring-indigo-500/20 focus:bg-white transition-all"
+                                value={policy}
+                                onChange={(e) => {
+                                    setPolicy(e.target.value);
+                                    handleFilterChange('policy', e.target.value);
+                                }}
+                            >
+                                <option value="">All Policies</option>
+                                <option value="allow_negative_with_warning">Soft Negative</option>
+                                <option value="strict_block">Strict Block</option>
+                            </select>
+                        </div>
+
                         <div className="flex justify-end gap-2">
                             <button
                                 onClick={handleReset}
@@ -181,13 +241,17 @@ export default function Index({ auth, logs, branches, filters }) {
                                     <tr className="bg-slate-50/50">
                                         <th className="px-6 py-4 font-black uppercase tracking-widest text-slate-400">Date/Time</th>
                                         <th className="px-6 py-4 font-black uppercase tracking-widest text-slate-400">Branch</th>
+                                        <th className="px-6 py-4 font-black uppercase tracking-widest text-slate-400">Status</th>
                                         <th className="px-6 py-4 font-black uppercase tracking-widest text-slate-400">Sale #</th>
                                         <th className="px-6 py-4 font-black uppercase tracking-widest text-slate-400">Parent Product</th>
                                         <th className="px-6 py-4 font-black uppercase tracking-widest text-slate-400">Ingredient / Product Short</th>
                                         <th className="px-6 py-4 font-black uppercase tracking-widest text-slate-400 text-right">Required</th>
                                         <th className="px-6 py-4 font-black uppercase tracking-widest text-slate-400 text-right">Available Before</th>
                                         <th className="px-6 py-4 font-black uppercase tracking-widest text-slate-400 text-right">Shortage</th>
+                                        <th className="px-6 py-4 font-black uppercase tracking-widest text-slate-400 text-right">Exposure</th>
                                         <th className="px-6 py-4 font-black uppercase tracking-widest text-slate-400 text-right">Resulting</th>
+                                        <th className="px-6 py-4 font-black uppercase tracking-widest text-slate-400 text-center">Movement</th>
+                                        <th className="px-6 py-4 font-black uppercase tracking-widest text-slate-400 text-center">Links</th>
                                         <th className="px-6 py-4 font-black uppercase tracking-widest text-slate-400 text-center font-bold">Policy</th>
                                         <th className="px-6 py-4 font-black uppercase tracking-widest text-slate-400">Reason</th>
                                     </tr>
@@ -204,6 +268,11 @@ export default function Index({ auth, logs, branches, filters }) {
                                                         <GitBranch size={14} className="text-slate-400" />
                                                         <span className="font-bold text-slate-700">{log.branch?.name}</span>
                                                     </div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
+                                                        {(log.current_status || 'open').replaceAll('_', ' ')}
+                                                    </span>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-slate-600 font-bold">
                                                     {log.sale?.sale_number}
@@ -229,10 +298,19 @@ export default function Index({ auth, logs, branches, filters }) {
                                                     {parseFloat(log.available_quantity_before).toFixed(2)} {log.unit}
                                                 </td>
                                                 <td className="px-6 py-4 text-right font-bold text-rose-600">
-                                                    {parseFloat(log.shortage_quantity).toFixed(2)} {log.unit}
+                                                    {parseFloat(log.incremental_shortage_quantity || log.shortage_quantity).toFixed(2)} {log.unit}
+                                                </td>
+                                                <td className="px-6 py-4 text-right font-bold text-rose-700">
+                                                    {parseFloat(log.resulting_negative_quantity || Math.abs(Math.min(log.resulting_quantity, 0))).toFixed(2)} {log.unit}
                                                 </td>
                                                 <td className="px-6 py-4 text-right font-bold text-slate-800">
                                                     {parseFloat(log.resulting_quantity).toFixed(2)} {log.unit}
+                                                </td>
+                                                <td className="px-6 py-4 text-center font-bold text-slate-600">
+                                                    {log.movement_sequence || log.movement?.movement_sequence || '-'}
+                                                </td>
+                                                <td className="px-6 py-4 text-center font-bold text-slate-600">
+                                                    {log.correction_links_count ?? log.correction_links?.length ?? 0}
                                                 </td>
                                                 <td className="px-6 py-4 text-center">
                                                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
@@ -250,7 +328,7 @@ export default function Index({ auth, logs, branches, filters }) {
                                         ))
                                     ) : (
                                         <tr>
-                                            <td colSpan="11" className="px-6 py-20 text-center">
+                                            <td colSpan="15" className="px-6 py-20 text-center">
                                                 <div className="flex flex-col items-center justify-center">
                                                     <div className="p-4 bg-slate-50 rounded-full mb-3 text-slate-300">
                                                         <AlertTriangle size={36} />
