@@ -85,7 +85,7 @@ Implementation may proceed only if:
    visibility, and movement summary visibility.
 4. Pilot checklist addendum includes preparation, run, and post-demo validation
    checkpoints.
-5. Escalation and rollback notes include owner, trigger condition, and response
+5. Containment and recovery notes include owner, trigger condition, and response
    path.
 6. Governance updates preserve non-goal boundaries and no-claim language.
 
@@ -122,8 +122,8 @@ Implementation and governance evidence:
    `docs/user-enablement/inventory-pilot-branch-manager-demo-script.md`
 5. Pilot checklist addendum:
    `docs/user-enablement/inventory-pilot-checklist-addendum.md`
-6. Escalation and rollback notes:
-   `docs/user-enablement/inventory-pilot-escalation-and-rollback-notes.md`
+6. Containment and recovery notes:
+   `docs/user-enablement/inventory-pilot-containment-and-recovery-notes.md`
 
 ## 12. Decision
 

@@ -15,7 +15,13 @@ Delivered artifacts:
 2. `docs/user-enablement/inventory-pilot-screenshot-capture-pack.md`
 3. `docs/user-enablement/inventory-pilot-branch-manager-demo-script.md`
 4. `docs/user-enablement/inventory-pilot-checklist-addendum.md`
-5. `docs/user-enablement/inventory-pilot-escalation-and-rollback-notes.md`
+5. `docs/user-enablement/inventory-pilot-containment-and-recovery-notes.md`
+
+Superseded artifact:
+
+1. `docs/user-enablement/inventory-pilot-escalation-and-rollback-notes.md`
+   was migrated to containment and governed recovery terminology during Epic 40
+   Story 40.8.
 
 ## Validation Evidence
 
