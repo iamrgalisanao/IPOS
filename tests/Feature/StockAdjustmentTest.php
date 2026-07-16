@@ -35,13 +35,16 @@ class StockAdjustmentTest extends TestCase
         app(TenantContext::class)->setTenant($tenant);
 
         $branch = Branch::factory()->create(['tenant_id' => $tenant->id, 'status' => 'active']);
-        $cat = ProductCategory::create(['name' => 'C1', 'code' => 'CAT1']);
-        $product = Product::create(['product_category_id' => $cat->id, 'name' => 'P1', 'sku' => 'S1', 'selling_price' => 100, 'status' => 'active', 'is_inventory_tracked' => true]);
+        $cat = ProductCategory::create(['tenant_id' => $tenant->id, 'name' => 'C1', 'code' => 'CAT1', 'status' => 'active']);
+        $product = Product::create(['tenant_id' => $tenant->id, 'product_category_id' => $cat->id, 'name' => 'P1', 'sku' => 'S1', 'selling_price' => 100, 'status' => 'active', 'is_inventory_tracked' => true]);
         
-        $inventory = app(InventoryService::class)->initializeInventory([
+        $inventory = BranchInventory::create([
+            'tenant_id' => $tenant->id,
             'branch_id' => $branch->id,
             'product_id' => $product->id,
-            'current_stock' => 10
+            'current_stock' => 10,
+            'inventory_revision' => 1,
+            'status' => 'active',
         ]);
 
         // 1. Manual adjustment can increase stock
@@ -97,21 +100,28 @@ class StockAdjustmentTest extends TestCase
         app(TenantContext::class)->setTenant($tenant);
 
         $branch = Branch::factory()->create(['tenant_id' => $tenant->id, 'status' => 'active']);
-        $cat = ProductCategory::create(['name' => 'C1', 'code' => 'CAT1']);
-        $product = Product::create(['product_category_id' => $cat->id, 'name' => 'P1', 'sku' => 'S1', 'selling_price' => 100, 'status' => 'active', 'is_inventory_tracked' => true]);
-        $inventory = app(InventoryService::class)->initializeInventory(['branch_id' => $branch->id, 'product_id' => $product->id, 'current_stock' => 10]);
+        $cat = ProductCategory::create(['tenant_id' => $tenant->id, 'name' => 'C1', 'code' => 'CAT1', 'status' => 'active']);
+        $product = Product::create(['tenant_id' => $tenant->id, 'product_category_id' => $cat->id, 'name' => 'P1', 'sku' => 'S1', 'selling_price' => 100, 'status' => 'active', 'is_inventory_tracked' => true]);
+        $inventory = BranchInventory::create([
+            'tenant_id' => $tenant->id,
+            'branch_id' => $branch->id,
+            'product_id' => $product->id,
+            'current_stock' => 10,
+            'inventory_revision' => 1,
+            'status' => 'active',
+        ]);
 
-        // We will mock recordMovement to throw an exception and verify the stock update rolls back
-        $service = \Mockery::mock(\App\Services\InventoryService::class, [
-            app(\App\Services\AuditLogger::class),
-            app(TenantContext::class),
-            app(BranchContext::class),
-            app(\App\Services\Inventory\UnitConversionResolver::class),
-        ])->makePartial();
-        $service->shouldReceive('recordMovement')->andThrow(new \RuntimeException('Forced failure'));
+        app()->bind(\App\Services\Inventory\InventoryMovementRecorder::class, function () {
+            return new class(app(TenantContext::class), app(BranchContext::class)) extends \App\Services\Inventory\InventoryMovementRecorder {
+                public function record(\App\Models\BranchInventory $inventory, array $data, bool $allowMigrationBaseline = false): \App\Models\InventoryMovement
+                {
+                    throw new \RuntimeException('Forced failure');
+                }
+            };
+        });
 
         try {
-            $service->adjustStock($inventory, 5, 'TEST');
+            app(InventoryService::class)->adjustStock($inventory, 5, 'TEST');
             $this->fail('Adjustment should have failed');
         } catch (\RuntimeException $e) {
             $this->assertEquals('Forced failure', $e->getMessage());
@@ -132,9 +142,16 @@ class StockAdjustmentTest extends TestCase
         app(TenantContext::class)->setTenant($tenantA);
         $branchA = Branch::factory()->create(['tenant_id' => $tenantA->id, 'status' => 'active']);
         $branchA2 = Branch::factory()->create(['tenant_id' => $tenantA->id, 'status' => 'active']);
-        $catA = ProductCategory::create(['name' => 'C1', 'code' => 'CAT1']);
-        $productA = Product::create(['product_category_id' => $catA->id, 'name' => 'P1', 'sku' => 'S1', 'selling_price' => 100, 'status' => 'active', 'is_inventory_tracked' => true]);
-        $inventoryA = app(InventoryService::class)->initializeInventory(['branch_id' => $branchA->id, 'product_id' => $productA->id, 'current_stock' => 10]);
+        $catA = ProductCategory::create(['tenant_id' => $tenantA->id, 'name' => 'C1', 'code' => 'CAT1', 'status' => 'active']);
+        $productA = Product::create(['tenant_id' => $tenantA->id, 'product_category_id' => $catA->id, 'name' => 'P1', 'sku' => 'S1', 'selling_price' => 100, 'status' => 'active', 'is_inventory_tracked' => true]);
+        $inventoryA = BranchInventory::create([
+            'tenant_id' => $tenantA->id,
+            'branch_id' => $branchA->id,
+            'product_id' => $productA->id,
+            'current_stock' => 10,
+            'inventory_revision' => 1,
+            'status' => 'active',
+        ]);
 
         // 6. Manual adjustment requires active TenantContext
         app(TenantContext::class)->clear();
