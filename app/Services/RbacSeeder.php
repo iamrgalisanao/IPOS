@@ -129,6 +129,8 @@ class RbacSeeder
             'inventory.adjustment.view' => 'Can view manual stock adjustment history',
             'inventory.adjustment.create' => 'Can record a one-off stock adjustment',
             'inventory.adjustment.approve' => 'Can approve one-off stock adjustments',
+            'inventory.adjustment.reason.manage' => 'Can manage inventory adjustment reason governance',
+            'inventory.opening-balance.create' => 'Can create opening balance inventory setup movements',
 
             // Epic 17: Cashier Accountability & Shift Report Export
             'reports.cashier-accountability.view' => 'Can view cashier accountability summaries',

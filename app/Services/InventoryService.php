@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\BranchInventory;
 use App\Models\InventoryMovement;
 use App\Services\Inventory\InventoryMovementRecorder;
+use App\Services\Inventory\InventoryAdjustmentService;
 use App\Services\Inventory\NegativeStockExceptionService;
 use App\Services\Inventory\RecipeDeductionService;
 use App\Services\Inventory\UnitConversionResolver;
@@ -15,6 +16,7 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\App;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Str;
 
 class InventoryService
 {
@@ -49,54 +51,21 @@ class InventoryService
      */
     public function adjustStock(BranchInventory $inventory, float $quantityChange, string $reasonCode, ?string $remarks = null): InventoryMovement
     {
-        if (!$this->tenantContext->getTenant()) {
-            throw new \RuntimeException('Cannot adjust stock without active TenantContext.');
-        }
-
-        // 9. Manual adjustment requires reason code
         if (empty(trim($reasonCode))) {
             throw new \RuntimeException('Manual adjustment requires a valid reason code.');
         }
 
-        // Validate inventory belongs to active tenant
-        if ($inventory->tenant_id !== $this->tenantContext->getTenant()->id) {
-            throw new \RuntimeException('Cannot adjust stock for inventory belonging to a different tenant.');
-        }
+        $result = App::make(InventoryAdjustmentService::class)->adjust([
+            'branch_inventory_id' => $inventory->id,
+            'product_id' => $inventory->product_id,
+            'quantity_change' => $quantityChange,
+            'reason_code' => $reasonCode,
+            'remarks' => $remarks,
+            'client_request_uuid' => (string) Str::orderedUuid(),
+            'allow_legacy_reason' => true,
+        ]);
 
-        // Validate inventory branch belongs to active branch context if it exists
-        if ($this->branchContext->hasBranch() && $inventory->branch_id !== $this->branchContext->getBranchId()) {
-            throw new \RuntimeException('Cannot adjust stock for inventory outside the active branch context.');
-        }
-
-        // Require permission manage_branch_inventory if authenticated user exists
-        $user = auth()->user();
-        if ($user && method_exists($user, 'hasPermission') && !$user->hasPermission('manage_branch_inventory')) {
-            throw new \RuntimeException('User does not have permission to manage branch inventory.');
-        }
-
-        return DB::transaction(function () use ($inventory, $quantityChange, $reasonCode, $remarks, $user) {
-            $quantityBefore = $inventory->current_stock;
-            $quantityAfter = $quantityBefore + $quantityChange;
-
-            // Block negative resulting stock by default for MVP
-            if ($quantityAfter < 0) {
-                throw new \RuntimeException('Stock adjustment would result in negative inventory, which is blocked.');
-            }
-
-            // Update branch_inventories.current_stock
-            $inventory->update(['current_stock' => $quantityAfter]);
-
-            // Create immutable movement log
-            return $this->recordMovement($inventory, [
-                'movement_type' => 'manual_adjustment',
-                'quantity_change' => $quantityChange,
-                'quantity_before' => $quantityBefore,
-                'quantity_after' => $quantityAfter,
-                'reason_code' => $reasonCode,
-                'remarks' => $remarks,
-                'user_id' => $user?->id,
-            ]);
-        });
+        return $result['movement'];
     }
 
     /**

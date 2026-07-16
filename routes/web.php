@@ -553,6 +553,20 @@ Route::middleware(['auth', 'tenant'])->group(function () {
              ->middleware('permission:view_branch_inventory')
              ->name('inventory.movements.index');
 
+        Route::prefix('inventory/adjustments')->name('inventory.adjustments.')->group(function () {
+            Route::post('/', [\App\Http\Controllers\Inventory\InventoryAdjustmentController::class, 'store'])
+                 ->middleware('permission:inventory.adjustment.create|manage_branch_inventory')
+                 ->name('store');
+
+            Route::post('/approval-preview', [\App\Http\Controllers\Inventory\InventoryAdjustmentController::class, 'preview'])
+                 ->middleware('permission:inventory.adjustment.create|manage_branch_inventory')
+                 ->name('approval-preview');
+
+            Route::post('/manager-approval', [\App\Http\Controllers\Inventory\InventoryAdjustmentController::class, 'managerApproval'])
+                 ->middleware('permission:inventory.adjustment.create|manage_branch_inventory')
+                 ->name('manager-approval');
+        });
+
         Route::prefix('inventory/stocktakes')->name('inventory.stocktakes.')->group(function () {
             Route::get('/', [\App\Http\Controllers\Inventory\StocktakeController::class, 'index'])
                  ->middleware('permission:inventory.stocktake.view')
@@ -847,6 +861,17 @@ Route::middleware(['auth', 'tenant'])->group(function () {
             ->name('admin.cash-drawer-reasons.update');
         Route::delete('/admin/cash-drawer-reasons/{reason}', [\App\Http\Controllers\Admin\CashDrawerReasonController::class, 'destroy'])
             ->name('admin.cash-drawer-reasons.destroy');
+    });
+
+    Route::middleware(['permission:inventory.adjustment.reason.manage'])->group(function () {
+        Route::get('/admin/inventory-adjustment-reasons', [\App\Http\Controllers\Admin\InventoryAdjustmentReasonController::class, 'index'])
+            ->name('admin.inventory-adjustment-reasons.index');
+        Route::post('/admin/inventory-adjustment-reasons', [\App\Http\Controllers\Admin\InventoryAdjustmentReasonController::class, 'store'])
+            ->name('admin.inventory-adjustment-reasons.store');
+        Route::put('/admin/inventory-adjustment-reasons/{reason}', [\App\Http\Controllers\Admin\InventoryAdjustmentReasonController::class, 'update'])
+            ->name('admin.inventory-adjustment-reasons.update');
+        Route::delete('/admin/inventory-adjustment-reasons/{reason}', [\App\Http\Controllers\Admin\InventoryAdjustmentReasonController::class, 'destroy'])
+            ->name('admin.inventory-adjustment-reasons.destroy');
     });
 
     // Epic 37: Advanced Promotions & Bundling Engine
