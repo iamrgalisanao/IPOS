@@ -19,6 +19,7 @@ This epic does not recreate the existing inventory module. IPOS already has inve
 3. [Stories](stories/)
 4. [Architecture Decision Records](adr/)
 5. [Diagrams](diagrams/)
+6. [Retrospective](epic-40-retrospective.md)
 
 ## Story Order
 

@@ -2,9 +2,9 @@
 
 ## 1. Status
 
-Draft for Review
+Complete
 
-Date: 2026-07-15
+Date: 2026-07-16
 
 This guide defines the intended execution order for Epic 40. It does not replace:
 
@@ -288,16 +288,17 @@ Unify inventory reports around movement, variance, and reconciliation evidence.
 
 Deliverables:
 
-1. Current stock report refinement.
-2. Stock card report.
-3. Movement summary report.
-4. Negative stock variance report refinement.
-5. Physical count variance report.
-6. System reconciliation exception report.
-7. Theoretical versus actual consumption foundation.
-8. Configuration gap report.
-9. CSV/print boundaries where already supported.
-10. Permission tests for reports and exports.
+1. Current Stock Report.
+2. Stock Card Report.
+3. Movement Summary Report.
+4. Negative Stock Exception Report.
+5. Physical Count Variance Report.
+6. System Reconciliation Exception Report.
+7. Expected versus Recorded Inventory Usage foundation.
+8. Configuration Gap Report.
+9. Inventory Integrity Exception Report.
+10. Report as-of watermarks and consistency metadata.
+11. CSV/export parity, permissions, and scope limits.
 
 Out of scope:
 
@@ -311,8 +312,12 @@ Acceptance checks:
 2. Exports match screen filters and permissions.
 3. No report mutates inventory.
 4. Branch-limited users cannot see unassigned branch inventory.
-5. Theoretical consumption is based on recipe deductions from finalized sales.
-6. Actual consumption is based on opening stock, in/out movements, closing stock, and documented non-sale outflows.
+5. Expected sale-driven usage is reported only when independent immutable expected evidence exists.
+6. Recorded sale-driven usage comes from committed inventory movements.
+7. Expected usage is marked unavailable when independent evidence is missing.
+8. Current recipe definitions are never used to reinterpret historical sales.
+9. Non-sale inventory effects remain separately classified and are not presented as physical consumption.
+10. Business-date Movement Summary opening and closing balances are derived from an authoritative baseline plus signed movements through the captured branch watermark. It must not select a historical `quantity_after` solely by business date because late-posted movements can make sequence history and business-date order differ.
 
 ## 13. Story 40.8 Pilot UAT and Operational Recovery
 
