@@ -75,7 +75,7 @@ class InventoryHubController extends Controller
                 'items' => [
                     $this->buildLink(
                         label: 'Variance Logs',
-                        description: 'Review recipe shortfall logs and export evidence.',
+                        description: 'Legacy variance lifecycle surface with mutation actions kept outside report generation.',
                         routeName: 'inventory.reports.variance-logs.index',
                         available: $user->hasAnyPermission(['view_inventory_reports', 'audit_inventory']),
                         unavailableReason: 'Requires view_inventory_reports or audit_inventory.'
@@ -89,6 +89,62 @@ class InventoryHubController extends Controller
                         extra: [
                             'cost_visible' => $user->hasPermission('audit_inventory'),
                         ]
+                    ),
+                    $this->buildLink(
+                        label: 'Current Stock',
+                        description: 'Current operational stock projection with revision and watermark metadata.',
+                        routeName: 'inventory.reports.current-stock.index',
+                        available: $user->hasAnyPermission(['view_inventory_reports', 'audit_inventory']),
+                        unavailableReason: 'Requires view_inventory_reports or audit_inventory.'
+                    ),
+                    $this->buildLink(
+                        label: 'Stock Card',
+                        description: 'Sequence-ordered branch/product movement ledger.',
+                        routeName: 'inventory.reports.stock-card.index',
+                        available: $user->hasAnyPermission(['view_inventory_reports', 'audit_inventory']),
+                        unavailableReason: 'Requires view_inventory_reports or audit_inventory.'
+                    ),
+                    $this->buildLink(
+                        label: 'Movement Summary',
+                        description: 'Business-date activity summary using captured movement watermarks.',
+                        routeName: 'inventory.reports.movement-summary.index',
+                        available: $user->hasAnyPermission(['view_inventory_reports', 'audit_inventory']),
+                        unavailableReason: 'Requires view_inventory_reports or audit_inventory.'
+                    ),
+                    $this->buildLink(
+                        label: 'Physical Count Variance',
+                        description: 'Stocktake count variance evidence from posted count sessions.',
+                        routeName: 'inventory.reports.physical-count-variance.index',
+                        available: $user->hasAnyPermission(['view_inventory_reports', 'audit_inventory']),
+                        unavailableReason: 'Requires view_inventory_reports or audit_inventory.'
+                    ),
+                    $this->buildLink(
+                        label: 'Negative Stock Exceptions',
+                        description: 'Audit view for soft-negative deduction exceptions and current lifecycle status.',
+                        routeName: 'inventory.reports.negative-stock-exceptions.index',
+                        available: $user->hasAnyPermission(['view_inventory_reports', 'audit_inventory']),
+                        unavailableReason: 'Requires view_inventory_reports or audit_inventory.'
+                    ),
+                    $this->buildLink(
+                        label: 'Reconciliation Exceptions',
+                        description: 'Movement-derived stock versus operational stock with baseline status.',
+                        routeName: 'inventory.reports.reconciliation-exceptions.index',
+                        available: $user->hasAnyPermission(['view_inventory_reports', 'audit_inventory']),
+                        unavailableReason: 'Requires view_inventory_reports or audit_inventory.'
+                    ),
+                    $this->buildLink(
+                        label: 'Usage Reconciliation',
+                        description: 'Expected-versus-recorded usage foundation without inventing missing expected evidence.',
+                        routeName: 'inventory.reports.usage-reconciliation.index',
+                        available: $user->hasAnyPermission(['view_inventory_reports', 'audit_inventory']),
+                        unavailableReason: 'Requires view_inventory_reports or audit_inventory.'
+                    ),
+                    $this->buildLink(
+                        label: 'Configuration and Integrity',
+                        description: 'Separate setup gaps from evidence-chain integrity exceptions.',
+                        routeName: 'inventory.reports.integrity.index',
+                        available: $user->hasAnyPermission(['view_inventory_reports', 'audit_inventory']),
+                        unavailableReason: 'Requires view_inventory_reports or audit_inventory.'
                     ),
                 ],
             ],
