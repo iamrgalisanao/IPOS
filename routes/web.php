@@ -967,9 +967,43 @@ Route::middleware(['auth', 'tenant'])->group(function () {
             ->name('inventory.reports.product-composition.index');
         Route::get('/inventory/reports/product-composition/export', [\App\Http\Controllers\Inventory\ProductCompositionReportController::class, 'export'])
             ->name('inventory.reports.product-composition.export');
+
+        Route::get('/inventory/reports/current-stock', [\App\Http\Controllers\Inventory\Reports\CurrentStockReportController::class, 'index'])
+            ->name('inventory.reports.current-stock.index');
+        Route::get('/inventory/reports/current-stock/export', [\App\Http\Controllers\Inventory\Reports\CurrentStockReportController::class, 'export'])
+            ->name('inventory.reports.current-stock.export');
+        Route::get('/inventory/reports/stock-card', [\App\Http\Controllers\Inventory\Reports\StockCardReportController::class, 'index'])
+            ->name('inventory.reports.stock-card.index');
+        Route::get('/inventory/reports/stock-card/export', [\App\Http\Controllers\Inventory\Reports\StockCardReportController::class, 'export'])
+            ->name('inventory.reports.stock-card.export');
+        Route::get('/inventory/reports/movement-summary', [\App\Http\Controllers\Inventory\Reports\MovementSummaryReportController::class, 'index'])
+            ->name('inventory.reports.movement-summary.index');
+        Route::get('/inventory/reports/movement-summary/export', [\App\Http\Controllers\Inventory\Reports\MovementSummaryReportController::class, 'export'])
+            ->name('inventory.reports.movement-summary.export');
+        Route::get('/inventory/reports/negative-stock-exceptions', [\App\Http\Controllers\Inventory\Reports\NegativeStockExceptionReportController::class, 'index'])
+            ->name('inventory.reports.negative-stock-exceptions.index');
+        Route::get('/inventory/reports/physical-count-variance', [\App\Http\Controllers\Inventory\Reports\PhysicalCountVarianceReportController::class, 'index'])
+            ->name('inventory.reports.physical-count-variance.index');
+        Route::get('/inventory/reports/physical-count-variance/export', [\App\Http\Controllers\Inventory\Reports\PhysicalCountVarianceReportController::class, 'export'])
+            ->name('inventory.reports.physical-count-variance.export');
+        Route::get('/inventory/reports/reconciliation-exceptions', [\App\Http\Controllers\Inventory\Reports\ReconciliationExceptionReportController::class, 'index'])
+            ->name('inventory.reports.reconciliation-exceptions.index');
+        Route::get('/inventory/reports/usage-reconciliation', [\App\Http\Controllers\Inventory\Reports\UsageReconciliationReportController::class, 'index'])
+            ->name('inventory.reports.usage-reconciliation.index');
+        Route::get('/inventory/reports/integrity', [\App\Http\Controllers\Inventory\Reports\InventoryIntegrityReportController::class, 'index'])
+            ->name('inventory.reports.integrity.index');
     });
 
     Route::middleware(['permission:audit_inventory'])->group(function () {
+        Route::get('/inventory/reports/negative-stock-exceptions/export', [\App\Http\Controllers\Inventory\Reports\NegativeStockExceptionReportController::class, 'export'])
+            ->name('inventory.reports.negative-stock-exceptions.export');
+        Route::get('/inventory/reports/reconciliation-exceptions/export', [\App\Http\Controllers\Inventory\Reports\ReconciliationExceptionReportController::class, 'export'])
+            ->name('inventory.reports.reconciliation-exceptions.export');
+        Route::get('/inventory/reports/usage-reconciliation/export', [\App\Http\Controllers\Inventory\Reports\UsageReconciliationReportController::class, 'export'])
+            ->name('inventory.reports.usage-reconciliation.export');
+        Route::get('/inventory/reports/integrity/export', [\App\Http\Controllers\Inventory\Reports\InventoryIntegrityReportController::class, 'export'])
+            ->name('inventory.reports.integrity.export');
+
         Route::post('/inventory/variance-logs/{varianceLog}/acknowledge', [\App\Http\Controllers\Inventory\VarianceLogController::class, 'acknowledge'])
             ->name('inventory.variance-logs.acknowledge');
         Route::post('/inventory/variance-logs/{varianceLog}/plan-action', [\App\Http\Controllers\Inventory\VarianceLogController::class, 'planAction'])

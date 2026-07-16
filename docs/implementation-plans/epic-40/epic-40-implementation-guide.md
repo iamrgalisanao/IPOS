@@ -47,8 +47,8 @@ Reason:
 | 40.3 | Done | - | - |
 | 40.4 | Done | - | - |
 | 40.5 | Done | - | - |
-| 40.6 | Approved for Implementation | - | - |
-| 40.7 | Planned | - | - |
+| 40.6 | Done | - | - |
+| 40.7 | Approved for Implementation | - | - |
 | 40.8 | Planned | - | - |
 
 ## 4. Story Dependencies and Complexity
