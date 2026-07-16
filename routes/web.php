@@ -602,6 +602,9 @@ Route::middleware(['auth', 'tenant'])->group(function () {
                  ->middleware('permission:inventory.stocktake.post')
                  ->name('post');
 
+            Route::get('/{stocktakeSession}/posting-preview', [\App\Http\Controllers\Inventory\StocktakeController::class, 'postingPreview'])
+                 ->middleware('permission:inventory.stocktake.post')
+                 ->name('posting-preview');
 
             Route::get('/{stocktakeSession}/summary', [\App\Http\Controllers\Inventory\StocktakeReportController::class, 'summary'])
                  ->middleware('permission:inventory.stocktake.view')

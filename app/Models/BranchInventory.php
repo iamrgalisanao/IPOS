@@ -17,6 +17,7 @@ class BranchInventory extends Model
         'branch_id',
         'product_id',
         'current_stock',
+        'inventory_revision',
         'average_cost',
         'reorder_level',
         'par_level',
@@ -27,6 +28,7 @@ class BranchInventory extends Model
 
     protected $casts = [
         'current_stock' => 'decimal:4',
+        'inventory_revision' => 'integer',
         'average_cost' => 'decimal:4',
         'reorder_level' => 'decimal:4',
         'par_level' => 'decimal:4',
