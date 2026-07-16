@@ -153,7 +153,7 @@ class RecipeCostingTest extends TestCase
             ->assertJsonPath('ingredients.0.cost_source', 'catalog_cost');
     }
 
-    public function test_update_recipe_endpoint_replaces_existing_recipe(): void
+    public function test_update_recipe_endpoint_versions_existing_recipe(): void
     {
         $response = $this->actingAs($this->owner)
             ->withHeader('X-Tenant-ID', $this->tenant->id)
@@ -171,12 +171,54 @@ class RecipeCostingTest extends TestCase
 
         app(TenantContext::class)->setTenant($this->tenant);
         
-        $this->assertDatabaseCount('product_recipes', 1);
+        $this->assertDatabaseCount('product_recipes', 3);
+        $this->assertSame(1, ProductRecipe::where('product_id', $this->composite->id)->active()->count());
         $this->assertDatabaseHas('product_recipes', [
             'product_id' => $this->composite->id,
             'ingredient_id' => $this->ingredientB->id,
             'quantity' => 10,
             'unit' => 'ml',
+            'recipe_version' => 2,
+            'is_active' => true,
+            'active_slot' => 'active',
         ]);
+
+        $active = ProductRecipe::where('product_id', $this->composite->id)->active()->firstOrFail();
+        $previous = ProductRecipe::findOrFail($active->supersedes_recipe_id);
+
+        $this->assertSame($previous->recipe_line_uuid, $active->recipe_line_uuid);
+        $this->assertFalse(ProductRecipe::where('ingredient_id', $this->ingredientA->id)->firstOrFail()->is_active);
+    }
+
+    public function test_update_recipe_rejects_cross_tenant_ingredient(): void
+    {
+        $otherTenant = Tenant::factory()->create(['status' => 'active']);
+        app(TenantContext::class)->setTenant($otherTenant);
+        $otherCategory = ProductCategory::create([
+            'tenant_id' => $otherTenant->id,
+            'name' => 'Other',
+            'code' => 'OTHER',
+        ]);
+        $otherIngredient = Product::factory()->create([
+            'tenant_id' => $otherTenant->id,
+            'product_category_id' => $otherCategory->id,
+            'unit_of_measure' => 'ml',
+        ]);
+        app(TenantContext::class)->setTenant($this->tenant);
+
+        $response = $this->actingAs($this->owner)
+            ->withHeader('X-Tenant-ID', $this->tenant->id)
+            ->from(route('admin.products.edit', $this->composite->id))
+            ->post(route('admin.products.recipe.update', $this->composite->id), [
+                'ingredients' => [
+                    [
+                        'ingredient_id' => $otherIngredient->id,
+                        'quantity' => 10,
+                        'unit' => 'ml'
+                    ]
+                ]
+            ]);
+
+        $response->assertSessionHasErrors('ingredients.0.ingredient_id');
     }
 }

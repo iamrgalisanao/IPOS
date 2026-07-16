@@ -15,7 +15,9 @@ use App\Services\Catalog\CatalogImportPreviewService;
 use App\Services\Inventory\RecipeCostingService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 class ProductController extends Controller
@@ -263,23 +265,68 @@ class ProductController extends Controller
     {
         $validated = $request->validate([
             'ingredients' => 'present|array',
-            'ingredients.*.ingredient_id' => 'required|exists:products,id',
+            'ingredients.*.ingredient_id' => [
+                'required',
+                'distinct',
+                Rule::exists('products', 'id')->where(fn ($query) => $query->where('tenant_id', $product->tenant_id)),
+            ],
             'ingredients.*.quantity' => 'required|numeric|min:0.0001',
             'ingredients.*.unit' => 'required|string',
         ]);
 
-        // Sync ingredients: Delete old, insert new
-        ProductRecipe::where('product_id', $product->id)->delete();
+        DB::transaction(function () use ($product, $validated) {
+            $activeRecipes = ProductRecipe::query()
+                ->active()
+                ->where('tenant_id', $product->tenant_id)
+                ->where('product_id', $product->id)
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('ingredient_id');
 
-        foreach ($validated['ingredients'] as $item) {
-            ProductRecipe::create([
-                'tenant_id' => $product->tenant_id,
-                'product_id' => $product->id,
-                'ingredient_id' => $item['ingredient_id'],
-                'quantity' => $item['quantity'],
-                'unit' => $item['unit'],
-            ]);
-        }
+            $incomingIngredientIds = collect($validated['ingredients'])->pluck('ingredient_id')->all();
+
+            $activeRecipes
+                ->reject(fn (ProductRecipe $recipe) => in_array($recipe->ingredient_id, $incomingIngredientIds, true))
+                ->each(fn (ProductRecipe $recipe) => $this->deactivateRecipeLine($recipe));
+
+            foreach ($validated['ingredients'] as $item) {
+                /** @var ProductRecipe|null $existing */
+                $existing = $activeRecipes->get($item['ingredient_id']);
+
+                if (!$existing) {
+                    ProductRecipe::create([
+                        'tenant_id' => $product->tenant_id,
+                        'product_id' => $product->id,
+                        'ingredient_id' => $item['ingredient_id'],
+                        'quantity' => $item['quantity'],
+                        'unit' => $item['unit'],
+                    ]);
+
+                    continue;
+                }
+
+                if (
+                    number_format((float) $existing->quantity, 4, '.', '') === number_format((float) $item['quantity'], 4, '.', '')
+                    && (string) $existing->unit === (string) $item['unit']
+                ) {
+                    continue;
+                }
+
+                $this->deactivateRecipeLine($existing);
+
+                ProductRecipe::create([
+                    'tenant_id' => $product->tenant_id,
+                    'product_id' => $product->id,
+                    'ingredient_id' => $item['ingredient_id'],
+                    'quantity' => $item['quantity'],
+                    'unit' => $item['unit'],
+                    'recipe_line_uuid' => $existing->recipe_line_uuid,
+                    'recipe_schema_version' => 1,
+                    'recipe_version' => ((int) $existing->recipe_version) + 1,
+                    'supersedes_recipe_id' => $existing->id,
+                ]);
+            }
+        });
 
         return redirect()->back()->with('success', 'Product recipe updated successfully.');
     }
@@ -335,5 +382,14 @@ class ProductController extends Controller
         }
 
         return $query;
+    }
+
+    private function deactivateRecipeLine(ProductRecipe $recipe): void
+    {
+        $recipe->forceFill([
+            'is_active' => false,
+            'active_slot' => 'inactive:' . $recipe->id,
+            'locked_at' => $recipe->locked_at ?? now(),
+        ])->save();
     }
 }

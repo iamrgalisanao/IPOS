@@ -86,6 +86,10 @@ class InventoryMovementRecorder
             'movement_uuid' => ['sometimes', 'nullable', 'string'],
             'movement_schema_version' => ['sometimes', 'nullable', 'integer'],
             'movement_sequence' => ['sometimes', 'nullable', 'integer', 'min:1'],
+            'sale_item_id' => ['sometimes', 'nullable', 'exists:sale_items,id'],
+            'parent_product_id' => ['sometimes', 'nullable', 'exists:products,id'],
+            'recipe_line_uuid' => ['sometimes', 'nullable', 'string'],
+            'recipe_batch_uuid' => ['sometimes', 'nullable', 'string'],
             'base_unit_id' => ['sometimes', 'nullable', 'string', 'max:64'],
             'source_unit_id' => ['sometimes', 'nullable', 'string', 'max:64'],
             'source_quantity' => ['sometimes', 'nullable', 'numeric'],
@@ -96,7 +100,7 @@ class InventoryMovementRecorder
             'source_id' => ['sometimes', 'nullable', 'string'],
             'reference_number' => ['sometimes', 'nullable', 'string'],
             'source_reference' => ['sometimes', 'nullable', 'string'],
-            'source_effect_key' => ['sometimes', 'nullable', 'string', 'max:160'],
+            'source_effect_key' => ['sometimes', 'nullable', 'string', 'max:255'],
             'original_movement_id' => ['sometimes', 'nullable', 'exists:inventory_movements,id'],
             'user_id' => ['sometimes', 'nullable', 'exists:users,id'],
             'reason_code' => ['sometimes', 'nullable', 'string'],
@@ -159,6 +163,10 @@ class InventoryMovementRecorder
             'quantity_before',
             'quantity_after',
             'original_movement_id',
+            'sale_item_id',
+            'parent_product_id',
+            'recipe_line_uuid',
+            'recipe_batch_uuid',
         ];
 
         foreach ($checks as $field) {

@@ -8,6 +8,7 @@ use App\Models\BranchInventory;
 use App\Models\InventoryMovement;
 use App\Services\Inventory\InventoryMovementRecorder;
 use App\Services\Inventory\NegativeStockExceptionService;
+use App\Services\Inventory\RecipeDeductionService;
 use App\Services\Inventory\UnitConversionResolver;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -23,6 +24,7 @@ class InventoryService
     protected UnitConversionResolver $unitConversionResolver;
     protected InventoryMovementRecorder $movementRecorder;
     protected NegativeStockExceptionService $negativeStockExceptionService;
+    protected RecipeDeductionService $recipeDeductionService;
 
     public function __construct(
         AuditLogger $auditLogger,
@@ -30,7 +32,8 @@ class InventoryService
         BranchContext $branchContext,
         UnitConversionResolver $unitConversionResolver,
         ?InventoryMovementRecorder $movementRecorder = null,
-        ?NegativeStockExceptionService $negativeStockExceptionService = null
+        ?NegativeStockExceptionService $negativeStockExceptionService = null,
+        ?RecipeDeductionService $recipeDeductionService = null
     ) {
         $this->auditLogger = $auditLogger;
         $this->tenantContext = $tenantContext;
@@ -38,6 +41,7 @@ class InventoryService
         $this->unitConversionResolver = $unitConversionResolver;
         $this->movementRecorder = $movementRecorder ?? App::make(InventoryMovementRecorder::class);
         $this->negativeStockExceptionService = $negativeStockExceptionService ?? App::make(NegativeStockExceptionService::class);
+        $this->recipeDeductionService = $recipeDeductionService ?? App::make(RecipeDeductionService::class);
     }
 
     /**
@@ -238,15 +242,6 @@ class InventoryService
             throw new \RuntimeException('Cannot deduct inventory without active TenantContext.');
         }
 
-        // 1. Idempotency Guard: Check if movements for this sale already exist
-        $exists = InventoryMovement::where('source_type', 'sale')
-            ->where('source_id', $sale->id)
-            ->exists();
-
-        if ($exists) {
-            return;
-        }
-
         DB::transaction(function () use ($sale) {
             foreach ($sale->items as $item) {
                 // Load product with recipes to check for ingredients
@@ -254,9 +249,7 @@ class InventoryService
                 
                 if ($product && $product->recipes->count() > 0) {
                     // Scenario: Recipe-based deduction (Ingredients)
-                    foreach ($product->recipes as $recipe) {
-                        $this->deductComponent($recipe, $sale, $item->quantity, $product->id, $item->id);
-                    }
+                    $this->recipeDeductionService->deductSaleItem($sale, $item, $product);
                 } else {
                     // Scenario: Standard product deduction
                     if (!$item->is_inventory_tracked) {
@@ -357,6 +350,22 @@ class InventoryService
             $policy = 'strict_block';
         }
 
+        $sourceEffectKey = $parentProductId
+            ? "sale:{$sale->id}:sale_item:{$saleItemId}:ingredient:{$inventory->product_id}"
+            : "sale:{$sale->id}:sale_item:{$saleItemId}:product:{$inventory->product_id}";
+
+        $existing = InventoryMovement::query()
+            ->where('tenant_id', $sale->tenant_id)
+            ->where('branch_id', $sale->branch_id)
+            ->where('source_type', 'sale')
+            ->where('source_id', $sale->id)
+            ->where('source_effect_key', $sourceEffectKey)
+            ->first();
+
+        if ($existing) {
+            return;
+        }
+
         if ($quantityAfter < 0 && $policy !== 'allow_negative_with_warning') {
                 throw new \RuntimeException("Insufficient stock for product {$inventory->product->name}. Available: {$quantityBefore}, Required: {$quantityChange}.");
         }
@@ -376,9 +385,7 @@ class InventoryService
             'source_type' => 'sale',
             'source_id' => $sale->id,
             'source_reference' => $sale->sale_number,
-            'source_effect_key' => $parentProductId
-                ? "sale:{$sale->id}:sale_item:{$saleItemId}:ingredient:{$inventory->product_id}"
-                : "sale:{$sale->id}:sale_item:{$saleItemId}:product:{$inventory->product_id}",
+            'source_effect_key' => $sourceEffectKey,
             'base_unit_id' => $conversionResolution['to_unit'] ?? $inventory->product->unit_of_measure ?? null,
             'source_unit_id' => $conversionResolution['from_unit'] ?? $inventory->product->unit_of_measure ?? null,
             'source_quantity' => $conversionResolution['source_quantity'] ?? $quantityChange,
