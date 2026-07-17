@@ -42,7 +42,7 @@ Reason:
 
 | Story | Status | Owner | Sprint |
 | --- | --- | --- | --- |
-| 41.1 | Planned | - | - |
+| 41.1 | Done | - | - |
 | 41.2 | Planned | - | - |
 | 41.3 | Planned | - | - |
 | 41.4 | Planned | - | - |
