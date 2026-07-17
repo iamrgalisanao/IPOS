@@ -41,6 +41,90 @@ Large
 14. Multi-tab and service-worker race tests.
 15. Queue access rules after cashier switching.
 16. Uncertain-storage recovery behavior.
+17. Policy-limit boundary calculations.
+18. Operator-visible queue status dashboard data.
+19. Cash-status transition evidence.
+
+## Required Queue State Vocabulary
+
+Story 41.2 must lock the concrete queue state machine.
+
+Expected states:
+
+```text
+persisting
+locally_captured
+pending_sync
+syncing
+retryable_failed
+review_required
+rejected
+accepted
+replayed
+resolution_pending
+resolved
+accepted_retained
+accepted_compacted
+purged
+```
+
+Each state must define:
+
+1. legal previous states,
+2. legal next states,
+3. whether automatic retry is allowed,
+4. whether cashier action is allowed,
+5. whether final shift close is blocked,
+6. whether support action is required.
+
+## Policy Limit Calculations
+
+Queue limit checks must be explicit:
+
+```text
+new_pending_count > maximum_unsynced_transaction_count
+new_pending_exposure > maximum_unsynced_cash_amount
+age > configured maximum
+```
+
+Rules:
+
+1. the current transaction is allowed only when adding it remains within the maximum,
+2. a value equal to the maximum remains allowed,
+3. anything exceeding the maximum is blocked before capture success,
+4. exposure is based on unresolved offline sale totals or net collected exposure, not gross tender before change.
+
+## Cash Status Transition Evidence
+
+Cash-status transitions must be append-only.
+
+When cash changes state, especially:
+
+```text
+collected
+returned
+```
+
+the transition must preserve:
+
+1. actor,
+2. timestamp,
+3. reason,
+4. support case,
+5. amount returned,
+6. acknowledgment evidence where applicable.
+
+## Non-Reopened Policy Decisions
+
+Story 41.2 must consume Story 41.1 as a non-negotiable contract and must not reopen:
+
+1. offline tender scope,
+2. statutory discount blocking,
+3. local cancellation blocking after durable cash capture,
+4. final shift-close blocking while unresolved records exist,
+5. no local stock deduction,
+6. receipt authority,
+7. loyalty promise restrictions.
 
 ## Out of Scope
 
@@ -61,6 +145,9 @@ Large
 8. Review-required and rejected records do not auto-retry.
 9. Cashier switching does not alter envelope ownership or actor evidence.
 10. Accepted records retain minimal tombstones through retention policy.
+11. Queue states define legal transitions, retry behavior, cashier action, and shift-close blocking.
+12. Policy limits block before capture success when adding the current transaction would exceed configured maximums.
+13. Cash-status changes preserve append-only transition evidence.
 
 ## Notes
 

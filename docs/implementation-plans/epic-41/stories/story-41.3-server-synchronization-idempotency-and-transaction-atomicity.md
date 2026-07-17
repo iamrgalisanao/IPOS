@@ -39,7 +39,8 @@ Very Large
 12. Duplicate source-effect prevention.
 13. Sync audit payload.
 14. Outbox behavior where unavoidable.
-15. Tests for accepted, replayed, retryable, rejected, review-required, and suspected-duplicate results.
+15. Capture-time terminal authorization validation versus sync-time revocation handling.
+16. Tests for accepted, replayed, retryable, rejected, review-required, and suspected-duplicate results.
 
 ## Out of Scope
 
@@ -58,6 +59,7 @@ Very Large
 6. Consequence-specific pending states live in consequence status fields, not top-level sync status.
 7. Suspected duplicate business captures enter review unless exact replay can be proven.
 8. Cash-collected records that cannot safely post are preserved for support resolution.
+9. Records captured before terminal/profile revocation follow explicit server policy and never auto-transfer to a replacement terminal.
 
 ## Notes
 

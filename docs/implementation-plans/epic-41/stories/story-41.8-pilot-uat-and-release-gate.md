@@ -57,6 +57,7 @@ Medium
 27. Retry backoff does not resubmit review-required records.
 28. Official invoice is retrieved or delivered after acceptance.
 29. Shift reconciliation includes accepted and unresolved offline cash.
+30. Compliance signoff for offline acknowledgment wording, presentation, numbering distinction, and official invoice delivery process.
 
 ## Out of Scope
 
@@ -84,6 +85,7 @@ Medium
 15. Offline stock presentation is stale/provisional and not locally deducted.
 16. Status dimensionality is validated with consequence-specific pending states.
 17. Cashier-switch protection preserves original actor evidence.
+18. Production offline acknowledgment is not enabled without compliance approval.
 
 ## Notes
 

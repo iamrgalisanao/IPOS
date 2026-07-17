@@ -38,6 +38,7 @@ Large
 13. Cashier-facing messaging.
 14. Admin/support diagnostics.
 15. Tests for sequence conflict, fingerprint drift, predecessor blocking, and review isolation.
+16. Revoked, stolen, compromised, cross-branch, and replacement-terminal conflict outcomes.
 
 ## Out of Scope
 
@@ -56,6 +57,7 @@ Large
 6. Review-required predecessors block later records only where dependency policy requires it.
 7. Device time is not blindly accepted as committed business-date authority.
 8. Cash-collected review records remain visible in support and drawer accountability.
+9. Revoked terminal records do not auto-post or auto-assign to a replacement terminal without governed support policy.
 
 ## Notes
 
