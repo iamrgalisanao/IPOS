@@ -33,6 +33,10 @@ class OfflineEnvelopePolicyValidator
             return $this->reason($rawImport, 'rejected_offline_manager_approval', 'review_offline_manager_approval_cash_collected');
         }
 
+        if ($this->containsStoreCreditEvidence($rawImport)) {
+            return $this->reason($rawImport, 'rejected_store_credit_offline', 'review_store_credit_offline_cash_collected');
+        }
+
         if (!empty($rawImport['statutory_discount'])) {
             return $this->reason($rawImport, 'rejected_statutory_discount_offline', 'review_statutory_discount_offline_cash_collected');
         }
@@ -196,6 +200,21 @@ class OfflineEnvelopePolicyValidator
             'manager_approval',
             'approval_id',
             'approval_snapshot',
+        ]);
+    }
+
+    private function containsStoreCreditEvidence(array $payload): bool
+    {
+        if (($payload['payment_method'] ?? null) === 'store_credit') {
+            return true;
+        }
+
+        return $this->containsAnyKey($payload, [
+            'store_credit_redemption',
+            'store_credit_account_id',
+            'store_credit_ledger_entry_id',
+            'store_credit_amount',
+            'store_credit',
         ]);
     }
 

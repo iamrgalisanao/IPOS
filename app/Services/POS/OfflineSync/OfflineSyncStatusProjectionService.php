@@ -30,6 +30,10 @@ class OfflineSyncStatusProjectionService
             'official_invoice_number' => $import->official_invoice_number ?? $import->reconciledSale?->principal_invoice_number,
             'local_reference' => Arr::get($import->raw_payload ?? [], 'local_transaction_reference'),
             'consequence_status' => $this->consequenceStatus($import),
+            'resolved_business_date' => $import->resolved_business_date?->toDateString(),
+            'reported_sync_delay_seconds' => $import->reported_sync_delay_seconds,
+            'normalized_sync_delay_seconds' => $import->normalized_sync_delay_seconds,
+            'terminal_timestamp_trust_status' => $import->time_evidence_status,
             'review_reason' => $import->review_reason,
             'reason' => $import->rejection_reason ?: $import->review_reason ?: $import->retryable_error_code,
             'retryable_error_code' => $import->retryable_error_code,
@@ -106,8 +110,8 @@ class OfflineSyncStatusProjectionService
 
     private function consequenceStatus(OfflineSalesImport $import): array
     {
-        return $import->acceptance_consequence_snapshot
-            ?: $import->current_consequence_status
+        return $import->current_consequence_status
+            ?: $import->acceptance_consequence_snapshot
             ?: $import->consequence_status_snapshot
             ?: [
                 'sale' => 'not_applicable',
@@ -118,6 +122,7 @@ class OfflineSyncStatusProjectionService
                 'store_credit' => 'not_applicable',
                 'receipt' => 'not_applicable',
                 'accounting_outbox' => 'not_applicable',
+                'business_date' => 'not_applicable',
             ];
     }
 

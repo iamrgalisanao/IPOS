@@ -71,7 +71,7 @@ class LoyaltyAccrualService
                 'points' => $points,
                 'eligible_amount_centavos' => $eligibleCentavos,
             ],
-            'business_date' => now()->toDateString(),
+            'business_date' => $payload['resolved_business_date'] ?? $payload['business_date'] ?? now()->toDateString(),
         ]);
     }
 }
