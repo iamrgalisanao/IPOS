@@ -63,6 +63,16 @@ Route::middleware(['auth:sanctum', 'tenant', 'branch', 'terminal', 'permission:c
     ->post('/pos/offline-sync', [\App\Http\Controllers\POS\OfflineSyncController::class, 'sync'])
     ->name('pos.offline-sync');
 
+Route::middleware(['auth:sanctum', 'tenant', 'branch', 'terminal', 'permission:create_sale', 'subscription.feature:sales.pos'])
+    ->prefix('v1/pos/offline-sales')
+    ->name('pos.offline-sales.')
+    ->group(function () {
+        Route::post('/sync', [\App\Http\Controllers\POS\OfflineSyncController::class, 'sync'])
+            ->name('sync');
+        Route::get('/{offlineTransactionUuid}/sync-status', [\App\Http\Controllers\POS\OfflineSyncController::class, 'status'])
+            ->name('sync-status');
+    });
+
 // Epic 32 — POS Terminal Sync Diagnostics & Reliability
 Route::middleware(['auth:sanctum', 'tenant', 'branch', 'terminal', 'permission:create_sale', 'subscription.feature:sales.pos', 'throttle:60,1'])
     ->prefix('pos')

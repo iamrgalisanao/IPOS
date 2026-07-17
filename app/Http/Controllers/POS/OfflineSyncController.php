@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\POS\SyncBatchRequest;
 use App\Models\SalesMachineProfile;
 use App\Services\BranchContext;
+use App\Services\POS\OfflineSync\OfflineEnvelopeSynchronizationService;
 use App\Services\POS\OfflineSync\OfflineReconciliationService;
 use App\Services\TenantContext;
 use Illuminate\Http\JsonResponse;
@@ -25,6 +26,7 @@ class OfflineSyncController extends Controller
 {
     public function __construct(
         protected OfflineReconciliationService $reconciliationService,
+        protected OfflineEnvelopeSynchronizationService $envelopeSynchronizationService,
         protected TenantContext $tenantContext,
         protected BranchContext $branchContext,
     ) {}
@@ -78,6 +80,12 @@ class OfflineSyncController extends Controller
         }
 
         try {
+            if ($request->is('api/v1/pos/offline-sales/sync')) {
+                $result = $this->envelopeSynchronizationService->synchronizeBatch($profile, $request->validated(), $request->user());
+
+                return response()->json($result, 200);
+            }
+
             $batch = $this->reconciliationService->receiveImportBatch($profile, $request->validated());
         } catch (\RuntimeException $e) {
             $errCode = 'OFFLINE_NOT_ENABLED';
@@ -128,5 +136,41 @@ class OfflineSyncController extends Controller
             'failed'          => $batch->failed_count,
             'imports'         => $importsResult,
         ], $isReplay ? 200 : 202);
+    }
+
+    public function status(string $offlineTransactionUuid): JsonResponse
+    {
+        $tenant = $this->tenantContext->getTenant();
+        $branch = $this->branchContext->getBranch();
+
+        if (!$tenant || !$branch) {
+            return response()->json([
+                'error' => 'MISSING_CONTEXT',
+                'message' => 'Tenant and Branch contexts are required.',
+            ], 403);
+        }
+
+        $profile = SalesMachineProfile::where('branch_id', $branch->id)
+            ->where('status', 'active')
+            ->where('id', request()->header('X-Terminal-ID'))
+            ->first();
+
+        if (!$profile) {
+            return response()->json([
+                'error' => 'NO_ACTIVE_TERMINAL',
+                'message' => 'No active terminal profile found for this branch.',
+            ], 404);
+        }
+
+        $result = $this->envelopeSynchronizationService->lookupStatus($profile, $offlineTransactionUuid);
+
+        if (!$result) {
+            return response()->json([
+                'error' => 'NOT_FOUND',
+                'message' => 'Offline transaction was not found for this terminal.',
+            ], 404);
+        }
+
+        return response()->json($result);
     }
 }

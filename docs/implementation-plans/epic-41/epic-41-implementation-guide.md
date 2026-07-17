@@ -44,7 +44,7 @@ Reason:
 | --- | --- | --- | --- |
 | 41.1 | Done | - | - |
 | 41.2 | Implemented - Local Verification Complete | - | - |
-| 41.3 | Planned | - | - |
+| 41.3 | Implemented - Local Verification Complete | - | - |
 | 41.4 | Planned | - | - |
 | 41.5 | Planned | - | - |
 | 41.6 | Planned | - | - |
@@ -202,6 +202,17 @@ Deliverables:
 15. Suspected duplicate detection beyond exact UUID replay.
 16. Strict consequence-status schema.
 17. Official invoice retrieval or delivery contract.
+18. Tenant-scoped offline transaction UUID uniqueness.
+19. Server-side fingerprint recomputation.
+20. Insert-or-lock concurrency pattern.
+21. Status lookup endpoint.
+22. OpenAPI contract fragment.
+23. Completed versus asynchronous HTTP response semantics.
+24. Attempt-history separation from envelope outcome.
+25. Raw-payload storage protection.
+26. Outbox idempotency effect keys.
+27. Consequence status history.
+28. Deadlock retry policy.
 
 Out of scope:
 
@@ -220,6 +231,11 @@ Acceptance checks:
 7. `accepted_with_pending_loyalty` is not used as a top-level status; consequence-specific pending states live in consequence status fields.
 8. Suspected duplicate business captures enter review unless exact replay can be proven.
 9. Cash-collected records that cannot safely post are preserved for support resolution.
+10. Same UUID with changed context is treated as drift or review, not a new sale.
+11. The server recomputes the canonical fingerprint before mutation.
+12. Synchronous completed sync returns HTTP 200; HTTP 202 is used only with durable asynchronous status lookup.
+13. Retryable failures remain attempt outcomes and may be reprocessed when policy permits.
+14. Attempt history, consequence history, and outbox idempotency are preserved.
 
 ## 9. Story 41.4 Conflict, Drift, Ordering, and Review Handling
 

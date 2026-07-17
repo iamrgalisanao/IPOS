@@ -7,9 +7,77 @@ info:
     by active Tenant and Branch scopes.
   version: 1.0.0
 servers:
-  - url: /api/pos
-    description: Relative POS terminal API root
+  - url: /api/v1/pos
+    description: Relative POS terminal v1 API root
 paths:
+  /offline-sales/sync:
+    post:
+      summary: Synchronize offline sale envelopes
+      description: |
+        Epic 41 server-authoritative synchronization endpoint for provisional
+        offline cash-sale envelopes. Processing is per envelope even when a
+        batch is submitted for transport efficiency. Completed synchronous
+        processing returns HTTP 200 with per-envelope results. HTTP 202 is
+        reserved for future durable asynchronous processing with a status
+        resource.
+      security:
+        - SanctumAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OfflineSalesSyncRequest'
+      responses:
+        '200':
+          description: Completed per-envelope synchronization results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfflineSalesSyncResponse'
+        '403':
+          description: Tenant, branch, or terminal context is missing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Request contract validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /offline-sales/{offline_transaction_uuid}/sync-status:
+    get:
+      summary: Look up offline sale synchronization status
+      description: |
+        Returns the stable current server result for one offline transaction
+        UUID without requiring the terminal to resubmit the full business
+        payload. The lookup is tenant, branch, and terminal scoped.
+      security:
+        - SanctumAuth: []
+      parameters:
+        - name: offline_transaction_uuid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Stable envelope synchronization status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfflineSalesSyncResult'
+        '404':
+          description: Envelope not found or hidden by tenant/branch/terminal scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /sandbox/validate:
     post:
       summary: Dry-run validate offline sale import payload
@@ -230,6 +298,139 @@ components:
               field:
                 type: string
                 example: client_total
+
+    OfflineSalesSyncRequest:
+      type: object
+      required:
+        - batch_reference
+        - imports
+      properties:
+        batch_reference:
+          type: string
+          maxLength: 64
+        imports:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/OfflineSalesEnvelope'
+
+    OfflineSalesEnvelope:
+      type: object
+      required:
+        - offline_transaction_uuid
+        - terminal_binding_epoch
+        - offline_sequence_number
+        - submitted_at
+        - items
+        - client_subtotal
+        - client_tax_total
+        - client_total
+        - payment_method
+        - payments
+      properties:
+        offline_transaction_uuid:
+          type: string
+          format: uuid
+        terminal_binding_epoch:
+          type: string
+        offline_sequence_number:
+          type: string
+        local_sequence:
+          type: string
+        business_payload_fingerprint:
+          type: string
+          minLength: 64
+          maxLength: 64
+        payment_method:
+          type: string
+          enum: [cash]
+        payments:
+          type: array
+          items:
+            type: object
+            required: [payment_method_id, amount]
+            properties:
+              payment_method_id:
+                type: string
+                format: uuid
+              amount:
+                type: number
+                minimum: 0.01
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [product_id, quantity, unit_price]
+            properties:
+              product_id:
+                type: string
+                format: uuid
+              quantity:
+                type: number
+                minimum: 0.0001
+              unit_price:
+                type: number
+                minimum: 0.01
+
+    OfflineSalesSyncResponse:
+      type: object
+      properties:
+        batch_reference:
+          type: string
+        contract_version:
+          type: string
+          example: epic-41-sync-v1
+        imports:
+          type: array
+          items:
+            $ref: '#/components/schemas/OfflineSalesSyncResult'
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/OfflineSalesSyncResult'
+
+    OfflineSalesSyncResult:
+      type: object
+      properties:
+        offline_transaction_uuid:
+          type: string
+          format: uuid
+        offline_sequence_number:
+          type: string
+        sync_status:
+          type: string
+          enum: [accepted, replayed, retryable_failed, review_required, rejected]
+        original_sync_status:
+          type: string
+          nullable: true
+          enum: [accepted, review_required, rejected]
+        server_sale_uuid:
+          type: string
+          format: uuid
+          nullable: true
+        server_sale_number:
+          type: string
+          nullable: true
+        official_invoice_number:
+          type: string
+          nullable: true
+        business_payload_fingerprint:
+          type: string
+        consequence_status:
+          type: object
+          additionalProperties:
+            type: string
+            enum: [committed, queued, pending, available, not_applicable, failed, blocked]
+        review_reason:
+          type: string
+          nullable: true
+        retryable_error_code:
+          type: string
+          nullable: true
+        contract_version:
+          type: string
 
     SubmissionStatusDTO:
       type: object
