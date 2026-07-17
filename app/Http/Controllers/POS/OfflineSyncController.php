@@ -4,6 +4,7 @@ namespace App\Http\Controllers\POS;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\POS\SyncBatchRequest;
+use App\Exceptions\HiddenOfflineResourceException;
 use App\Models\SalesMachineProfile;
 use App\Services\BranchContext;
 use App\Services\POS\OfflineSync\OfflineEnvelopeSynchronizationService;
@@ -87,6 +88,11 @@ class OfflineSyncController extends Controller
             }
 
             $batch = $this->reconciliationService->receiveImportBatch($profile, $request->validated());
+        } catch (HiddenOfflineResourceException) {
+            return response()->json([
+                'error' => 'NOT_FOUND',
+                'message' => 'Offline transaction was not found.',
+            ], 404);
         } catch (\RuntimeException $e) {
             $errCode = 'OFFLINE_NOT_ENABLED';
             if (str_contains($e->getMessage(), 'SEQUENCE_OUT_OF_ORDER') || str_contains($e->getMessage(), 'HASH_CHAIN_BROKEN')) {
@@ -162,7 +168,7 @@ class OfflineSyncController extends Controller
             ], 404);
         }
 
-        $result = $this->envelopeSynchronizationService->lookupStatus($profile, $offlineTransactionUuid);
+        $result = $this->envelopeSynchronizationService->lookupStatus($profile, $offlineTransactionUuid, request()->user());
 
         if (!$result) {
             return response()->json([

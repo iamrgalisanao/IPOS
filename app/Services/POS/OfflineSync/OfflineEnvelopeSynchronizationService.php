@@ -2,6 +2,7 @@
 
 namespace App\Services\POS\OfflineSync;
 
+use App\Exceptions\HiddenOfflineResourceException;
 use App\Models\OfflineSalesImport;
 use App\Models\OfflineSyncAttempt;
 use App\Models\OfflineSyncBatch;
@@ -30,6 +31,12 @@ class OfflineEnvelopeSynchronizationService
         protected SaleCreationService $saleCreationService,
         protected AccountingOutboxService $outboxService,
         protected AuditLogger $auditLogger,
+        protected OfflineSyncOrderingService $orderingService,
+        protected OfflineSuspectedDuplicateService $duplicateService,
+        protected OfflineSyncReviewStateService $reviewStateService,
+        protected OfflineTerminalQuarantineService $quarantineService,
+        protected OfflinePolicyDriftService $policyDriftService,
+        protected OfflineSyncStatusProjectionService $projectionService,
     ) {}
 
     public function synchronizeBatch(SalesMachineProfile $profile, array $batchPayload, User $user): array
@@ -99,7 +106,7 @@ class OfflineEnvelopeSynchronizationService
         ];
     }
 
-    public function lookupStatus(SalesMachineProfile $profile, string $offlineTransactionUuid): ?array
+    public function lookupStatus(SalesMachineProfile $profile, string $offlineTransactionUuid, ?User $viewer = null): ?array
     {
         $import = OfflineSalesImport::withoutGlobalScopes()
             ->where('tenant_id', $profile->tenant_id)
@@ -107,7 +114,7 @@ class OfflineEnvelopeSynchronizationService
             ->where('sales_machine_profile_id', $profile->id)
             ->first();
 
-        return $import ? $this->responseFor($import, replay: false) : null;
+        return $import ? $this->responseFor($import, replay: false, viewer: $viewer) : null;
     }
 
     private function synchronizeEnvelope(
@@ -131,6 +138,16 @@ class OfflineEnvelopeSynchronizationService
 
         if ($fingerprintResolution['reason'] !== null) {
             return $this->preMutationRejectedResult($rawImport, $fingerprintResolution['reason']);
+        }
+
+        if (($rawImport['tenant_id'] ?? $profile->tenant_id) !== $profile->tenant_id) {
+            $this->auditLogger->log('offline_sync_cross_tenant_blocked', metadata: [
+                'offline_transaction_uuid' => $offlineUuid,
+                'terminal_id' => $rawImport['terminal_id'] ?? $rawImport['sales_machine_profile_id'] ?? null,
+                'masked_submitted_tenant_id' => isset($rawImport['tenant_id']) ? '[masked]' : null,
+            ]);
+
+            throw new HiddenOfflineResourceException('Offline resource was not found.');
         }
 
         $clientFingerprint = $fingerprintResolution['fingerprint'];
@@ -191,7 +208,48 @@ class OfflineEnvelopeSynchronizationService
                         'original_sync_status' => $import->server_sync_status,
                     ]);
 
-                    return $this->responseFor($import->fresh(), replay: true);
+                    return $this->responseFor($import->fresh(), replay: true, viewer: $user);
+                }
+
+                if ($this->quarantineService->isEpochQuarantined($profile, $import->terminal_binding_epoch)) {
+                    return $this->applyDecisionAndRespond(
+                        $import,
+                        $attempt,
+                        OfflineSyncConflictDecision::review(
+                            reasonCode: 'review_terminal_epoch_quarantined',
+                            conflictFamily: 'terminal_state',
+                            reviewSeverity: 'critical',
+                            cashExposure: OfflineSyncReviewStateService::cashExposureFrom($rawImport['cash_status'] ?? $import->cash_status),
+                            suggestedActionCode: 'contact_security_support',
+                            blocksSuccessors: true,
+                            metadata: [
+                                'assigned_team' => 'security',
+                                'terminal_state' => 'epoch_quarantined',
+                            ]
+                        ),
+                        $profile,
+                        $user
+                    );
+                }
+
+                $terminalDecision = $this->classifyTerminalState($profile, $import, $rawImport);
+                if ($terminalDecision !== null) {
+                    return $this->applyDecisionAndRespond($import, $attempt, $terminalDecision, $profile, $user);
+                }
+
+                $orderingDecision = $this->orderingService->classify($profile, $import, $rawImport);
+                if ($orderingDecision !== null) {
+                    return $this->applyDecisionAndRespond($import, $attempt, $orderingDecision, $profile, $user);
+                }
+
+                $policyDriftDecision = $this->policyDriftService->classify($profile, $import, $rawImport);
+                if ($policyDriftDecision !== null) {
+                    return $this->applyDecisionAndRespond($import, $attempt, $policyDriftDecision, $profile, $user);
+                }
+
+                $duplicateDecision = $this->duplicateService->classify($profile, $import, $rawImport);
+                if ($duplicateDecision !== null) {
+                    return $this->applyDecisionAndRespond($import, $attempt, $duplicateDecision, $profile, $user);
                 }
 
                 $policyFailure = $this->validateEnvelopePolicy($profile, $rawImport);
@@ -245,8 +303,10 @@ class OfflineEnvelopeSynchronizationService
                     'consequence_status' => $consequenceStatus,
                 ]);
 
-                return $this->responseFor($import->fresh(), replay: false);
+                return $this->responseFor($import->fresh(), replay: false, viewer: $user);
             }, 3);
+        } catch (HiddenOfflineResourceException $exception) {
+            throw $exception;
         } catch (ValidationException $exception) {
             return $this->markFailureOutsideTransaction(
                 $profile,
@@ -514,6 +574,103 @@ class OfflineEnvelopeSynchronizationService
         return null;
     }
 
+    private function classifyTerminalState(
+        SalesMachineProfile $profile,
+        OfflineSalesImport $import,
+        array $rawImport
+    ): ?OfflineSyncConflictDecision {
+        $cashExposure = OfflineSyncReviewStateService::cashExposureFrom($rawImport['cash_status'] ?? $import->cash_status);
+
+        if (($rawImport['branch_id'] ?? $profile->branch_id) !== $profile->branch_id) {
+            return $cashExposure === 'collected'
+                ? OfflineSyncConflictDecision::review(
+                    reasonCode: 'review_cross_branch_terminal',
+                    conflictFamily: 'identity',
+                    reviewSeverity: 'high',
+                    cashExposure: $cashExposure,
+                    suggestedActionCode: 'support_review_cross_branch_terminal',
+                    metadata: ['terminal_state' => 'cross_branch']
+                )
+                : OfflineSyncConflictDecision::rejected('rejected_cross_tenant_or_branch', 'identity', $cashExposure);
+        }
+
+        if (($rawImport['terminal_compromised'] ?? false) === true
+            || ($rawImport['terminal_state'] ?? null) === 'compromised') {
+            return OfflineSyncConflictDecision::review(
+                reasonCode: 'review_terminal_compromised',
+                conflictFamily: 'terminal_state',
+                reviewSeverity: 'critical',
+                cashExposure: $cashExposure,
+                suggestedActionCode: 'security_review_terminal_quarantine',
+                blocksSuccessors: true,
+                metadata: [
+                    'assigned_team' => 'security',
+                    'terminal_state' => 'compromised',
+                ]
+            );
+        }
+
+        if (in_array($profile->activation_status, [
+            SalesMachineProfile::STATUS_REVOKED,
+            SalesMachineProfile::STATUS_SUSPENDED,
+            SalesMachineProfile::STATUS_EXPIRED,
+        ], true)) {
+            return $cashExposure === 'collected'
+                ? OfflineSyncConflictDecision::review(
+                    reasonCode: 'review_terminal_revoked_after_capture',
+                    conflictFamily: 'terminal_state',
+                    reviewSeverity: 'high',
+                    cashExposure: $cashExposure,
+                    suggestedActionCode: 'support_review_terminal_state',
+                    blocksSuccessors: true,
+                    metadata: ['terminal_state' => $profile->activation_status]
+                )
+                : OfflineSyncConflictDecision::rejected('rejected_terminal_inactive', 'terminal_state', $cashExposure);
+        }
+
+        return null;
+    }
+
+    private function applyDecisionAndRespond(
+        OfflineSalesImport $import,
+        OfflineSyncAttempt $attempt,
+        OfflineSyncConflictDecision $decision,
+        ?SalesMachineProfile $profile = null,
+        ?User $viewer = null
+    ): array {
+        $consequenceStatus = $this->emptyConsequenceStatus();
+        $fresh = $this->reviewStateService->apply($import, $attempt, $decision, $consequenceStatus);
+
+        if ($decision->reasonCode === 'review_terminal_compromised' && $profile !== null) {
+            $this->quarantineService->quarantineEpoch($profile, $fresh, $decision->reasonCode);
+        }
+
+        $this->auditDecision($fresh, $decision);
+
+        return $this->responseFor($fresh, replay: false, viewer: $viewer);
+    }
+
+    private function auditDecision(OfflineSalesImport $import, OfflineSyncConflictDecision $decision): void
+    {
+        $event = match ($decision->decision) {
+            'retryable_failed' => $decision->reasonCode === 'retry_sequence_gap_waiting'
+                ? 'offline_sync_sequence_gap_detected'
+                : 'offline_sync_conflict_retryable',
+            'rejected' => 'offline_sync_envelope_rejected',
+            default => match ($decision->reasonCode) {
+                'review_suspected_duplicate_capture' => 'offline_sync_duplicate_suspected',
+                'review_sequence_gap' => 'offline_sync_sequence_gap_escalated',
+                'review_terminal_compromised' => 'offline_sync_terminal_quarantined',
+                default => 'offline_sync_review_opened',
+            },
+        };
+
+        $this->auditLogger->log($event, $import, metadata: [
+            'offline_transaction_uuid' => $import->offline_transaction_uuid,
+            'decision' => $decision->toArray(),
+        ]);
+    }
+
     private function markDrift(OfflineSalesImport $import, OfflineSyncAttempt $attempt, string $reason): array
     {
         $consequenceStatus = $this->emptyConsequenceStatus();
@@ -549,37 +706,18 @@ class OfflineEnvelopeSynchronizationService
         $syncStatus = $cashCollected
             ? OfflineSalesImport::SYNC_REVIEW_REQUIRED
             : OfflineSalesImport::SYNC_REJECTED;
-        $consequenceStatus = $this->emptyConsequenceStatus();
+        $cashExposure = OfflineSyncReviewStateService::cashExposureFrom($rawImport['cash_status'] ?? $import->cash_status);
+        $decision = $syncStatus === OfflineSalesImport::SYNC_REVIEW_REQUIRED
+            ? OfflineSyncConflictDecision::review(
+                reasonCode: $reason,
+                conflictFamily: 'policy',
+                reviewSeverity: $cashExposure === 'collected' ? 'high' : 'medium',
+                cashExposure: $cashExposure,
+                suggestedActionCode: 'manager_review_offline_policy'
+            )
+            : OfflineSyncConflictDecision::rejected($reason, 'policy', $cashExposure);
 
-        $import->update([
-            'status' => $syncStatus === OfflineSalesImport::SYNC_REVIEW_REQUIRED
-                ? OfflineSalesImport::STATUS_CONFLICT
-                : OfflineSalesImport::STATUS_REJECTED,
-            'server_sync_status' => $syncStatus,
-            'original_sync_status' => $syncStatus,
-            'review_reason' => $syncStatus === OfflineSalesImport::SYNC_REVIEW_REQUIRED ? $reason : null,
-            'rejection_reason' => $syncStatus === OfflineSalesImport::SYNC_REJECTED ? $reason : null,
-            'consequence_status_snapshot' => $consequenceStatus,
-            'current_consequence_status' => $consequenceStatus,
-            'review_required_at' => $syncStatus === OfflineSalesImport::SYNC_REVIEW_REQUIRED ? now() : null,
-            'rejected_at' => $syncStatus === OfflineSalesImport::SYNC_REJECTED ? now() : null,
-        ]);
-
-        $attempt->update([
-            'result_status' => $syncStatus,
-            'http_status' => 200,
-            'response_finished_at' => now(),
-        ]);
-
-        $this->auditLogger->log(
-            $syncStatus === OfflineSalesImport::SYNC_REVIEW_REQUIRED
-                ? 'offline_sync_envelope_review_required'
-                : 'offline_sync_envelope_rejected',
-            $import->fresh(),
-            metadata: ['reason' => $reason]
-        );
-
-        return $this->responseFor($import->fresh(), replay: false);
+        return $this->applyDecisionAndRespond($import, $attempt, $decision);
     }
 
     private function createSaleFromEnvelope(
@@ -770,32 +908,9 @@ class OfflineEnvelopeSynchronizationService
         return json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
-    private function responseFor(OfflineSalesImport $import, bool $replay): array
+    private function responseFor(OfflineSalesImport $import, bool $replay, ?User $viewer = null): array
     {
-        $sale = $import->reconciledSale;
-        $syncStatus = $replay ? OfflineSalesImport::SYNC_REPLAYED : $import->server_sync_status;
-        $consequenceStatus = $import->acceptance_consequence_snapshot
-            ?: $import->current_consequence_status
-            ?: $import->consequence_status_snapshot
-            ?: $this->emptyConsequenceStatus();
-
-        return array_filter([
-            'offline_transaction_uuid' => $import->offline_transaction_uuid,
-            'offline_sequence_number' => $import->offline_sequence_number,
-            'status' => $syncStatus,
-            'sync_status' => $syncStatus,
-            'original_sync_status' => $replay ? $import->server_sync_status : $import->original_sync_status,
-            'server_sale_uuid' => $sale?->id,
-            'server_sale_number' => $sale?->sale_number,
-            'official_invoice_number' => $import->official_invoice_number ?? $sale?->principal_invoice_number,
-            'local_reference' => Arr::get($import->raw_payload ?? [], 'local_transaction_reference'),
-            'business_payload_fingerprint' => $import->server_payload_fingerprint,
-            'consequence_status' => $consequenceStatus,
-            'review_reason' => $import->review_reason,
-            'reason' => $import->rejection_reason ?: $import->review_reason,
-            'retryable_error_code' => $import->retryable_error_code,
-            'contract_version' => $import->sync_contract_version ?? self::CONTRACT_VERSION,
-        ], fn ($value) => $value !== null);
+        return $this->projectionService->project($import, $replay, $viewer);
     }
 
     private function emptyConsequenceStatus(): array

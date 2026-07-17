@@ -45,7 +45,7 @@ Reason:
 | 41.1 | Done | - | - |
 | 41.2 | Implemented - Local Verification Complete | - | - |
 | 41.3 | Implemented - Local Verification Complete | - | - |
-| 41.4 | Planned | - | - |
+| 41.4 | Approved for Implementation | - | - |
 | 41.5 | Planned | - | - |
 | 41.6 | Planned | - | - |
 | 41.7 | Planned | - | - |
