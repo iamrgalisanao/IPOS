@@ -70,6 +70,12 @@ class SyncBatchRequest extends FormRequest
             'imports.*.last_sync_attempt_at'     => ['sometimes', 'nullable', 'date'],
             'imports.*.previous_hash'            => ['sometimes', 'nullable', 'string', 'size:64'],
             'imports.*.row_hash'                 => ['sometimes', 'nullable', 'string', 'size:64'],
+            'imports.*.offline_transaction_uuid' => ['sometimes', 'nullable', 'uuid'],
+            'imports.*.terminal_binding_epoch'   => ['sometimes', 'nullable', 'string', 'max:128'],
+            'imports.*.queue_state_revision'     => ['sometimes', 'integer', 'min:1'],
+            'imports.*.sync_attempt_id'          => ['sometimes', 'nullable', 'uuid'],
+            'imports.*.lease_id'                 => ['sometimes', 'nullable', 'uuid'],
+            'imports.*.attempt_generation'       => ['sometimes', 'integer', 'min:1'],
         ];
     }
 

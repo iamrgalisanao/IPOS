@@ -170,6 +170,8 @@ const bootstrapPayload = {
     ],
     categories: [],
     tax_categories: [],
+    payment_methods: [],
+    promotion_rules: [],
     tenant_context: { id: 'tenant-1', tax_mode: 'inclusive', offline_sales_enabled: true },
     branch_context: { id: 'branch-1', status: 'active', offline_sales_enabled: true },
     machine_profile_context: {
@@ -319,6 +321,11 @@ test('Story 28.11 offline queue and sync hardening', async (t) => {
             assert.strictEqual(payload.imports[0].catalog_version_hash, 'catalog-hash-123');
             assert.strictEqual(payload.imports[0].payment_methods_version_hash, 'payment-hash-123');
             assert.strictEqual(payload.imports[0].config_snapshot.config_snapshot_hash, 'snapshot-hash-123');
+            assert.ok(payload.imports[0].offline_transaction_uuid);
+            assert.ok(payload.imports[0].sync_attempt_id);
+            assert.ok(payload.imports[0].lease_id);
+            assert.strictEqual(payload.imports[0].attempt_generation, 1);
+            assert.ok(payload.imports[0].queue_state_revision >= 3);
 
             return {
                 status: 202,
@@ -339,6 +346,10 @@ test('Story 28.11 offline queue and sync hardening', async (t) => {
         const synced = records.find((record) => record.id === first.id);
         const duplicate = records.find((record) => record.id === second.id);
         assert.strictEqual(synced.status, 'synced');
+        assert.strictEqual(synced.queue_state, 'processing_complete');
+        assert.strictEqual(synced.server_state, 'accepted');
+        assert.strictEqual(synced.resolution_state, 'resolved_posted');
+        assert.strictEqual(synced.lease.lease_id, null);
         assert.strictEqual(duplicate.status, 'synced');
 
         const summary = await offlineSalesQueue.getStatusSummary();
@@ -434,6 +445,40 @@ test('Story 28.11 offline queue and sync hardening', async (t) => {
         assert.match(updated.error_message, /422/);
     });
 
+    await t.test('leases block duplicate workers, expired leases retry, and stale responses are ignored', async () => {
+        const record = await offlineSalesQueue.appendTransaction({
+            submitted_at: '2026-05-20T12:00:00.000Z',
+            items: [{ product_id: 'product-1', quantity: 1, unit_price: '125.00' }],
+            client_subtotal: '111.61',
+            client_tax_total: '13.39',
+            client_total: '125.00',
+        }, { subtotal: '111.61', tax: '13.39', total: '125.00' }, { prefix: 'INV-T01-', initialNextValue: 1 });
+
+        const leased = await offlineSalesQueue.acquireLease(record.id, 'owner-a', 'test-worker', 'test', 45_000);
+        await assert.rejects(
+            () => offlineSalesQueue.acquireLease(record.id, 'owner-a', 'test-worker', 'test', 45_000),
+            /already leased/
+        );
+
+        const stored = sharedDb.stores.get('transactions').dataMap.get(record.id);
+        stored.lease.lease_expires_at = new Date(Date.now() - 1_000).toISOString();
+        const retryable = await offlineSalesQueue.getQueuedTransactions();
+        assert.strictEqual(retryable.some((item) => item.id === record.id), true);
+
+        stored.last_sync_attempt_id = '00000000-0000-4000-8000-000000000002';
+        stored.lease.lease_expires_at = new Date(Date.now() + 45_000).toISOString();
+        await offlineSalesQueue.updateTransactionStatus(record.id, 'synced', undefined, {
+            leaseId: leased.lease.lease_id,
+            syncAttemptId: leased.last_sync_attempt_id,
+            attemptGeneration: leased.last_attempt_generation,
+            ownerInstanceId: 'owner-a',
+        });
+
+        const afterStale = sharedDb.stores.get('transactions').dataMap.get(record.id);
+        assert.strictEqual(afterStale.status, 'syncing');
+        assert.strictEqual(afterStale.queue_state, 'leased');
+    });
+
     await t.test('diagnostics bundle is support-safe and includes hash-chain status', async () => {
         const record = await offlineSalesQueue.appendTransaction({
             submitted_at: '2026-05-20T12:00:00.000Z',
@@ -451,11 +496,19 @@ test('Story 28.11 offline queue and sync hardening', async (t) => {
 
         assert.strictEqual(bundle.storage.indexed_db_available, true);
         assert.strictEqual(bundle.storage.database_name, 'ipos_pos_offline_queue');
-        assert.strictEqual(bundle.storage.database_version, 1);
+        assert.strictEqual(bundle.storage.database_version, 2);
+        assert.strictEqual(bundle.storage.persistent_storage_capability.supported, false);
         assert.strictEqual(bundle.hash_chain_valid, true);
         assert.strictEqual(bundle.active_record_count, 1);
         assert.strictEqual(bundle.historical_record_count, 1);
+        assert.strictEqual(bundle.tombstone_count, 0);
         assert.strictEqual(bundle.records[0].offline_sequence, record.offline_sequence);
+        assert.strictEqual(bundle.records[0].persistence_state, 'durably_captured');
+        assert.strictEqual(bundle.records[0].queue_state, 'pending');
+        assert.strictEqual(bundle.records[0].server_state, 'not_submitted');
+        assert.strictEqual(bundle.records[0].resolution_state, 'none');
+        assert.strictEqual(bundle.records[0].retention_state, 'full_payload');
+        assert.ok(bundle.records[0].queue_state_revision >= 2);
         assert.strictEqual(bundle.records[0].terminal_id, 'terminal-1');
         assert.strictEqual(bundle.records[0].branch_id, 'branch-1');
         assert.strictEqual(bundle.records[0].cashier_shift_id, 'shift-1');
@@ -503,8 +556,10 @@ test('Story 28.11 offline queue and sync hardening', async (t) => {
 
         const result = await offlineSalesQueue.pruneResolvedTransactions(7, new Date('2026-06-01T12:00:00.000Z'));
         const remaining = await offlineSalesQueue.getAllTransactions();
+        const diagnostics = await offlineSalesQueue.getDiagnosticsBundle();
 
         assert.deepStrictEqual(result, { pruned: 1, retained: 2 });
+        assert.strictEqual(diagnostics.tombstone_count, 1);
         assert.strictEqual(remaining.some((record) => record.id === oldSynced.id), false);
         assert.strictEqual(remaining.some((record) => record.id === failed.id), true);
         assert.strictEqual(remaining.some((record) => record.id === conflict.id), true);
