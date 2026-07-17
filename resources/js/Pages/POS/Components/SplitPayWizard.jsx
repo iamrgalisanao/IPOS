@@ -2,7 +2,6 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { X, Plus, Trash2, CreditCard, Banknote, AlertCircle, CheckCircle2, Loader2, Wallet, Landmark, Layers } from 'lucide-react';
 import { calculatePaymentTotals, calculatePaymentProgress, validatePaymentRows, buildSplitPaymentPayload, requiresReference, isCashPayment, calculateCashChange } from '../helpers/splitPaymentHelper';
 import { isOffline } from '@/POS/offline/offlineGuards';
-import { offlinePaymentQueue } from '@/POS/offline/offlinePaymentQueue';
 
 // Helper to map DB payment methods to one of the 5 standard categories
 const getMappedMethod = (methodNameOrCode) => {
@@ -109,6 +108,11 @@ export default function SplitPayWizard({ sale, paymentMethods = [], onClose, onP
     }, [activeField.rowId, payableRows, remainingBalance, rows]);
 
     const addRow = () => {
+        if (currentlyOffline) {
+            setError('Offline capture is cash-only and does not support split or mixed tender payments.');
+            return;
+        }
+
         const remaining = remainingBalance;
         if (remaining <= 0) return;
 
@@ -170,36 +174,7 @@ export default function SplitPayWizard({ sale, paymentMethods = [], onClose, onP
         }
 
         if (isOffline()) {
-            if (!rowsUseCashOnly) {
-                setError('Offline completion for an existing sale only supports cash payments. Reconnect for card, e-wallet, bank, or other payment methods.');
-                return;
-            }
-
-            setIsSubmitting(true);
-            setError(null);
-
-            try {
-                const payload = buildSplitPaymentPayload(validationRows);
-                offlinePaymentQueue.queuePayment({
-                    sale_id: sale.id,
-                    payload,
-                    rows: validationRows,
-                    context: {
-                        tenant_id: tenantId,
-                        branch_id: branchId,
-                    },
-                });
-                onPaymentRecorded({
-                    status: 'queued_offline_payment',
-                    sale_id: sale.id,
-                    sale_status: 'payment_queued',
-                    rows: validationRows,
-                });
-            } catch (err) {
-                setError(err?.message || 'Offline payment could not be queued. Please try again.');
-            } finally {
-                setIsSubmitting(false);
-            }
+            setError('Reconnect to finalize payment for this server-created sale. Offline mode only supports standalone cash sale capture.');
             return;
         }
 
@@ -271,7 +246,7 @@ export default function SplitPayWizard({ sale, paymentMethods = [], onClose, onP
         const currentlyOffline = isOffline() || offlineCaptureMode;
         return paymentMethods
             .filter(m => getMappedMethod(m.code || m.name) === key)
-            .filter(m => !currentlyOffline || m.allow_offline);
+            .filter(m => !currentlyOffline || isCashPayment(m));
     };
 
     // Dynamic Quick Cash Bill Denominations based on current amount (Requirement 6)
@@ -368,7 +343,7 @@ export default function SplitPayWizard({ sale, paymentMethods = [], onClose, onP
                     <div>
                         <h2 className="text-base font-black text-white flex items-center gap-2 tracking-wide">
                             <CreditCard className="w-4.5 h-4.5 text-indigo-400" />
-                            SPLIT PAYMENT WIZARD
+                            {offlineCaptureMode ? 'CASH PAYMENT' : 'SPLIT PAYMENT WIZARD'}
                         </h2>
                         <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5 tracking-wider">Sale ID: {sale.id.substring(0, 8)}...</p>
                     </div>
@@ -471,7 +446,7 @@ export default function SplitPayWizard({ sale, paymentMethods = [], onClose, onP
                                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                                         {BUTTONS.map(btn => {
                                                             const terminalOffline = isOffline() || offlineCaptureMode;
-                                                            const isAvailable = paymentMethods.some(m => getMappedMethod(m.code || m.name) === btn.key && (!terminalOffline || m.allow_offline));
+                                                            const isAvailable = paymentMethods.some(m => getMappedMethod(m.code || m.name) === btn.key && (!terminalOffline || isCashPayment(m)));
                                                             const Icon = btn.icon;
 
                                                             return (
