@@ -43,7 +43,7 @@ Reason:
 | Story | Status | Owner | Sprint |
 | --- | --- | --- | --- |
 | 41.1 | Done | - | - |
-| 41.2 | Draft for Review | - | - |
+| 41.2 | Approved for Implementation | - | - |
 | 41.3 | Planned | - | - |
 | 41.4 | Planned | - | - |
 | 41.5 | Planned | - | - |

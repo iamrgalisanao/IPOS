@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft for Review
+Approved for Implementation
 
 Date: 2026-07-17
 
@@ -98,6 +98,37 @@ Minimum local stores:
 
 The immutable envelope and mutable state must not be stored as one repeatedly overwritten object.
 
+Recommended indexes:
+
+```text
+offline_envelopes:
+- offline_transaction_uuid
+- [terminal_id, terminal_binding_epoch, local_sequence]
+
+offline_queue_state:
+- queue_status
+- server_status
+- resolution_status
+- retention_status
+- next_retry_at
+- lease_expires_at
+- cashier_id
+- shift_id
+
+offline_status_events:
+- offline_transaction_uuid
+- occurred_at
+
+offline_sync_attempts:
+- offline_transaction_uuid
+- sync_attempt_id
+- attempt_started_at
+
+offline_tombstones:
+- offline_transaction_uuid
+- server_sale_uuid
+```
+
 ## 2. State Dimensions
 
 Story 41.2 must not overload one queue-state enum with persistence, processing, server outcome, resolution, and retention meanings.
@@ -122,7 +153,7 @@ leased
 syncing
 retry_scheduled
 blocked
-terminal
+processing_complete
 ```
 
 ### Server Outcome State
@@ -150,7 +181,7 @@ resolved_rejected
 
 ```text
 full_payload
-accepted_retained
+retained_full
 compacted
 purged
 ```
@@ -175,6 +206,82 @@ Each state dimension must define:
 4. whether cashier action is allowed,
 5. whether final shift close is blocked,
 6. whether support action is required.
+
+### Legal Transition Matrices
+
+Persistence transitions:
+
+```text
+creating -> persisting
+persisting -> durably_captured
+persisting -> capture_uncertain
+persisting -> storage_failed
+capture_uncertain -> durably_captured
+capture_uncertain -> storage_failed
+```
+
+Forbidden persistence transitions:
+
+```text
+durably_captured -> persisting
+durably_captured -> storage_failed
+```
+
+A later corruption issue is diagnostic/support evidence and must not rewrite original capture history.
+
+Queue processing transitions:
+
+```text
+pending -> leased
+leased -> syncing
+leased -> pending
+syncing -> pending
+syncing -> retry_scheduled
+syncing -> blocked
+syncing -> processing_complete
+retry_scheduled -> leased
+blocked -> pending
+blocked -> processing_complete
+```
+
+`processing_complete` means local queue processing is done for this record because the server result, rejection, or support-resolution state no longer allows ordinary sync processing.
+
+Server outcome transitions:
+
+```text
+not_submitted -> retryable_failed
+not_submitted -> accepted
+not_submitted -> replayed
+not_submitted -> review_required
+not_submitted -> rejected
+
+retryable_failed -> retryable_failed
+retryable_failed -> accepted
+retryable_failed -> replayed
+retryable_failed -> review_required
+retryable_failed -> rejected
+```
+
+After `accepted`, `replayed`, `review_required`, or `rejected`, ordinary synchronization must not replace the result without a formal support or resolution event.
+
+Resolution transitions:
+
+```text
+none -> pending_support
+pending_support -> resolved_posted
+pending_support -> resolved_cash_returned
+pending_support -> resolved_rejected
+```
+
+Retention transitions:
+
+```text
+full_payload -> retained_full
+retained_full -> compacted
+compacted -> purged
+```
+
+Review-required, cash-collected, and capture-uncertain records must not enter compaction unless formally resolved and retention rules allow it.
 
 ## 3. Queue Identity
 
@@ -216,6 +323,16 @@ The following must happen within one IndexedDB transaction:
 
 The transaction commits all five or none.
 
+IndexedDB transaction rules:
+
+1. all atomic capture writes occur in one read-write transaction,
+2. no asynchronous network operation occurs inside that transaction,
+3. envelope construction and fingerprint generation happen before opening the write transaction where practical,
+4. sequence allocation and writes happen inside the transaction,
+5. the application treats transaction completion as the commit signal,
+6. read-back verification occurs after completion,
+7. transaction abort leaves no partial records.
+
 Invalid partial states include:
 
 1. envelope exists without queue state,
@@ -252,6 +369,22 @@ The business payload fingerprint:
 6. handles explicit nulls consistently,
 7. uses a versioned algorithm,
 8. is used for server idempotency and drift detection.
+
+Canonical serialization rules:
+
+1. decimals use base-10 canonical strings,
+2. decimals use no scientific notation,
+3. decimals use no locale separators,
+4. each monetary or quantity domain uses either fixed scale or a documented trailing-zero normalization rule,
+5. timestamps use ISO 8601,
+6. timestamps include explicit timezone offset or UTC `Z`,
+7. timestamps use fixed fractional-second precision,
+8. arrays preserve semantically defined ordering,
+9. object keys use stable lexicographic ordering,
+10. strings use a documented Unicode normalization form,
+11. missing values and explicit `null` are treated consistently by schema version,
+12. booleans serialize as JSON booleans,
+13. currency codes use uppercase ISO-style codes.
 
 ### Queue Integrity Checksum
 
@@ -295,14 +428,47 @@ Rules:
 6. foreground and service-worker processors use the same lease contract,
 7. lease scope must be explicit.
 
-Recommended first-release model:
+First-release model:
 
 ```text
-per-record lease
-optional terminal-level coordination lock
+mandatory per-record lease
+terminal-level synchronization coordinator
 ```
 
+Rules:
+
+1. the per-record lease owns the record transition,
+2. the terminal-level coordinator elects which records are eligible,
+3. the coordinator lock does not own the record itself,
+4. sequence and predecessor rules are evaluated before acquiring a record lease,
+5. workers may process more than one independent record only when Story 41.4 allows it.
+
 This allows unrelated records to continue where sequence dependency permits while still preventing duplicate processing of the same record.
+
+## 7.1 Projection Revision
+
+Mutable queue projections must include:
+
+```text
+queue_state_revision
+```
+
+Every mutation uses compare-and-swap semantics:
+
+```text
+update where revision = expected_revision
+then revision = revision + 1
+```
+
+For IndexedDB, this is implemented by reading and updating within the same transaction.
+
+This protects:
+
+1. retry scheduling,
+2. support blocking,
+3. lease acquisition,
+4. resolution transitions,
+5. cash-state updates.
 
 ## 8. Stale Response Protection
 
@@ -335,6 +501,17 @@ last_retryable_error_code
 retry_policy_version
 ```
 
+Error fields must be separated:
+
+```text
+local_error_code
+network_error_code
+server_error_code
+review_reason
+```
+
+Do not collapse storage corruption, connectivity timeout, HTTP failure, server rejection, and review classification into one `last_error` field.
+
 Recommended backoff:
 
 ```text
@@ -353,6 +530,15 @@ Rules:
 6. manual retry cannot bypass status restrictions,
 7. manual retry cannot bypass `next_retry_at` excessively,
 8. retry behavior remains observable.
+
+Retry exhaustion:
+
+1. retry count may be large, but automatic retry cadence becomes capped,
+2. exceeding a configured alert threshold changes queue health to `support_required`,
+3. record remains `retryable_failed` unless error classification changes,
+4. retry exhaustion does not automatically reclassify a record as rejected,
+5. manual retry remains policy controlled,
+6. cash exposure remains visible.
 
 ## 10. Network Outcome Uncertainty
 
@@ -394,6 +580,39 @@ Rules:
 3. anything exceeding the maximum is blocked before capture success,
 4. exposure is based on unresolved offline sale totals or net collected exposure, not gross tender before change.
 
+Pending count includes unresolved records where:
+
+```text
+persistence_status = durably_captured or capture_uncertain
+retention_status != purged
+resolution_status is not resolved_posted/resolved_cash_returned/resolved_rejected
+```
+
+Pending count excludes:
+
+1. accepted and safely retained records,
+2. fully resolved returned-cash records,
+3. purged tombstones.
+
+Cash exposure includes:
+
+1. collected,
+2. disputed,
+3. return pending,
+4. capture uncertain where cash may have been collected.
+
+Cash exposure excludes:
+
+1. not confirmed cash.
+
+Age basis:
+
+```text
+estimated_offline_age
+```
+
+`estimated_offline_age` is derived from current device time versus `captured_at_device` adjusted by last trusted server offset. It is an offline safety check, not authoritative transaction time. If device clock evidence becomes unreliable, queue health becomes `support_required` or capture is blocked according to policy.
+
 ## 12. Capacity Preflight
 
 Required capacity fields:
@@ -423,6 +642,24 @@ Rules:
 5. show actionable guidance,
 6. never tell the cashier to clear browser storage when unsynced records exist.
 
+Persistent storage capability:
+
+```text
+storage_persistence_status:
+- granted
+- denied
+- unsupported
+- unknown
+```
+
+Rules:
+
+1. request persistent storage where supported,
+2. record whether it was granted,
+3. denial is not automatic failure unless tenant policy requires it,
+4. warn or reduce offline limits where storage is best-effort,
+5. never promise browser persistent storage is equivalent to server durability.
+
 ## 13. Uncertain Local Capture Recovery
 
 On app restart, the queue must:
@@ -443,6 +680,15 @@ accepted_tombstone_only
 ```
 
 Malformed records are not automatically deleted.
+
+Startup integrity scan rules:
+
+1. scan unresolved and recently compacted records first,
+2. keep indexes for status, terminal epoch, local sequence, and retention class,
+3. validate checksums lazily for accepted compacted history where appropriate,
+4. always verify unresolved records before sync,
+5. show startup recovery status if the scan is still running,
+6. block new offline capture until critical queue integrity checks finish.
 
 ## 14. Schema Migration
 
@@ -616,14 +862,57 @@ Queue extraction or diagnostics export requires:
 
 Ordinary cashiers cannot export raw queue payloads.
 
+Support export metadata:
+
+```text
+export_id
+generated_at
+generated_by
+terminal_id
+terminal_binding_epoch
+queue_schema_version
+record_count
+export_checksum
+filter_summary
+```
+
+For each record, include immutable identifiers and current projections. Export must not rewrite or repair local data. It is a snapshot of provisional local evidence, not a new authoritative record.
+
+## 22. Local Data Protection
+
+First-release security decision:
+
+1. minimize sensitive data stored locally,
+2. rely on OS/browser profile protection for baseline local storage isolation,
+3. never store secrets, PINs, approval credentials, card data, or raw encryption keys,
+4. apply field masking in cashier and support diagnostics,
+5. use encryption only where a device-bound or server-issued key design exists,
+6. document residual risk of browser-local storage.
+
+Browser-only encryption with a key stored beside encrypted data must not be represented as strong encryption.
+
+## 23. Local Diagnostic Counters
+
+Expose local diagnostic counters for pilot and support:
+
+```text
+lease_contention_count
+stale_response_ignored_count
+checksum_failure_count
+schema_migration_failure_count
+storage_write_failure_count
+capture_uncertain_count
+retry_exhausted_count
+```
+
 ## Implementation Slices
 
-1. Queue schema and identity.
-2. Durable capture.
-3. Queue state and events.
+1. Schema and compatibility.
+2. Atomic capture.
+3. Projection and event model.
 4. Processing ownership.
-5. Retention and compatibility.
-6. Diagnostics and regression.
+5. Retention and recovery.
+6. Operator and regression coverage.
 
 ## Acceptance Criteria
 
@@ -652,6 +941,14 @@ Ordinary cashiers cannot export raw queue payloads.
 23. Cash collection and return remain separately traceable with actor, amount, time, reason, support reference, and acknowledgment evidence.
 24. Operator dashboard shows queue health, pending count, cash exposure, oldest age, last sync, and required action without sensitive payloads.
 25. New client or service worker builds process approved older contracts safely or preserve records in support-required state.
+26. Any state-dimension transition must exist in the approved transition matrix or be rejected and recorded as an integrity event.
+27. Queue projection mutations use revision/compare-and-swap protection.
+28. IndexedDB atomic capture performs no network work and commits sequence, envelope, projection, and capture event in one transaction before read-back verification.
+29. Queue limits count only unresolved records and applicable cash states according to the approved counting contract.
+30. Persistent storage capability is requested where supported and recorded without presenting browser storage as central durability.
+31. Retry exhaustion keeps the record preserved, sets queue health to `support_required`, and does not silently reject or purge.
+32. Startup integrity scan completes critical identity, schema, projection, event, and checksum checks before new offline capture or synchronization proceeds.
+33. Local diagnostics expose lease contention, stale responses, checksum failures, migration failures, storage write failures, capture uncertainty, and retry exhaustion.
 
 ## Test Planning Notes
 
@@ -676,7 +973,17 @@ Later implementation should include tests for:
 17. cashier switching access rules,
 18. operator dashboard projection,
 19. support export authorization and masking,
-20. multi-tab and foreground/service-worker race handling.
+20. multi-tab and foreground/service-worker race handling,
+21. legal transition matrix enforcement,
+22. queue projection revision conflict,
+23. IndexedDB transaction boundary without network work,
+24. policy-limit population and age basis,
+25. persistent storage capability handling,
+26. retry exhaustion,
+27. startup integrity scan,
+28. support export metadata,
+29. local data-protection masking,
+30. local diagnostic counters.
 
 ## Definition of Done
 
@@ -690,5 +997,8 @@ Story 41.2 is ready for implementation when:
 6. retry and network-uncertainty behavior are approved,
 7. retention and migration rules are approved,
 8. dashboard and support diagnostics contracts are approved,
-9. acceptance criteria are sufficient for implementation,
-10. story index and implementation guide status are updated.
+9. queue projection revision behavior is approved,
+10. persistent storage and encryption/key-management boundary is approved,
+11. startup integrity scan and indexes are approved,
+12. acceptance criteria are sufficient for implementation,
+13. story index and implementation guide status are updated.
