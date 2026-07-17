@@ -14,6 +14,7 @@ use App\Models\Role;
 use App\Models\Sale;
 use App\Models\SalePayment;
 use App\Models\SalesMachineProfile;
+use App\Models\Shift;
 use App\Models\TaxCategory;
 use App\Models\Tenant;
 use App\Models\User;
@@ -34,6 +35,7 @@ class OfflineSyncEpic41ContractTest extends TestCase
     private SalesMachineProfile $profile;
     private Product $product;
     private PaymentMethod $cashMethod;
+    private Shift $shift;
 
     protected function setUp(): void
     {
@@ -108,6 +110,15 @@ class OfflineSyncEpic41ContractTest extends TestCase
             'name' => 'Cash',
             'type' => 'cash',
             'status' => 'active',
+        ]);
+
+        $this->shift = Shift::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branch->id,
+            'cashier_id' => $this->cashier->id,
+            'opened_by' => $this->cashier->id,
+            'status' => Shift::STATUS_OPEN,
+            'opened_at' => now()->subHour(),
         ]);
     }
 
@@ -209,13 +220,95 @@ class OfflineSyncEpic41ContractTest extends TestCase
             'payments' => [[
                 'payment_method_id' => $card->id,
                 'amount' => 300.00,
+                'payment_method_type_snapshot' => 'card',
+                'payment_method_name_snapshot' => 'Card',
+                'payment_method_version' => 'payment-method-v1',
+                'payment_method_configuration_hash' => str_repeat('e', 64),
             ]],
             'cash_status' => 'collected',
         ]);
 
         $this->postSync($this->batchPayload($import))->assertOk()
             ->assertJsonPath('imports.0.sync_status', 'review_required')
-            ->assertJsonPath('imports.0.review_reason', 'rejected_non_cash_tender');
+            ->assertJsonPath('imports.0.review_reason', 'review_non_cash_tender_cash_collected');
+
+        $this->assertSame(0, Sale::count());
+        $this->assertSame(0, SalePayment::count());
+    }
+
+    public function test_missing_shift_authority_with_collected_cash_enters_review_required(): void
+    {
+        $import = $this->importPayload([
+            'shift_authorization_id' => null,
+            'cash_status' => 'collected',
+        ]);
+
+        $this->postSync($this->batchPayload($import))->assertOk()
+            ->assertJsonPath('imports.0.sync_status', 'review_required')
+            ->assertJsonPath('imports.0.review_reason', 'review_missing_shift_authority_cash_collected');
+
+        $this->assertSame(0, Sale::count());
+        $this->assertSame(0, SalePayment::count());
+    }
+
+    public function test_stale_shift_authority_with_collected_cash_enters_review_required(): void
+    {
+        $import = $this->importPayload([
+            'authorized_offline_until' => now()->subMinute()->toIso8601String(),
+            'cash_status' => 'collected',
+        ]);
+
+        $this->postSync($this->batchPayload($import))->assertOk()
+            ->assertJsonPath('imports.0.sync_status', 'review_required')
+            ->assertJsonPath('imports.0.review_reason', 'review_stale_shift_authority_cash_collected');
+
+        $this->assertSame(0, Sale::count());
+        $this->assertSame(0, SalePayment::count());
+    }
+
+    public function test_statutory_discount_with_collected_cash_enters_review_required(): void
+    {
+        $import = $this->importPayload([
+            'statutory_discount' => [
+                'type' => 'senior',
+                'amount' => 42.00,
+            ],
+            'cash_status' => 'collected',
+        ]);
+
+        $this->postSync($this->batchPayload($import))->assertOk()
+            ->assertJsonPath('imports.0.sync_status', 'review_required')
+            ->assertJsonPath('imports.0.review_reason', 'review_statutory_discount_offline_cash_collected');
+
+        $this->assertSame(0, Sale::count());
+        $this->assertSame(0, SalePayment::count());
+    }
+
+    public function test_official_receipt_identity_before_cash_collection_is_rejected(): void
+    {
+        $import = $this->importPayload([
+            'official_receipt_number' => 'OR-0001',
+            'cash_status' => 'not_collected',
+        ]);
+
+        $this->postSync($this->batchPayload($import))->assertOk()
+            ->assertJsonPath('imports.0.sync_status', 'rejected')
+            ->assertJsonPath('imports.0.reason', 'rejected_official_receipt_identity_offline');
+
+        $this->assertSame(0, Sale::count());
+        $this->assertSame(0, SalePayment::count());
+    }
+
+    public function test_unknown_payload_schema_with_collected_cash_enters_review_required(): void
+    {
+        $import = $this->importPayload([
+            'schema_version' => 99,
+            'cash_status' => 'collected',
+        ]);
+
+        $this->postSync($this->batchPayload($import))->assertOk()
+            ->assertJsonPath('imports.0.sync_status', 'review_required')
+            ->assertJsonPath('imports.0.review_reason', 'review_unknown_offline_payload_schema_cash_collected');
 
         $this->assertSame(0, Sale::count());
         $this->assertSame(0, SalePayment::count());
@@ -313,7 +406,7 @@ class OfflineSyncEpic41ContractTest extends TestCase
 
         $this->postSync($this->batchPayload($import))->assertOk()
             ->assertJsonPath('imports.0.sync_status', 'review_required')
-            ->assertJsonPath('imports.0.review_reason', 'rejected_non_cash_tender');
+            ->assertJsonPath('imports.0.review_reason', 'review_non_cash_tender_cash_collected');
 
         $this->assertSame(0, Sale::count());
         $this->assertSame(0, SalePayment::count());
@@ -329,7 +422,7 @@ class OfflineSyncEpic41ContractTest extends TestCase
 
         $this->postSync($this->batchPayload($import))->assertOk()
             ->assertJsonPath('imports.0.sync_status', 'review_required')
-            ->assertJsonPath('imports.0.review_reason', 'rejected_missing_payment_evidence');
+            ->assertJsonPath('imports.0.review_reason', 'review_missing_payment_evidence_cash_collected');
 
         $this->assertSame(0, Sale::count());
         $this->assertSame(0, SalePayment::count());
@@ -660,6 +753,7 @@ class OfflineSyncEpic41ContractTest extends TestCase
     {
         $uuid = $overrides['offline_transaction_uuid'] ?? Str::uuid()->toString();
         $payload = array_replace_recursive([
+            'schema_version' => 2,
             'offline_transaction_uuid' => $uuid,
             'tenant_id' => $this->tenant->id,
             'branch_id' => $this->branch->id,
@@ -670,8 +764,16 @@ class OfflineSyncEpic41ContractTest extends TestCase
             'local_sequence' => '1',
             'user_id' => $this->cashier->id,
             'cashier_id' => $this->cashier->id,
-            'submitted_at' => '2026-07-17T08:00:00+08:00',
-            'terminal_timestamp' => '2026-07-17T08:00:00+08:00',
+            'cashier_shift_id' => $this->shift->id,
+            'shift_authorization_id' => 'shift-auth-'.$this->shift->id,
+            'shift_authorization_policy_version' => 'offline-shift-authority-v1',
+            'shift_authorization_issued_at' => now()->subMinutes(10)->toIso8601String(),
+            'authorized_offline_until' => now()->addHours(12)->toIso8601String(),
+            'shift_status_snapshot' => 'open',
+            'shift_opened_at' => now()->subHour()->toIso8601String(),
+            'shift_cached_at' => now()->subMinutes(10)->toIso8601String(),
+            'submitted_at' => now()->toIso8601String(),
+            'terminal_timestamp' => now()->toIso8601String(),
             'timezone' => 'Asia/Manila',
             'items' => [[
                 'product_id' => $this->product->id,
@@ -685,6 +787,12 @@ class OfflineSyncEpic41ContractTest extends TestCase
             'payments' => [[
                 'payment_method_id' => $this->cashMethod->id,
                 'amount' => 300.00,
+                'amount_centavos' => 30000,
+                'payment_method_type_snapshot' => 'cash',
+                'payment_method_name_snapshot' => 'Cash',
+                'payment_method_version' => 'payment-method-v1',
+                'payment_method_configured_at' => now()->subDay()->toIso8601String(),
+                'payment_method_configuration_hash' => str_repeat('e', 64),
             ]],
             'catalog_version_hash' => str_repeat('a', 64),
             'tax_configuration_version_hash' => str_repeat('b', 64),

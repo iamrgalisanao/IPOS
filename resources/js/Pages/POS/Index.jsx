@@ -24,6 +24,9 @@ import { validateCheckoutAllowed, isOffline, resolveOfflineCaptureReadiness } fr
 import { offlineSalesQueue } from '@/POS/offline/offlineSalesQueue';
 import { offlineSyncManager } from '@/POS/offline/offlineSyncManager';
 import { offlinePaymentQueue } from '@/POS/offline/offlinePaymentQueue';
+import { buildPaymentMethodSnapshot } from '@/POS/offline/offlinePaymentPolicy';
+import { buildShiftAuthoritySnapshot, validateShiftAuthoritySnapshot } from '@/POS/offline/offlineShiftAuthority';
+import { buildOfflineAcknowledgmentPrintEvent } from '@/POS/offline/offlineDocumentPolicy';
 import { useConnectivityStore } from '@/POS/offline/connectivityStore';
 import ConnectivityBanner from './Components/ConnectivityBanner';
 import StaleLayoutBanner from './Components/StaleLayoutBanner';
@@ -547,6 +550,14 @@ export default function Index({ categories, initial_products, payment_methods, d
             throw new Error('Offline cash capture requires an active Cash payment method. Reconnect or configure Cash before continuing.');
         }
 
+        const capturedAt = new Date().toISOString();
+        const shiftAuthority = buildShiftAuthoritySnapshot(activeShift, capturedAt);
+        const shiftValidation = validateShiftAuthoritySnapshot(shiftAuthority, new Date(capturedAt));
+
+        if (!shiftValidation.allowed) {
+            throw new Error('Offline capture requires an open shift with valid cached shift authorization. Reconnect before continuing.');
+        }
+
         const sourcePaymentRows = Array.isArray(rowsOverride) && rowsOverride.length > 0
             ? rowsOverride
             : [{
@@ -561,30 +572,39 @@ export default function Index({ categories, initial_products, payment_methods, d
                 throw new Error('Offline capture only supports cash payments. Reconnect for card, e-wallet, bank, or other payment methods.');
             }
 
+            const methodSnapshot = buildPaymentMethodSnapshot(method || cashPaymentMethod);
+            const amountCentavos = parseMoneyToCentavos(row.amount || clientTotals.total);
+
             return {
                 payment_method_id: row.payment_method_id || cashPaymentMethod.id,
-                amount: centavosToDecimalString(parseMoneyToCentavos(row.amount || clientTotals.total)),
+                amount: centavosToDecimalString(amountCentavos),
+                amount_centavos: amountCentavos,
                 reference_number: null,
+                ...methodSnapshot,
             };
         });
 
+        const paymentSnapshot = buildPaymentMethodSnapshot(cashPaymentMethod);
+
         const payload = {
+            schema_version: 2,
             tenant_id,
             branch_id,
             terminal_id: offlineCaptureReadiness.machineProfile?.id || null,
             device_id: deviceId,
-            cashier_shift_id: activeShift?.id || null,
+            ...shiftAuthority,
             timecard_id: timecardStatus?.timecard_id || null,
             local_transaction_reference: '', // will be set by appendTransaction
             local_receipt_number: '',        // will be set by appendTransaction
             business_date: activeShift?.business_date || new Date().toISOString().split('T')[0],
-            terminal_timestamp: new Date().toISOString(),
+            terminal_timestamp: capturedAt,
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
             sales_machine_profile_id: offlineCaptureReadiness.machineProfile?.id || null,
             catalog_version_hash: catalogHash || null,
             tax_configuration_version_hash: taxHash,
             cart_snapshot: { items: cart },
             payment_method: 'cash',
+            ...paymentSnapshot,
             payments,
             gross_amount_centavos: totalCentavos,
             discount_total_centavos: 0,
@@ -595,10 +615,20 @@ export default function Index({ categories, initial_products, payment_methods, d
             sync_status: 'pending',
             sync_attempt_count: 0,
             last_sync_attempt_at: null,
+            cash_status: 'collected',
+            offline_document_events: [
+                buildOfflineAcknowledgmentPrintEvent({
+                    client_request_uuid: clientRequestUuid,
+                    amount: clientTotals.total,
+                    captured_at: capturedAt,
+                    terminal_id: offlineCaptureReadiness.machineProfile?.id || null,
+                    cashier_id: user_id,
+                }),
+            ],
 
             // Legacy/envelope support
             client_request_uuid: clientRequestUuid,
-            submitted_at: new Date().toISOString(),
+            submitted_at: capturedAt,
             items,
             client_subtotal: clientTotals.subtotal,
             client_tax_total: clientTotals.tax,

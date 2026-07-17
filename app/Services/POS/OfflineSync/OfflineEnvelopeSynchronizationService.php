@@ -37,6 +37,7 @@ class OfflineEnvelopeSynchronizationService
         protected OfflineTerminalQuarantineService $quarantineService,
         protected OfflinePolicyDriftService $policyDriftService,
         protected OfflineSyncStatusProjectionService $projectionService,
+        protected OfflineEnvelopePolicyValidator $policyValidator,
     ) {}
 
     public function synchronizeBatch(SalesMachineProfile $profile, array $batchPayload, User $user): array
@@ -530,48 +531,7 @@ class OfflineEnvelopeSynchronizationService
 
     private function validateEnvelopePolicy(SalesMachineProfile $profile, array $rawImport): ?string
     {
-        if (($rawImport['terminal_id'] ?? $rawImport['sales_machine_profile_id'] ?? $profile->id) !== $profile->id) {
-            return 'rejected_terminal_identity_invalid';
-        }
-
-        if (($rawImport['tenant_id'] ?? $profile->tenant_id) !== $profile->tenant_id
-            || ($rawImport['branch_id'] ?? $profile->branch_id) !== $profile->branch_id) {
-            return 'rejected_cross_tenant_or_branch';
-        }
-
-        if (($rawImport['payment_method'] ?? null) !== 'cash') {
-            return 'rejected_non_cash_tender';
-        }
-
-        $payments = $rawImport['payments'] ?? null;
-        if (!is_array($payments) || empty($payments)) {
-            return 'rejected_missing_payment_evidence';
-        }
-
-        foreach ($payments as $payment) {
-            if (empty($payment['payment_method_id']) || !array_key_exists('amount', $payment)) {
-                return 'rejected_missing_payment_evidence';
-            }
-
-            $method = PaymentMethod::where('tenant_id', $profile->tenant_id)
-                ->where('id', $payment['payment_method_id'])
-                ->active()
-                ->first();
-
-            if (!$method) {
-                return 'review_required_cash_payment_configuration';
-            }
-
-            if (!$this->isCashMethod($method)) {
-                return 'rejected_non_cash_tender';
-            }
-        }
-
-        if (!empty($rawImport['statutory_discount'])) {
-            return 'rejected_statutory_discount_offline';
-        }
-
-        return null;
+        return $this->policyValidator->reasonFor($profile, $rawImport);
     }
 
     private function classifyTerminalState(

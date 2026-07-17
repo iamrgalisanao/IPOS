@@ -93,6 +93,10 @@ export const validatePaymentRows = (rows, paymentMethods, saleTotal, isOffline =
             errors.push(`Row ${index + 1}: Payment method is required.`);
         }
 
+        if (isOffline && method && !isCashPayment(method)) {
+            errors.push(`Offline capture only supports cash payments. Reconnect for ${method.name || 'non-cash'} payments.`);
+        }
+
         const amount = Number(row.amount) || 0;
         if (amount <= 0) {
             errors.push(`Row ${index + 1}: Amount must be positive.`);
