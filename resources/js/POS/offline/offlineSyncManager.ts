@@ -4,6 +4,7 @@ import type { OfflineTransactionEnvelope, OfflineSyncStatus } from './offlineSal
 import { isOffline } from './offlineGuards.ts';
 
 export class OfflineSyncManager {
+    private readonly ownerInstanceId = `browser:${typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36)}`;
 
     /**
      * Batch pending offline transactions and send them to the server.
@@ -29,9 +30,13 @@ export class OfflineSyncManager {
         const eligible = retryableTransactions.filter(env => {
             if (options.force) return true;
             if (env.status !== 'failed') return true;
+            if (env.next_retry_at) {
+                const nextRetryAt = Date.parse(env.next_retry_at);
+                return !Number.isFinite(nextRetryAt) || now.getTime() >= nextRetryAt;
+            }
             if (!env.last_sync_attempt_at) return true;
 
-            const attempts = env.payload?.sync_attempt_count || 0;
+            const attempts = env.retry_count || 0;
             if (attempts === 0) return true;
 
             // Backoff: 2^attempts * 5 seconds (e.g. 10s, 20s, 40s, 80s, 160s, max 5 minutes)
@@ -104,16 +109,34 @@ export class OfflineSyncManager {
     }
 
     private async syncBatch(batchRef: string, envelopes: OfflineTransactionEnvelope[]): Promise<void> {
+        const leasedEnvelopes: OfflineTransactionEnvelope[] = [];
+
         try {
-            // Update local status to syncing
             for (const env of envelopes) {
-                await offlineSalesQueue.updateTransactionStatus(env.id, 'syncing');
+                try {
+                    leasedEnvelopes.push(await offlineSalesQueue.acquireLease(
+                        env.id,
+                        this.ownerInstanceId,
+                        'offline-sales-sync',
+                        'story-41.2'
+                    ));
+                } catch (leaseError: any) {
+                    console.warn('Skipping offline transaction already owned by another sync worker:', {
+                        id: env.id,
+                        offline_sequence: env.offline_sequence,
+                        message: leaseError?.message || String(leaseError),
+                    });
+                }
+            }
+
+            if (leasedEnvelopes.length === 0) {
+                return;
             }
 
             // Prepare the payload according to backend validation rules (SyncBatchRequest)
             const payload = {
                 batch_reference: batchRef,
-                imports: envelopes.map(env => ({
+                imports: leasedEnvelopes.map(env => ({
                     offline_sequence_number: env.offline_sequence,
                     submitted_at: env.payload.submitted_at || env.created_at,
                     items: env.payload.items,
@@ -153,28 +176,45 @@ export class OfflineSyncManager {
                     net_amount_centavos: env.payload.net_amount_centavos,
                     payload_hash: env.payload_hash,
                     sync_status: 'pending',
-                    sync_attempt_count: env.payload.sync_attempt_count || 0,
-                    last_sync_attempt_at: env.payload.last_sync_attempt_at,
+                    sync_attempt_count: env.retry_count || 0,
+                    last_sync_attempt_at: env.last_sync_attempt_at,
 
                     // Hashing chain properties
                     previous_hash: env.previous_hash,
                     row_hash: env.row_hash,
+                    offline_transaction_uuid: env.offline_transaction_uuid || env.id,
+                    terminal_binding_epoch: env.terminal_binding_epoch,
+                    queue_state_revision: env.queue_state_revision,
+                    sync_attempt_id: env.last_sync_attempt_id,
+                    lease_id: env.lease?.lease_id,
+                    attempt_generation: env.last_attempt_generation || 1,
                 }))
             };
 
             const response = await axios.post('/pos/offline-sync', payload, {
-                headers: this.buildContextHeaders(envelopes),
+                headers: this.buildContextHeaders(leasedEnvelopes),
             });
 
             if (response.status === 202 || response.status === 200) {
                 const results = response.data.imports || [];
-                for (const env of envelopes) {
+                for (const env of leasedEnvelopes) {
                     const result = results.find((r: any) => r.offline_sequence_number === env.offline_sequence);
+                    const guard = {
+                        leaseId: env.lease?.lease_id || '',
+                        syncAttemptId: env.last_sync_attempt_id || '',
+                        attemptGeneration: env.last_attempt_generation || 1,
+                        ownerInstanceId: this.ownerInstanceId,
+                    };
                     if (result) {
                         const newStatus = this.mapServerStatus(result.status);
-                        await offlineSalesQueue.updateTransactionStatus(env.id, newStatus, result.reason || result.rejection_reason || result.conflict_notes || undefined);
+                        await offlineSalesQueue.updateTransactionStatus(
+                            env.id,
+                            newStatus,
+                            result.reason || result.rejection_reason || result.conflict_notes || undefined,
+                            guard
+                        );
                     } else {
-                        await offlineSalesQueue.updateTransactionStatus(env.id, 'synced');
+                        await offlineSalesQueue.updateTransactionStatus(env.id, 'synced', undefined, guard);
                     }
                 }
 
@@ -212,7 +252,7 @@ export class OfflineSyncManager {
                 response: error.response?.data,
                 message: error.message,
                 batch_reference: batchRef,
-                offline_sequences: envelopes.map((env) => env.offline_sequence),
+                offline_sequences: (leasedEnvelopes.length > 0 ? leasedEnvelopes : envelopes).map((env) => env.offline_sequence),
                 local_status: newStatus,
             };
 
@@ -223,9 +263,17 @@ export class OfflineSyncManager {
             }
 
             // Apply the failure status
-            for (const env of envelopes) {
+            for (const env of leasedEnvelopes.length > 0 ? leasedEnvelopes : envelopes) {
                 try {
-                    await offlineSalesQueue.updateTransactionStatus(env.id, newStatus, errorMessage);
+                    const guard = env.lease?.lease_id && env.last_sync_attempt_id
+                        ? {
+                            leaseId: env.lease.lease_id,
+                            syncAttemptId: env.last_sync_attempt_id,
+                            attemptGeneration: env.last_attempt_generation || 1,
+                            ownerInstanceId: this.ownerInstanceId,
+                        }
+                        : undefined;
+                    await offlineSalesQueue.updateTransactionStatus(env.id, newStatus, errorMessage, guard);
                 } catch (updateError) {
                     console.error('Failed to update offline sync status after sync error:', updateError);
                 }
