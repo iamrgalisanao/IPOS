@@ -92,6 +92,10 @@ class OfflineSalesImport extends Model
         'proposed_business_date',
         'resolved_business_date',
         'business_date_review_reason',
+        'reported_sync_delay_seconds',
+        'normalized_sync_delay_seconds',
+        'offline_capture_timestamp',
+        'server_accepted_at',
         'conflict_notes',
         'reviewed_by_user_id',
         'reviewed_at',
@@ -134,6 +138,10 @@ class OfflineSalesImport extends Model
         'predecessor_lookup_last_attempt_at' => 'datetime',
         'proposed_business_date' => 'date',
         'resolved_business_date' => 'date',
+        'reported_sync_delay_seconds' => 'integer',
+        'normalized_sync_delay_seconds' => 'integer',
+        'offline_capture_timestamp' => 'datetime',
+        'server_accepted_at' => 'datetime',
         'reviewed_at'          => 'datetime',
         'first_seen_at'        => 'datetime',
         'last_replayed_at'     => 'datetime',
@@ -173,5 +181,10 @@ class OfflineSalesImport extends Model
     public function syncAttempts(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(OfflineSyncAttempt::class, 'offline_sales_import_id');
+    }
+
+    public function consequenceAttempts(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(OfflineSyncConsequenceAttempt::class, 'offline_sales_import_id');
     }
 }

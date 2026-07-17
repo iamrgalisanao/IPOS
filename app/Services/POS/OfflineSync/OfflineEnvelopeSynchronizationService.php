@@ -38,6 +38,9 @@ class OfflineEnvelopeSynchronizationService
         protected OfflinePolicyDriftService $policyDriftService,
         protected OfflineSyncStatusProjectionService $projectionService,
         protected OfflineEnvelopePolicyValidator $policyValidator,
+        protected OfflineConsequenceStatusBuilder $consequenceStatusBuilder,
+        protected OfflineInventoryConsequenceService $inventoryConsequenceService,
+        protected OfflineLoyaltyConsequenceService $loyaltyConsequenceService,
     ) {}
 
     public function synchronizeBatch(SalesMachineProfile $profile, array $batchPayload, User $user): array
@@ -258,24 +261,37 @@ class OfflineEnvelopeSynchronizationService
                     return $this->markRejectedOrReview($import, $attempt, $policyFailure, $rawImport);
                 }
 
-                $sale = $this->createSaleFromEnvelope($profile, $import, $rawImport, $user);
-                $payments = $this->recordCashPayment($sale, $rawImport, $user);
-                $this->recordAccountingOutbox($sale, $payments);
-
-                if (!$sale->is_training_mode) {
-                    \App\Jobs\Inventory\ProcessSaleInventoryDeductionJob::dispatch($sale->id)->afterCommit();
+                $loyaltyDecision = $this->loyaltyConsequenceService->validateAccountForSale($import, $rawImport);
+                if ($loyaltyDecision['status'] === 'review_required') {
+                    return $this->markRejectedOrReview($import, $attempt, $loyaltyDecision['reason'], $rawImport);
                 }
 
-                $consequenceStatus = [
-                    'sale' => 'committed',
-                    'payment' => 'committed',
-                    'inventory' => $sale->is_training_mode ? 'not_applicable' : 'queued',
-                    'variance' => 'not_applicable',
-                    'loyalty' => $sale->customer_financial_account_id ? 'queued' : 'not_applicable',
-                    'store_credit' => 'not_applicable',
-                    'receipt' => 'available',
+                $sale = $this->createSaleFromEnvelope(
+                    $profile,
+                    $import,
+                    $rawImport,
+                    $user,
+                    $loyaltyDecision['customer_financial_account_id']
+                );
+                $payments = $this->recordCashPayment($sale, $rawImport, $user);
+                $this->recordAccountingOutbox($sale, $payments);
+                $inventoryResult = $this->inventoryConsequenceService->deductAndVerify($sale);
+                $this->applyBusinessDateEvidence($import, $rawImport);
+                $import->refresh();
+
+                $loyaltyAttempt = null;
+                if ($loyaltyDecision['status'] === 'eligible') {
+                    $loyaltyAttempt = $this->loyaltyConsequenceService->registerAttempt($import, $sale, $rawImport);
+                }
+
+                $consequenceStatus = $this->consequenceStatusBuilder->accepted([
+                    'inventory' => $inventoryResult['inventory_status'],
+                    'variance' => $inventoryResult['variance_status'],
+                    'loyalty' => $loyaltyAttempt
+                        ? 'queued'
+                        : ($loyaltyDecision['status'] === 'skipped_by_policy' ? 'skipped_by_policy' : 'not_applicable'),
                     'accounting_outbox' => $sale->is_training_mode ? 'not_applicable' : 'queued',
-                ];
+                ]);
 
                 $import->update([
                     'status' => OfflineSalesImport::STATUS_POSTED,
@@ -284,7 +300,7 @@ class OfflineEnvelopeSynchronizationService
                     'reconciled_sale_id' => $sale->id,
                     'official_invoice_number' => $sale->principal_invoice_number,
                     'reconciled_at' => now(),
-                    'accepted_at' => now(),
+                    'accepted_at' => $import->server_accepted_at ?? now(),
                     'server_payload_fingerprint' => $serverFingerprint,
                     'consequence_status_snapshot' => $consequenceStatus,
                     'acceptance_consequence_snapshot' => $consequenceStatus,
@@ -302,6 +318,8 @@ class OfflineEnvelopeSynchronizationService
                     'sale_id' => $sale->id,
                     'official_invoice_number' => $sale->principal_invoice_number,
                     'consequence_status' => $consequenceStatus,
+                    'inventory_movement_ids' => $inventoryResult['movement_ids'],
+                    'loyalty_attempt_id' => $loyaltyAttempt?->id,
                 ]);
 
                 return $this->responseFor($import->fresh(), replay: false, viewer: $user);
@@ -321,6 +339,25 @@ class OfflineEnvelopeSynchronizationService
                 $exception->getMessage()
             );
         } catch (\Throwable $exception) {
+            $inventoryFailureReason = $this->inventoryFailureReason($exception);
+            if ($inventoryFailureReason !== null) {
+                $syncStatus = ($rawImport['cash_status'] ?? null) === 'not_collected'
+                    ? OfflineSalesImport::SYNC_REJECTED
+                    : OfflineSalesImport::SYNC_REVIEW_REQUIRED;
+
+                return $this->markFailureOutsideTransaction(
+                    $profile,
+                    $batch,
+                    $rawImport,
+                    $offlineUuid,
+                    $localSequence,
+                    $serverFingerprint,
+                    $syncStatus,
+                    $inventoryFailureReason,
+                    $exception->getMessage()
+                );
+            }
+
             return $this->markFailureOutsideTransaction(
                 $profile,
                 $batch,
@@ -477,14 +514,18 @@ class OfflineEnvelopeSynchronizationService
             $import->update([
                 'status' => $syncStatus === OfflineSalesImport::SYNC_RETRYABLE_FAILED
                     ? OfflineSalesImport::STATUS_PENDING
-                    : OfflineSalesImport::STATUS_CONFLICT,
+                    : ($syncStatus === OfflineSalesImport::SYNC_REJECTED
+                        ? OfflineSalesImport::STATUS_REJECTED
+                        : OfflineSalesImport::STATUS_CONFLICT),
                 'server_sync_status' => $syncStatus,
                 'original_sync_status' => $syncStatus,
                 'retryable_error_code' => $syncStatus === OfflineSalesImport::SYNC_RETRYABLE_FAILED ? $reason : null,
                 'review_reason' => $syncStatus === OfflineSalesImport::SYNC_REVIEW_REQUIRED ? $reason : null,
+                'rejection_reason' => $syncStatus === OfflineSalesImport::SYNC_REJECTED ? $reason : null,
                 'current_consequence_status' => $consequenceStatus,
                 'consequence_status_snapshot' => $consequenceStatus,
                 'review_required_at' => $syncStatus === OfflineSalesImport::SYNC_REVIEW_REQUIRED ? now() : null,
+                'rejected_at' => $syncStatus === OfflineSalesImport::SYNC_REJECTED ? now() : null,
             ]);
 
             $attempt->update([
@@ -684,7 +725,8 @@ class OfflineEnvelopeSynchronizationService
         SalesMachineProfile $profile,
         OfflineSalesImport $import,
         array $rawImport,
-        User $user
+        User $user,
+        ?string $customerFinancialAccountId = null
     ): Sale {
         $actorId = $rawImport['user_id'] ?? $rawImport['cashier_id'] ?? $user->id;
         $items = collect($rawImport['items'] ?? [])->map(fn (array $item) => [
@@ -701,6 +743,7 @@ class OfflineEnvelopeSynchronizationService
             statutoryDiscount: [],
             isTrainingMode: false,
             terminalId: $profile->id,
+            customerFinancialAccountId: $customerFinancialAccountId,
         );
 
         if (!in_array($result['status'], ['created', 'duplicate_seen'], true) || empty($result['sale'])) {
@@ -875,15 +918,84 @@ class OfflineEnvelopeSynchronizationService
 
     private function emptyConsequenceStatus(): array
     {
-        return [
-            'sale' => 'not_applicable',
-            'payment' => 'not_applicable',
-            'inventory' => 'not_applicable',
-            'variance' => 'not_applicable',
-            'loyalty' => 'not_applicable',
-            'store_credit' => 'not_applicable',
-            'receipt' => 'not_applicable',
-            'accounting_outbox' => 'not_applicable',
-        ];
+        return $this->consequenceStatusBuilder->empty();
+    }
+
+    private function applyBusinessDateEvidence(OfflineSalesImport $import, array $rawImport): void
+    {
+        $acceptedAt = now();
+        $terminalTimestamp = $this->parseTimestamp($rawImport['terminal_timestamp'] ?? $rawImport['submitted_at'] ?? null);
+        $reportedDelay = $terminalTimestamp ? $acceptedAt->diffInSeconds($terminalTimestamp, false) * -1 : null;
+        $trustStatus = $this->terminalTimestampTrustStatus($terminalTimestamp, $acceptedAt);
+
+        $import->update([
+            'proposed_business_date' => $rawImport['business_date'] ?? null,
+            'resolved_business_date' => $this->resolveBusinessDate($rawImport, $acceptedAt),
+            'business_date_status' => 'resolved',
+            'time_evidence_status' => $trustStatus,
+            'reported_sync_delay_seconds' => $reportedDelay,
+            'normalized_sync_delay_seconds' => in_array($trustStatus, ['trusted', 'within_tolerance'], true)
+                ? max(0, (int) $reportedDelay)
+                : null,
+            'offline_capture_timestamp' => $terminalTimestamp,
+            'server_accepted_at' => $acceptedAt,
+        ]);
+    }
+
+    private function resolveBusinessDate(array $rawImport, \Illuminate\Support\Carbon $acceptedAt): string
+    {
+        return $rawImport['business_date'] ?? $acceptedAt->toDateString();
+    }
+
+    private function terminalTimestampTrustStatus(?\Illuminate\Support\Carbon $terminalTimestamp, \Illuminate\Support\Carbon $acceptedAt): string
+    {
+        if (!$terminalTimestamp) {
+            return 'invalid';
+        }
+
+        $absoluteDelay = abs($acceptedAt->diffInSeconds($terminalTimestamp, false));
+
+        if ($absoluteDelay <= 300) {
+            return 'trusted';
+        }
+
+        if ($absoluteDelay <= 86400) {
+            return 'within_tolerance';
+        }
+
+        return 'suspicious';
+    }
+
+    private function parseTimestamp(?string $value): ?\Illuminate\Support\Carbon
+    {
+        if (!$value) {
+            return null;
+        }
+
+        try {
+            return \Illuminate\Support\Carbon::parse($value);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private function inventoryFailureReason(\Throwable $exception): ?string
+    {
+        $message = strtolower($exception->getMessage());
+
+        foreach ([
+            'insufficient stock',
+            'inventory record not found',
+            'ingredient',
+            'recipe deduction',
+            'offline inventory consequence evidence is incomplete',
+            'unit conversion',
+        ] as $needle) {
+            if (str_contains($message, $needle)) {
+                return 'review_inventory_consequence_failed';
+            }
+        }
+
+        return null;
     }
 }

@@ -4,7 +4,11 @@ namespace Tests\Feature\POS;
 
 use App\Models\AccountingOutbox;
 use App\Models\Branch;
+use App\Models\BranchInventory;
+use App\Models\CustomerFinancialAccount;
+use App\Models\InventoryMovement;
 use App\Models\OfflineSalesImport;
+use App\Models\OfflineSyncConsequenceAttempt;
 use App\Models\OfflineSyncAttempt;
 use App\Models\OfflineTerminalEpochQuarantine;
 use App\Models\PaymentMethod;
@@ -21,8 +25,12 @@ use App\Models\User;
 use App\Services\RbacSeeder;
 use App\Services\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use App\Jobs\Inventory\ProcessSaleInventoryDeductionJob;
+use App\Jobs\POS\ProcessOfflineSyncConsequenceAttemptJob;
+use App\Services\Loyalty\LoyaltyAccrualService;
 use Tests\TestCase;
 
 class OfflineSyncEpic41ContractTest extends TestCase
@@ -151,6 +159,290 @@ class OfflineSyncEpic41ContractTest extends TestCase
         $this->assertNotNull($import->server_payload_fingerprint);
         $this->assertNotNull($import->acceptance_consequence_snapshot);
         $this->assertSame(1, OfflineSyncAttempt::where('offline_sales_import_id', $import->id)->count());
+    }
+
+    public function test_accepted_offline_sale_deducts_inventory_inside_acceptance_transaction(): void
+    {
+        Queue::fake([ProcessSaleInventoryDeductionJob::class]);
+        $this->product->update(['is_inventory_tracked' => true]);
+        $inventory = BranchInventory::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branch->id,
+            'product_id' => $this->product->id,
+            'current_stock' => 10,
+        ]);
+
+        $this->postSync($this->batchPayload($this->importPayload()))->assertOk()
+            ->assertJsonPath('imports.0.sync_status', 'accepted')
+            ->assertJsonPath('imports.0.consequence_status.inventory', 'committed')
+            ->assertJsonPath('imports.0.consequence_status.business_date', 'committed');
+
+        $this->assertSame(1, Sale::count());
+        $this->assertSame(1, InventoryMovement::where('source_type', 'sale')->count());
+        $this->assertEquals(8.0, (float) $inventory->fresh()->current_stock);
+        Queue::assertNotPushed(ProcessSaleInventoryDeductionJob::class);
+    }
+
+    public function test_strict_stock_failure_rolls_back_sale_payment_and_inventory_then_enters_review(): void
+    {
+        $this->branch->update(['inventory_deduction_policy' => 'strict_block']);
+        $this->product->update(['is_inventory_tracked' => true]);
+        BranchInventory::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branch->id,
+            'product_id' => $this->product->id,
+            'current_stock' => 1,
+        ]);
+
+        $this->postSync($this->batchPayload($this->importPayload()))->assertOk()
+            ->assertJsonPath('imports.0.sync_status', 'review_required')
+            ->assertJsonPath('imports.0.review_reason', 'review_inventory_consequence_failed');
+
+        $this->assertSame(0, Sale::count());
+        $this->assertSame(0, SalePayment::count());
+        $this->assertSame(0, InventoryMovement::where('source_type', 'sale')->count());
+    }
+
+    public function test_strict_stock_failure_before_cash_collection_is_rejected_without_partial_consequences(): void
+    {
+        $this->branch->update(['inventory_deduction_policy' => 'strict_block']);
+        $this->product->update(['is_inventory_tracked' => true]);
+        BranchInventory::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branch->id,
+            'product_id' => $this->product->id,
+            'current_stock' => 1,
+        ]);
+
+        $this->postSync($this->batchPayload($this->importPayload([
+            'cash_status' => 'not_collected',
+        ])))->assertOk()
+            ->assertJsonPath('imports.0.sync_status', 'rejected')
+            ->assertJsonPath('imports.0.reason', 'review_inventory_consequence_failed');
+
+        $this->assertSame(0, Sale::count());
+        $this->assertSame(0, SalePayment::count());
+        $this->assertSame(0, InventoryMovement::where('source_type', 'sale')->count());
+        $this->assertSame(0, OfflineSyncConsequenceAttempt::count());
+        $this->assertSame(0, AccountingOutbox::count());
+    }
+
+    public function test_inventory_failure_with_missing_cash_status_fails_conservatively_to_review(): void
+    {
+        $this->branch->update(['inventory_deduction_policy' => 'strict_block']);
+        $this->product->update(['is_inventory_tracked' => true]);
+        BranchInventory::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branch->id,
+            'product_id' => $this->product->id,
+            'current_stock' => 1,
+        ]);
+
+        $import = $this->importPayload();
+        unset($import['cash_status'], $import['business_payload_fingerprint'], $import['payload_hash']);
+        $import['business_payload_fingerprint'] = $this->fingerprint($import);
+        $import['payload_hash'] = $import['business_payload_fingerprint'];
+
+        $this->postSync($this->batchPayload($import))->assertOk()
+            ->assertJsonPath('imports.0.sync_status', 'review_required')
+            ->assertJsonPath('imports.0.review_reason', 'review_inventory_consequence_failed');
+
+        $this->assertSame(0, Sale::count());
+        $this->assertSame(0, SalePayment::count());
+        $this->assertSame(0, InventoryMovement::where('source_type', 'sale')->count());
+        $this->assertSame(0, OfflineSyncConsequenceAttempt::count());
+        $this->assertSame(0, AccountingOutbox::count());
+    }
+
+    public function test_eligible_loyalty_sale_creates_durable_consequence_attempt(): void
+    {
+        Queue::fake([ProcessOfflineSyncConsequenceAttemptJob::class]);
+        $account = CustomerFinancialAccount::factory()->create(['tenant_id' => $this->tenant->id]);
+
+        $import = $this->importPayload([
+            'customer_financial_account_id' => $account->id,
+            'customer_snapshot_version' => 1,
+            'customer_snapshot_hash' => str_repeat('1', 64),
+            'customer_lookup_captured_at' => now()->subMinutes(5)->toIso8601String(),
+            'loyalty_expected' => true,
+        ]);
+
+        $this->postSync($this->batchPayload($import))->assertOk()
+            ->assertJsonPath('imports.0.sync_status', 'accepted')
+            ->assertJsonPath('imports.0.consequence_status.loyalty', 'queued');
+
+        $sale = Sale::firstOrFail();
+        $this->assertSame($account->id, $sale->customer_financial_account_id);
+
+        $attempt = OfflineSyncConsequenceAttempt::firstOrFail();
+        $this->assertSame(OfflineSyncConsequenceAttempt::TYPE_LOYALTY_ACCRUAL, $attempt->consequence_type);
+        $this->assertSame(OfflineSyncConsequenceAttempt::STATUS_QUEUED, $attempt->status);
+        $this->assertSame(0, $attempt->attempt_no);
+        $this->assertSame($sale->id, $attempt->sale_id);
+        $this->assertSame($account->id, data_get($attempt->metadata_json, 'payload.customer_financial_account_id'));
+        Queue::assertPushed(ProcessOfflineSyncConsequenceAttemptJob::class);
+    }
+
+    public function test_loyalty_worker_transient_failure_updates_live_projection(): void
+    {
+        Queue::fake([ProcessOfflineSyncConsequenceAttemptJob::class]);
+        $account = CustomerFinancialAccount::factory()->create(['tenant_id' => $this->tenant->id]);
+        $this->postSync($this->batchPayload($this->importPayload([
+            'customer_financial_account_id' => $account->id,
+            'loyalty_expected' => true,
+        ])))->assertOk();
+
+        $attempt = OfflineSyncConsequenceAttempt::firstOrFail();
+        $service = \Mockery::mock(LoyaltyAccrualService::class);
+        $service->shouldReceive('accrueFromSalePaid')
+            ->once()
+            ->andThrow(new \RuntimeException('temporary loyalty outage'));
+
+        try {
+            (new ProcessOfflineSyncConsequenceAttemptJob($attempt->id))->handle(
+                $service,
+                app(TenantContext::class),
+                app(\App\Services\BranchContext::class)
+            );
+            $this->fail('Expected loyalty worker failure.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('temporary loyalty outage', $exception->getMessage());
+        }
+
+        $attempt->refresh();
+        $import = OfflineSalesImport::firstOrFail()->refresh();
+
+        $this->assertSame(OfflineSyncConsequenceAttempt::STATUS_RETRYABLE_FAILED, $attempt->status);
+        $this->assertSame(1, $attempt->attempt_no);
+        $this->assertSame('loyalty_processing_failed', $attempt->last_error_code);
+        $this->assertSame('queued', $import->acceptance_consequence_snapshot['loyalty']);
+        $this->assertSame('retryable_failed', $import->current_consequence_status['loyalty']);
+        $this->assertSame('loyalty_processing_failed', $import->current_consequence_status['loyalty_details']['last_error_code']);
+        $this->assertSame(1, $import->current_consequence_status['loyalty_details']['attempt_count']);
+    }
+
+    public function test_loyalty_worker_retry_exhaustion_updates_live_projection_to_failed(): void
+    {
+        Queue::fake([ProcessOfflineSyncConsequenceAttemptJob::class]);
+        $account = CustomerFinancialAccount::factory()->create(['tenant_id' => $this->tenant->id]);
+        $this->postSync($this->batchPayload($this->importPayload([
+            'customer_financial_account_id' => $account->id,
+            'loyalty_expected' => true,
+        ])))->assertOk();
+
+        $attempt = OfflineSyncConsequenceAttempt::firstOrFail();
+        $attempt->update([
+            'status' => OfflineSyncConsequenceAttempt::STATUS_RETRYABLE_FAILED,
+            'attempt_no' => 2,
+        ]);
+
+        $service = \Mockery::mock(LoyaltyAccrualService::class);
+        $service->shouldReceive('accrueFromSalePaid')
+            ->once()
+            ->andThrow(new \RuntimeException('persistent loyalty outage'));
+
+        try {
+            (new ProcessOfflineSyncConsequenceAttemptJob($attempt->id))->handle(
+                $service,
+                app(TenantContext::class),
+                app(\App\Services\BranchContext::class)
+            );
+            $this->fail('Expected loyalty worker failure.');
+        } catch (\RuntimeException) {
+            // Expected.
+        }
+
+        $attempt->refresh();
+        $import = OfflineSalesImport::firstOrFail()->refresh();
+
+        $this->assertSame(OfflineSyncConsequenceAttempt::STATUS_FAILED, $attempt->status);
+        $this->assertSame(3, $attempt->attempt_no);
+        $this->assertSame('loyalty_retry_exhausted', $attempt->last_error_code);
+        $this->assertSame('failed', $import->current_consequence_status['loyalty']);
+        $this->assertSame('loyalty_retry_exhausted', $import->current_consequence_status['loyalty_details']['last_error_code']);
+        $this->assertSame(3, $import->current_consequence_status['loyalty_details']['attempt_count']);
+    }
+
+    public function test_loyalty_successful_retry_advances_live_projection_without_rewriting_acceptance_snapshot(): void
+    {
+        Queue::fake([ProcessOfflineSyncConsequenceAttemptJob::class]);
+        $account = CustomerFinancialAccount::factory()->create(['tenant_id' => $this->tenant->id]);
+        $this->postSync($this->batchPayload($this->importPayload([
+            'customer_financial_account_id' => $account->id,
+            'loyalty_expected' => true,
+        ])))->assertOk();
+
+        $attempt = OfflineSyncConsequenceAttempt::firstOrFail();
+        $attempt->update([
+            'status' => OfflineSyncConsequenceAttempt::STATUS_RETRYABLE_FAILED,
+            'attempt_no' => 1,
+            'last_error_code' => 'loyalty_processing_failed',
+        ]);
+
+        (new ProcessOfflineSyncConsequenceAttemptJob($attempt->id))->handle(
+            app(LoyaltyAccrualService::class),
+            app(TenantContext::class),
+            app(\App\Services\BranchContext::class)
+        );
+
+        $attempt->refresh();
+        $import = OfflineSalesImport::firstOrFail()->refresh();
+
+        $this->assertSame(OfflineSyncConsequenceAttempt::STATUS_COMMITTED, $attempt->status);
+        $this->assertSame(2, $attempt->attempt_no);
+        $this->assertSame('queued', $import->acceptance_consequence_snapshot['loyalty']);
+        $this->assertSame('committed', $import->current_consequence_status['loyalty']);
+        $this->assertNull($import->current_consequence_status['loyalty_details']['last_error_code']);
+        $this->assertSame(2, $import->current_consequence_status['loyalty_details']['attempt_count']);
+    }
+
+    public function test_invalid_optional_loyalty_identity_is_accepted_without_loyalty_ledger_authority(): void
+    {
+        $import = $this->importPayload([
+            'customer_financial_account_id' => Str::uuid()->toString(),
+            'loyalty_expected' => false,
+        ]);
+
+        $this->postSync($this->batchPayload($import))->assertOk()
+            ->assertJsonPath('imports.0.sync_status', 'accepted')
+            ->assertJsonPath('imports.0.consequence_status.loyalty', 'skipped_by_policy');
+
+        $this->assertSame(1, Sale::count());
+        $this->assertSame(0, OfflineSyncConsequenceAttempt::count());
+    }
+
+    public function test_offline_store_credit_payload_enters_review_before_sale_creation(): void
+    {
+        $import = $this->importPayload([
+            'store_credit_redemption' => ['amount' => 100],
+            'cash_status' => 'collected',
+        ]);
+
+        $this->postSync($this->batchPayload($import))->assertOk()
+            ->assertJsonPath('imports.0.sync_status', 'review_required')
+            ->assertJsonPath('imports.0.review_reason', 'review_store_credit_offline_cash_collected');
+
+        $this->assertSame(0, Sale::count());
+        $this->assertSame(0, SalePayment::count());
+    }
+
+    public function test_delayed_terminal_timestamp_preserves_sync_delay_evidence(): void
+    {
+        $import = $this->importPayload([
+            'terminal_timestamp' => now()->subMinutes(20)->toIso8601String(),
+            'submitted_at' => now()->toIso8601String(),
+        ]);
+
+        $this->postSync($this->batchPayload($import))->assertOk()
+            ->assertJsonPath('imports.0.sync_status', 'accepted')
+            ->assertJsonPath('imports.0.terminal_timestamp_trust_status', 'within_tolerance');
+
+        $stored = OfflineSalesImport::where('offline_transaction_uuid', $import['offline_transaction_uuid'])->firstOrFail();
+        $this->assertSame('within_tolerance', $stored->time_evidence_status);
+        $this->assertNotNull($stored->reported_sync_delay_seconds);
+        $this->assertNotNull($stored->normalized_sync_delay_seconds);
+        $this->assertNotNull($stored->offline_capture_timestamp);
+        $this->assertNotNull($stored->server_accepted_at);
     }
 
     public function test_exact_replay_returns_replayed_without_duplicate_consequences(): void
