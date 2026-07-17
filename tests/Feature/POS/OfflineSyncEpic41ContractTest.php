@@ -6,6 +6,7 @@ use App\Models\AccountingOutbox;
 use App\Models\Branch;
 use App\Models\OfflineSalesImport;
 use App\Models\OfflineSyncAttempt;
+use App\Models\OfflineTerminalEpochQuarantine;
 use App\Models\PaymentMethod;
 use App\Models\Product;
 use App\Models\ProductCategory;
@@ -19,6 +20,7 @@ use App\Models\User;
 use App\Services\RbacSeeder;
 use App\Services\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -381,13 +383,269 @@ class OfflineSyncEpic41ContractTest extends TestCase
         $this->assertSame($methodCount, PaymentMethod::count());
     }
 
+    public function test_suspected_duplicate_enters_review_with_decision_evidence(): void
+    {
+        $first = $this->importPayload([
+            'offline_sequence_number' => 'OFF-MAIN-000001',
+            'local_sequence' => '1',
+            'local_receipt_number' => 'LOCAL-R-100',
+            'business_date' => '2026-07-17',
+        ]);
+        $second = $this->importPayload([
+            'offline_transaction_uuid' => Str::uuid()->toString(),
+            'offline_sequence_number' => 'OFF-MAIN-000002',
+            'local_sequence' => '2',
+            'local_receipt_number' => 'LOCAL-R-100',
+            'business_date' => '2026-07-17',
+        ]);
+
+        $this->postSync($this->batchPayload($first, 'BATCH-DUP-1'))->assertOk()
+            ->assertJsonPath('imports.0.sync_status', 'accepted');
+
+        $this->postSync($this->batchPayload($second, 'BATCH-DUP-2'))->assertOk()
+            ->assertJsonPath('imports.0.sync_status', 'review_required')
+            ->assertJsonPath('imports.0.review_reason', 'review_suspected_duplicate_capture')
+            ->assertJsonPath('imports.0.suggested_action_code', 'manager_review_possible_duplicate');
+
+        $review = OfflineSalesImport::where('offline_transaction_uuid', $second['offline_transaction_uuid'])->firstOrFail();
+        $this->assertSame('duplicate', $review->conflict_family);
+        $this->assertSame('review_suspected_duplicate_capture', $review->reason_code);
+        $this->assertSame('high', $review->review_severity);
+        $this->assertSame('support_only', $review->retry_classification);
+        $this->assertSame(100, $review->duplicate_score);
+        $this->assertSame(90, $review->duplicate_review_threshold);
+        $this->assertContains('same_local_receipt_number', $review->duplicate_rule_ids);
+        $this->assertNotEmpty($review->duplicate_candidates);
+        $this->assertSame('pending_support', $review->current_resolution_status);
+        $this->assertSame(1, Sale::count());
+    }
+
+    public function test_sequence_gap_is_retryable_and_does_not_restart_grace_period(): void
+    {
+        $import = $this->importPayload([
+            'offline_sequence_number' => 'OFF-MAIN-000003',
+            'local_sequence' => '3',
+            'predecessor_dependency' => 'strict',
+        ]);
+
+        $this->postSync($this->batchPayload($import, 'BATCH-GAP-1'))->assertOk()
+            ->assertJsonPath('imports.0.sync_status', 'retryable_failed')
+            ->assertJsonPath('imports.0.reason', 'retry_sequence_gap_waiting')
+            ->assertJsonPath('imports.0.retryable_error_code', 'retry_sequence_gap_waiting');
+
+        $stored = OfflineSalesImport::where('offline_transaction_uuid', $import['offline_transaction_uuid'])->firstOrFail();
+        $detectedAt = $stored->sequence_gap_detected_at?->toISOString();
+        $expiresAt = $stored->sequence_gap_grace_expires_at?->toISOString();
+
+        $this->assertSame('grace_period', $stored->sequence_gap_state);
+        $this->assertNotNull($detectedAt);
+        $this->assertNotNull($expiresAt);
+        $this->assertSame(0, Sale::count());
+
+        $this->postSync($this->batchPayload($import, 'BATCH-GAP-2'))->assertOk()
+            ->assertJsonPath('imports.0.sync_status', 'retryable_failed');
+
+        $replayed = $stored->fresh();
+        $this->assertSame($detectedAt, $replayed->sequence_gap_detected_at?->toISOString());
+        $this->assertSame($expiresAt, $replayed->sequence_gap_grace_expires_at?->toISOString());
+        $this->assertSame(0, Sale::count());
+    }
+
+    public function test_review_replay_is_idempotent_and_does_not_duplicate_review_opened_audit(): void
+    {
+        $this->cashMethod->update(['status' => 'inactive']);
+        $import = $this->importPayload();
+
+        $this->postSync($this->batchPayload($import, 'BATCH-REVIEW-1'))->assertOk()
+            ->assertJsonPath('imports.0.sync_status', 'review_required')
+            ->assertJsonPath('imports.0.review_reason', 'review_required_cash_payment_configuration');
+
+        $review = OfflineSalesImport::where('offline_transaction_uuid', $import['offline_transaction_uuid'])->firstOrFail();
+        $diagnosticReference = 'offline-review:' . $review->id;
+
+        $this->postSync($this->batchPayload($import, 'BATCH-REVIEW-2'))->assertOk()
+            ->assertJsonPath('imports.0.sync_status', 'replayed')
+            ->assertJsonPath('imports.0.original_sync_status', 'review_required')
+            ->assertJsonPath('imports.0.diagnostic_reference', $diagnosticReference);
+
+        $this->assertSame(1, OfflineSalesImport::where('offline_transaction_uuid', $import['offline_transaction_uuid'])->count());
+        $this->assertSame(1, DB::table('audit_logs')->where('action', 'offline_sync_review_opened')->count());
+        $this->assertSame(0, Sale::count());
+    }
+
+    public function test_compromised_terminal_quarantines_epoch_and_blocks_successor_envelopes(): void
+    {
+        $compromised = $this->importPayload([
+            'terminal_compromised' => true,
+            'terminal_state' => 'compromised',
+            'offline_sequence_number' => 'OFF-MAIN-000001',
+            'local_sequence' => '1',
+        ]);
+        $successor = $this->importPayload([
+            'offline_transaction_uuid' => Str::uuid()->toString(),
+            'offline_sequence_number' => 'OFF-MAIN-000002',
+            'local_sequence' => '2',
+        ]);
+        $this->postSync($this->batchPayload($compromised, 'BATCH-COMPROMISED'))->assertOk()
+            ->assertJsonPath('imports.0.sync_status', 'review_required')
+            ->assertJsonPath('imports.0.review_reason', 'review_terminal_compromised');
+
+        $this->assertDatabaseHas('offline_terminal_epoch_quarantines', [
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branch->id,
+            'sales_machine_profile_id' => $this->profile->id,
+            'terminal_binding_epoch' => 'epoch-1',
+            'quarantine_reason' => 'review_terminal_compromised',
+            'quarantine_status' => OfflineTerminalEpochQuarantine::STATUS_ACTIVE,
+        ]);
+
+        $this->postSync($this->batchPayload($successor, 'BATCH-QUARANTINED-SUCCESSOR'))->assertOk()
+            ->assertJsonPath('imports.0.sync_status', 'review_required')
+            ->assertJsonPath('imports.0.review_reason', 'review_terminal_epoch_quarantined');
+
+        $successorImport = OfflineSalesImport::where('offline_transaction_uuid', $successor['offline_transaction_uuid'])->firstOrFail();
+        $this->assertSame('review_terminal_epoch_quarantined', $successorImport->reason_code);
+        $this->assertSame('terminal_state', $successorImport->conflict_family);
+        $this->assertSame(0, Sale::count());
+    }
+
+    public function test_material_policy_drift_enters_review_before_sale_creation(): void
+    {
+        $import = $this->importPayload([
+            'policy_drift_materiality' => 'material_review',
+            'policy_drift_area' => 'tax',
+            'policy_drift_reason' => 'review_tax_policy_changed',
+            'business_date' => '2026-07-17',
+        ]);
+
+        $this->postSync($this->batchPayload($import, 'BATCH-POLICY-DRIFT'))->assertOk()
+            ->assertJsonPath('imports.0.sync_status', 'review_required')
+            ->assertJsonPath('imports.0.review_reason', 'review_tax_policy_changed');
+
+        $review = OfflineSalesImport::where('offline_transaction_uuid', $import['offline_transaction_uuid'])->firstOrFail();
+        $this->assertSame('policy', $review->conflict_family);
+        $this->assertSame('review_tax_policy_changed', $review->reason_code);
+        $this->assertSame('policy-drift-v1', $review->conflict_policy_version);
+        $this->assertSame('material_review', $review->conflict_metadata['policy_drift_materiality']);
+        $this->assertSame(0, Sale::count());
+        $this->assertSame(0, SalePayment::count());
+    }
+
+    public function test_prohibited_policy_drift_without_cash_is_rejected_before_sale_creation(): void
+    {
+        $import = $this->importPayload([
+            'policy_drift_materiality' => 'prohibited',
+            'policy_drift_area' => 'offline_sales',
+            'policy_drift_reason' => 'rejected_offline_policy_revoked',
+            'cash_status' => 'not_collected',
+        ]);
+
+        $this->postSync($this->batchPayload($import, 'BATCH-POLICY-REJECT'))->assertOk()
+            ->assertJsonPath('imports.0.sync_status', 'rejected')
+            ->assertJsonPath('imports.0.reason', 'rejected_offline_policy_revoked');
+
+        $rejected = OfflineSalesImport::where('offline_transaction_uuid', $import['offline_transaction_uuid'])->firstOrFail();
+        $this->assertSame('policy', $rejected->conflict_family);
+        $this->assertSame('rejected_offline_policy_revoked', $rejected->reason_code);
+        $this->assertSame('policy-drift-v1', $rejected->conflict_policy_version);
+        $this->assertSame(0, Sale::count());
+        $this->assertSame(0, SalePayment::count());
+    }
+
+    public function test_cross_tenant_payload_is_hidden_and_does_not_create_import(): void
+    {
+        $otherTenant = Tenant::factory()->create(['status' => 'active']);
+        $import = $this->importPayload([
+            'tenant_id' => $otherTenant->id,
+        ]);
+
+        $this->postSync($this->batchPayload($import, 'BATCH-CROSS-TENANT'))
+            ->assertNotFound()
+            ->assertJsonPath('error', 'NOT_FOUND');
+
+        $this->assertSame(0, OfflineSalesImport::where('offline_transaction_uuid', $import['offline_transaction_uuid'])->count());
+        $this->assertSame(0, Sale::count());
+        $this->assertSame(1, DB::table('audit_logs')->where('action', 'offline_sync_cross_tenant_blocked')->count());
+    }
+
+    public function test_sync_status_projection_is_role_safe(): void
+    {
+        $first = $this->importPayload([
+            'offline_sequence_number' => 'OFF-MAIN-000001',
+            'local_sequence' => '1',
+            'local_receipt_number' => 'LOCAL-R-PROJECTION',
+            'business_date' => '2026-07-17',
+        ]);
+        $second = $this->importPayload([
+            'offline_transaction_uuid' => Str::uuid()->toString(),
+            'offline_sequence_number' => 'OFF-MAIN-000002',
+            'local_sequence' => '2',
+            'local_receipt_number' => 'LOCAL-R-PROJECTION',
+            'business_date' => '2026-07-17',
+        ]);
+
+        $this->postSync($this->batchPayload($first, 'BATCH-PROJECTION-1'))->assertOk();
+        $this->postSync($this->batchPayload($second, 'BATCH-PROJECTION-2'))->assertOk();
+
+        $this->statusLookup($this->cashier, $second['offline_transaction_uuid'])->assertOk()
+            ->assertJsonPath('sync_status', 'review_required')
+            ->assertJsonMissingPath('reason_code')
+            ->assertJsonMissingPath('conflict_family')
+            ->assertJsonMissingPath('business_payload_fingerprint')
+            ->assertJsonMissingPath('duplicate_candidates');
+
+        $manager = $this->userWithRole('Branch Manager');
+        $this->statusLookup($manager, $second['offline_transaction_uuid'])->assertOk()
+            ->assertJsonPath('sync_status', 'review_required')
+            ->assertJsonPath('reason_code', 'review_suspected_duplicate_capture')
+            ->assertJsonPath('conflict_family', 'duplicate')
+            ->assertJsonMissingPath('business_payload_fingerprint')
+            ->assertJsonMissingPath('duplicate_candidates');
+
+        $owner = $this->userWithRole('Owner/Admin');
+        $supportResponse = $this->statusLookup($owner, $second['offline_transaction_uuid']);
+        $supportResponse->assertOk()
+            ->assertJsonPath('sync_status', 'review_required')
+            ->assertJsonPath('reason_code', 'review_suspected_duplicate_capture')
+            ->assertJsonPath('business_payload_fingerprint', OfflineSalesImport::where('offline_transaction_uuid', $second['offline_transaction_uuid'])->firstOrFail()->server_payload_fingerprint);
+        $this->assertNotEmpty($supportResponse->json('duplicate_candidates'));
+    }
+
     private function postSync(array $payload): \Illuminate\Testing\TestResponse
     {
-        return $this->actingAs($this->cashier, 'sanctum')
+        return $this->postSyncAs($this->cashier, $payload);
+    }
+
+    private function postSyncAs(User $user, array $payload): \Illuminate\Testing\TestResponse
+    {
+        return $this->actingAs($user, 'sanctum')
             ->withHeader('X-Tenant-ID', $this->tenant->id)
             ->withHeader('X-Branch-ID', $this->branch->id)
             ->withHeader('X-Terminal-ID', $this->profile->id)
             ->postJson('/api/v1/pos/offline-sales/sync', $payload);
+    }
+
+    private function statusLookup(User $user, string $offlineTransactionUuid): \Illuminate\Testing\TestResponse
+    {
+        return $this->actingAs($user, 'sanctum')
+            ->withHeader('X-Tenant-ID', $this->tenant->id)
+            ->withHeader('X-Branch-ID', $this->branch->id)
+            ->withHeader('X-Terminal-ID', $this->profile->id)
+            ->getJson("/api/v1/pos/offline-sales/{$offlineTransactionUuid}/sync-status");
+    }
+
+    private function userWithRole(string $roleName): User
+    {
+        $user = User::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'actor_type' => 'tenant_user',
+            'status' => 'active',
+        ]);
+
+        $user->assignRole(Role::where('name', $roleName)->firstOrFail());
+        $user->assignToBranch($this->branch);
+
+        return $user;
     }
 
     private function batchPayload(array $import, string $reference = 'BATCH-EPIC-41'): array
