@@ -37,7 +37,7 @@ Large
 9. Provisional expected-cash presentation.
 10. Provisional document wording and printing behavior.
 11. Customer acknowledgment when final invoice is pending.
-12. Pre-sync error or cancellation behavior.
+12. Pre-sync error behavior with local cancellation blocked after durable cash capture.
 13. Mixed-tender restoration tests.
 14. Online-only route/action guard review.
 15. Permission and branch/terminal isolation tests.

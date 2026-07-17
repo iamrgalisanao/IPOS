@@ -167,18 +167,12 @@ After durable cash capture:
 1. material business fields must not be edited in place,
 2. the original envelope must not be silently deleted,
 3. correction normally requires server synchronization followed by governed void/refund when accepted,
-4. if pre-sync cancellation is permitted by policy, it must be represented as a separate append-only cancellation event.
+4. local cancellation is prohibited for the first release.
 
-Local cancellation evidence must include:
+Resolution is either:
 
-```text
-cancelled_by
-cancelled_at
-reason
-cash_returned
-original_envelope_checksum
-original_business_payload_fingerprint
-```
+1. synchronize and perform an authorized online void/refund after acceptance, or
+2. use the cash-collected support-resolution workflow if the envelope cannot be accepted.
 
 ## 6. Fiscal, Receipt, and Identity Boundary
 
@@ -855,7 +849,7 @@ These constraints may not be violated by future stories unless this document is 
 25. Offline dine-in ticket mutation is unsupported in the first release; offline capture is a standalone cash checkout path.
 26. No UI may promise official receipt completion, inventory posting, loyalty accrual, or central reporting until server acceptance.
 27. Cash-collected records that cannot be posted remain preserved as explicit support-resolution cases.
-28. Durable captured envelopes are immutable; corrections or cancellations are separate evidence.
+28. Durable captured envelopes are immutable; local edit, deletion, and cancellation are blocked after durable cash capture.
 29. Cached stock is not authoritative offline and is never locally deducted as committed inventory.
 30. Top-level synchronization status stays generic; consequence-specific pending states belong in consequence status fields.
 31. All statutory discounts remain online-only for the first release.

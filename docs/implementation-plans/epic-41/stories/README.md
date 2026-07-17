@@ -1,12 +1,12 @@
 # Epic 41 Story Specifications
 
-Status: Story 41.1 Draft for Review; Stories 41.2-41.8 Scaffolded
+Status: Story 41.1 Approved; Stories 41.2-41.8 Scaffolded
 
 Detailed story implementation specifications will be created here after the Epic 41 Architecture Lock and Implementation Guide are approved.
 
 Planned stories:
 
-1. `story-41.1-offline-architecture-and-policy-lock.md` - Draft for Review
+1. `story-41.1-offline-architecture-and-policy-lock.md` - Approved
 2. `story-41.2-offline-transaction-queue-integrity.md` - Planned Scaffold
 3. `story-41.3-server-synchronization-idempotency-and-transaction-atomicity.md` - Planned Scaffold
 4. `story-41.4-conflict-drift-ordering-and-review-handling.md` - Planned Scaffold

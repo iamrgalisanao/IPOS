@@ -35,7 +35,7 @@ Large
 8. Queue ownership lease and single-writer rules.
 9. Retry scheduling and backoff metadata.
 10. Local cash-status tracking.
-11. Optional local cancellation event contract if approved.
+11. Local cancellation blocked after durable cash capture.
 12. Storage quota and storage-unavailable behavior.
 13. Accepted tombstone and retention/compaction policy.
 14. Multi-tab and service-worker race tests.

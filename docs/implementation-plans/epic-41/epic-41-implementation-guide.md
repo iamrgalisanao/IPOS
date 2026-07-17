@@ -152,7 +152,7 @@ Deliverables:
 13. Local data retention and compaction.
 14. Multi-tab/service-worker race tests.
 15. Immutable business envelope versus mutable queue metadata.
-16. Local cancellation event if approved.
+16. Local cancellation blocked after durable cash capture.
 17. Retry scheduling and backoff metadata.
 18. Local cash-status tracking.
 19. Queue access after cashier switch.
@@ -288,7 +288,7 @@ Deliverables:
 13. Statutory discounts entirely blocked offline.
 14. Cashier-switch and logout restrictions.
 15. Provisional expected-cash presentation.
-16. Pre-sync error or cancellation behavior.
+16. Pre-sync error behavior with local cancellation blocked after durable cash capture.
 17. Customer acknowledgment when final invoice is pending.
 
 Out of scope:
@@ -462,7 +462,7 @@ Acceptance checks:
 11. Queue lease and predecessor-blocking behavior pass.
 12. Customer and loyalty messaging remains server-acceptance aware.
 13. Cash-collected review records are retained, visible, and resolution-gated.
-14. Envelope immutability and separate cancellation evidence are validated.
+14. Envelope immutability and local cancellation blocking are validated.
 15. Offline stock presentation is stale/provisional and not locally deducted.
 16. Status dimensionality is validated with consequence-specific pending states.
 17. Cashier-switch protection preserves original actor evidence.

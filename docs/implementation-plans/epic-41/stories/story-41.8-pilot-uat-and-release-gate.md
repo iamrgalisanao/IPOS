@@ -80,7 +80,7 @@ Medium
 11. Queue lease and predecessor-blocking behavior pass.
 12. Customer and loyalty messaging remains server-acceptance aware.
 13. Cash-collected review records are retained, visible, and resolution-gated.
-14. Envelope immutability and separate cancellation evidence are validated.
+14. Envelope immutability and local cancellation blocking are validated.
 15. Offline stock presentation is stale/provisional and not locally deducted.
 16. Status dimensionality is validated with consequence-specific pending states.
 17. Cashier-switch protection preserves original actor evidence.

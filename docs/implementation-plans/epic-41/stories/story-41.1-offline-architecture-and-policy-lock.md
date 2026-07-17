@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft for Review
+Approved
 
 Date: 2026-07-17
 
@@ -15,6 +15,32 @@ Epic 41 POS Terminal Offline Readiness and Release Validation
 Create the implementation specification that locks the first-release offline policy boundary for POS terminals.
 
 This story does not implement runtime queue, synchronization, hardware, inventory, loyalty, or fiscal behavior. It defines the exact contracts those later stories must follow.
+
+## Evidence Boundary
+
+Competitor evidence validates visible offline operating patterns only.
+
+Public materials from comparable POS providers support:
+
+1. offline transaction continuity,
+2. later synchronization,
+3. visible online/offline and sync status,
+4. cashier, branch, terminal, and shift awareness,
+5. restricted centrally dependent features,
+6. cash accountability and formal day-end behavior.
+
+Public competitor documentation does not establish IPOS's detailed backend architecture for:
+
+1. queue leases,
+2. terminal binding epochs,
+3. immutable envelope fingerprints,
+4. cash-collected review lifecycle,
+5. suspected duplicate detection,
+6. server consequence atomicity,
+7. fiscal identity separation,
+8. local tombstone retention.
+
+Story 41.1 therefore uses competitor evidence as market validation for operational needs, not as proof that StoreHub, UTAK, Mosaic, or any other provider implements the same internal controls.
 
 ## Dependencies
 
@@ -51,6 +77,9 @@ In scope:
 13. Queued-record immutability and cancellation rules.
 14. Cashier switching and cached-session expiry rules.
 15. Hardware validation versus deferral policy.
+16. Policy precedence and policy snapshot contract.
+17. Operator-visible sync status requirements.
+18. Review ownership and escalation expectations.
 
 Out of scope:
 
@@ -83,6 +112,27 @@ It is allowed only when all required policy gates pass:
 7. local queue persistence succeeds,
 8. local envelope read-back and checksum verification succeeds,
 9. server synchronization later accepts the envelope.
+
+## Policy Precedence
+
+Effective offline policy is resolved in this order:
+
+```text
+Architecture Lock
+Platform non-overridable safety rules
+Tenant offline policy
+Branch strengthening
+Terminal profile strengthening
+Cached authorization snapshot
+```
+
+Rules:
+
+1. a lower scope may make offline behavior stricter,
+2. a lower scope may not enable something blocked by the Architecture Lock,
+3. missing or contradictory policy fails closed,
+4. server policy remains authoritative at synchronization,
+5. a cached policy proves why capture was allowed locally, but does not guarantee server acceptance.
 
 ## Online-Only Operation Matrix
 
@@ -132,6 +182,26 @@ The implementation must define a server-issued terminal offline profile containi
 13. cashier session and lock policy,
 14. local evidence retention policy.
 
+The effective policy snapshot attached to a captured envelope must include:
+
+1. `offline_policy_snapshot_id`,
+2. `offline_policy_version`,
+3. `offline_policy_fingerprint`,
+4. `offline_policy_effective_at`.
+
+The snapshot must resolve:
+
+1. duration limits,
+2. transaction and cash limits,
+3. catalog age,
+4. price policy age,
+5. shift authorization age,
+6. discount allowlist,
+7. customer identity policy,
+8. receipt acknowledgment policy,
+9. session lock policy,
+10. stock display policy.
+
 If any required policy is missing, expired, cross-tenant, cross-branch, or incompatible with the terminal, offline capture fails closed.
 
 ## Offline Transaction Envelope Contract
@@ -161,15 +231,50 @@ The policy spec must define the canonical envelope fields for later implementati
 21. `offline_duration`,
 22. `catalog_cache_version`,
 23. `pricing_policy_version`,
-24. `customer_identity_snapshot` when allowed,
-25. `business_payload_fingerprint`,
-26. `queue_record_integrity_checksum`,
-27. `capture_status`,
-28. `cash_status`,
-29. `server_status`,
-30. `resolution_status`.
+24. `offline_policy_snapshot_id`,
+25. `offline_policy_version`,
+26. `offline_policy_fingerprint`,
+27. `offline_policy_effective_at`,
+28. `customer_identity_snapshot` when allowed,
+29. `cash_snapshot`,
+30. `business_payload_fingerprint`.
 
 Mutable queue metadata such as retry count, last error, lease owner, sync timestamps, and support notes must not be included in the canonical business payload fingerprint.
+
+Immutable business envelope data includes:
+
+1. identity,
+2. terminal, branch, cashier, shift, and drawer evidence,
+3. cart item snapshots,
+4. pricing, tax, and allowed discount evidence,
+5. cash tender evidence,
+6. customer snapshot when allowed,
+7. capture time evidence,
+8. policy snapshot evidence,
+9. business payload fingerprint.
+
+Mutable queue projection data includes:
+
+1. `queue_status`,
+2. `cash_status`,
+3. `server_status`,
+4. `resolution_status`,
+5. retry counts,
+6. error fields,
+7. lease fields,
+8. sync timestamps,
+9. support notes.
+
+Append-only status history must preserve:
+
+1. event,
+2. from status,
+3. to status,
+4. timestamp,
+5. actor or worker,
+6. reason,
+7. error code,
+8. support reference.
 
 ## Local Capture Sequence
 
@@ -190,6 +295,16 @@ Show provisional acknowledgment
 
 If transactional write, read-back, or checksum verification fails, the cashier must not see a successful offline sale state.
 
+If cash may have been collected but durable capture cannot be confirmed, the record must enter capture-uncertain review rather than inviting immediate duplicate re-entry.
+
+Capture-uncertain behavior:
+
+1. use `capture_status = uncertain` where local evidence supports it,
+2. preserve any retrievable local evidence,
+3. show supervisor/support instructions,
+4. include the event in provisional drawer accountability,
+5. route suspected recapture under another UUID through duplicate review.
+
 ## Fiscal and Receipt Boundary
 
 First release uses a provisional acknowledgment only.
@@ -201,6 +316,18 @@ OFFLINE TRANSACTION ACKNOWLEDGMENT
 Not yet posted as official sale
 Local reference: ...
 ```
+
+The acknowledgment must communicate:
+
+1. payment was recorded locally,
+2. central posting is pending,
+3. local reference,
+4. amount received,
+5. it is not yet the official invoice,
+6. how the customer obtains the official invoice,
+7. how the customer contacts the branch if posting fails.
+
+Exact wording and print behavior require formal compliance signoff before production use.
 
 The specification must preserve separate identities:
 
@@ -223,8 +350,24 @@ Rules:
 4. cashier switching does not change envelope ownership,
 5. browser UI may show provisional expected cash,
 6. official shift and drawer totals remain server-authoritative,
-7. shift close with unresolved offline records is blocked or clearly provisional,
+7. final shift close is blocked while unresolved locally captured records exist,
 8. unresolved cash-collected records remain visible until support resolution.
+
+## Cash Evidence Contract
+
+The immutable cash snapshot must include:
+
+1. `currency`,
+2. `sale_total`,
+3. `cash_tendered`,
+4. `change_due`,
+5. `cash_net_collected`,
+6. `rounding_policy_id`,
+7. `rounding_policy_version`,
+8. `rounding_adjustment`,
+9. `cash_confirmed_at_device`.
+
+`maximum_unsynced_cash_amount` is based on unresolved offline sale totals or net collected exposure, not gross tendered cash before change.
 
 ## Cash-Collected Review Policy
 
@@ -263,16 +406,14 @@ After durable capture with cash collected:
 2. envelope payload is not edited,
 3. envelope is not silently deleted,
 4. correction requires later governed void/refund after accepted sync or support resolution if posting cannot occur,
-5. any allowed local pre-sync cancellation is a separate append-only event.
+5. local edit, deletion, and cancellation are blocked.
 
-Cancellation evidence must include:
+First-release policy prohibits local cancellation after durable cash capture.
 
-1. `cancelled_by`,
-2. `cancelled_at`,
-3. `reason`,
-4. `cash_returned`,
-5. `original_envelope_checksum`,
-6. `original_business_payload_fingerprint`.
+Resolution is either:
+
+1. synchronize and perform an authorized online void/refund after acceptance, or
+2. use the cash-collected support-resolution workflow if the envelope cannot be accepted.
 
 ## Discount and Customer Identity Policy
 
@@ -304,11 +445,15 @@ Customer identity policy:
 The policy must state:
 
 1. cached catalog and pricing may be shown,
-2. current stock is not authoritative offline,
-3. cached stock may be shown only with stale/provisional labelling and last-sync timestamp,
-4. offline capture does not locally deduct displayed stock,
-5. strict versus soft negative-stock policy is evaluated at server synchronization,
-6. stock conflict after cash collection enters review rather than disappearing from accountability.
+2. cached product sellability and cached inventory quantity are separate concepts,
+3. product sellability may be cached within policy age,
+4. an item marked unavailable in the last accepted catalog is blocked,
+5. current stock is not authoritative offline,
+6. cached stock may be shown only with stale/provisional labelling and last-sync timestamp,
+7. offline capture does not locally deduct displayed stock,
+8. cached quantity alone does not authorize sale,
+9. strict versus soft negative-stock policy is evaluated at server synchronization,
+10. stock conflict after cash collection enters review rather than disappearing from accountability.
 
 ## Time and Business-Date Policy
 
@@ -324,6 +469,25 @@ The server resolves committed business date using:
 6. maximum offline duration.
 
 Clock drift, timezone changes, business-day cutoff crossings, and late synchronization may cause review or rejection.
+
+Time-quality outcomes:
+
+```text
+trusted
+offset_estimated
+device_changed
+timezone_changed
+sequence_conflict
+offline_window_exceeded
+```
+
+Rules:
+
+1. local sequence orders captures within one terminal epoch,
+2. device timestamp does not reorder the queue,
+3. business date is server resolved,
+4. cashier cannot manually change the committed business date,
+5. finance/support owns business-date review.
 
 ## Queue Ownership and Retry Policy
 
@@ -362,6 +526,19 @@ receipt_status
 
 Do not introduce consequence-specific top-level statuses such as `accepted_with_pending_loyalty`.
 
+## Operator Sync Visibility
+
+The cashier-facing terminal status must show at minimum:
+
+1. connection state: online, intermittent, or offline,
+2. pending transaction count,
+3. pending cash amount,
+4. oldest pending age,
+5. last successful synchronization,
+6. blocked or review-required count,
+7. current terminal and branch,
+8. current cashier and shift.
+
 ## Review Reasons
 
 Required review reasons:
@@ -373,7 +550,29 @@ review_required_stock_policy
 review_required_clock_drift
 review_required_business_date
 review_required_terminal_revoked
+review_required_capture_uncertain
 ```
+
+## Review Ownership and Service Expectations
+
+Each review reason must have configured ownership and service expectations.
+
+| Review reason | Primary owner |
+| --- | --- |
+| Cash collected | Branch manager and support |
+| Suspected duplicate | Support/audit |
+| Stock policy | Inventory controller and support |
+| Clock drift | Support |
+| Business date | Finance/operations and support |
+| Terminal revoked | Security/tenant admin and support |
+| Capture uncertain | Branch manager and support |
+
+The policy must define:
+
+1. acknowledgment target,
+2. resolution target,
+3. escalation threshold,
+4. customer follow-up owner.
 
 ## Security and Local Data Protection
 
@@ -414,17 +613,27 @@ Story 41.7 owns recovery and physical validation details.
 7. Offline capture is blocked without valid cached open-shift authority.
 8. Cash-collected unresolved records have explicit review and resolution rules.
 9. Captured envelopes are immutable after durable cash capture.
-10. Local cancellation, if permitted, is append-only evidence.
+10. Local edit, deletion, and cancellation are blocked after durable cash capture.
 11. Cached stock is not presented as authoritative offline.
 12. Cached stock is not locally deducted.
-13. All statutory discounts are online-only.
-14. Customer and loyalty messaging does not promise points before server acceptance.
-15. Device time is evidence; server resolves committed business date.
-16. Top-level sync status remains generic and consequence statuses are separate.
-17. Retry and review vocabularies prevent review-required records from auto-retrying.
-18. Cashier switching preserves original envelope actor evidence.
-19. Local storage success requires write, read-back, and checksum verification.
-20. Policy does not conflict with Epic 39 loyalty or Epic 40 inventory architecture.
+13. Cached product sellability and cached stock quantity are separate concepts.
+14. All statutory discounts are online-only.
+15. Customer and loyalty messaging does not promise points before server acceptance.
+16. Device time is evidence; server resolves committed business date.
+17. Top-level sync status remains generic and consequence statuses are separate.
+18. Retry and review vocabularies prevent review-required records from auto-retrying.
+19. Cashier switching preserves original envelope actor evidence.
+20. Local storage success requires write, read-back, and checksum verification.
+21. Competitor evidence is used only to validate visible operational patterns, not undocumented backend architecture.
+22. Policy precedence applies stricter lower-scope policies but cannot weaken platform restrictions.
+23. Complete offline policy snapshot version and fingerprint are available for support review.
+24. Immutable business envelope data is separated from mutable queue projection data.
+25. Cash evidence preserves sale total, tendered amount, change, net collected exposure, currency, and rounding evidence.
+26. Capture-uncertain recovery prevents ordinary duplicate re-entry after uncertain local persistence.
+27. Operator sync visibility includes connection state, pending count, pending cash, oldest pending age, last sync, and review count.
+28. Final shift close is blocked while unresolved locally captured records exist.
+29. Review ownership and service expectations are defined.
+30. Policy does not conflict with Epic 39 loyalty or Epic 40 inventory architecture.
 
 ## Test Planning Notes
 
@@ -440,7 +649,16 @@ This story is documentation/specification only. Later implementation stories sho
 8. cached stock stale label,
 9. cashier switching,
 10. clock drift review,
-11. suspected duplicate review.
+11. suspected duplicate review,
+12. policy precedence conflict,
+13. policy snapshot evidence,
+14. immutable envelope versus mutable queue state,
+15. cash evidence and rounding,
+16. capture-uncertain recovery,
+17. operator sync visibility,
+18. shift close blocked while unresolved records exist,
+19. product sellability versus stock quantity display,
+20. review ownership routing.
 
 ## Definition of Done
 
