@@ -134,9 +134,8 @@ export class OfflineSyncManager {
             }
 
             // Prepare the payload according to backend validation rules (SyncBatchRequest)
-            const payload = {
-                batch_reference: batchRef,
-                imports: leasedEnvelopes.map(env => ({
+            const imports = await Promise.all(leasedEnvelopes.map(async env => {
+                const importPayload = {
                     offline_sequence_number: env.offline_sequence,
                     submitted_at: env.payload.submitted_at || env.created_at,
                     items: env.payload.items,
@@ -149,6 +148,8 @@ export class OfflineSyncManager {
                     branch_id: env.payload.branch_id,
                     terminal_id: env.payload.terminal_id,
                     device_id: env.payload.device_id,
+                    user_id: env.payload.user_id,
+                    cashier_id: env.payload.cashier_id,
                     cashier_shift_id: env.payload.cashier_shift_id,
                     timecard_id: env.payload.timecard_id,
                     local_transaction_reference: env.payload.local_transaction_reference,
@@ -174,7 +175,6 @@ export class OfflineSyncManager {
                     taxable_amount_centavos: env.payload.taxable_amount_centavos,
                     tax_amount_centavos: env.payload.tax_amount_centavos,
                     net_amount_centavos: env.payload.net_amount_centavos,
-                    payload_hash: env.payload_hash,
                     sync_status: 'pending',
                     sync_attempt_count: env.retry_count || 0,
                     last_sync_attempt_at: env.last_sync_attempt_at,
@@ -188,17 +188,41 @@ export class OfflineSyncManager {
                     sync_attempt_id: env.last_sync_attempt_id,
                     lease_id: env.lease?.lease_id,
                     attempt_generation: env.last_attempt_generation || 1,
-                }))
+                };
+                const businessFingerprint = await this.computeBusinessPayloadFingerprint(importPayload);
+
+                return {
+                    ...importPayload,
+                    payload_hash: businessFingerprint,
+                    business_payload_fingerprint: businessFingerprint,
+                };
+            }));
+
+            const payload = {
+                batch_reference: batchRef,
+                imports,
             };
 
-            const response = await axios.post('/pos/offline-sync', payload, {
+            const response = await axios.post('/api/v1/pos/offline-sales/sync', payload, {
                 headers: this.buildContextHeaders(leasedEnvelopes),
             });
 
             if (response.status === 202 || response.status === 200) {
                 const results = response.data.imports || [];
+                const resultsByUuid = new Map<string, any>();
+
+                for (const result of results) {
+                    const uuid = result?.offline_transaction_uuid;
+                    if (!uuid || resultsByUuid.has(uuid)) {
+                        console.warn('Offline sync response contained an invalid or duplicate envelope result:', result);
+                        continue;
+                    }
+                    resultsByUuid.set(uuid, result);
+                }
+
                 for (const env of leasedEnvelopes) {
-                    const result = results.find((r: any) => r.offline_sequence_number === env.offline_sequence);
+                    const offlineUuid = env.offline_transaction_uuid || env.id;
+                    const result = resultsByUuid.get(offlineUuid);
                     const guard = {
                         leaseId: env.lease?.lease_id || '',
                         syncAttemptId: env.last_sync_attempt_id || '',
@@ -214,7 +238,12 @@ export class OfflineSyncManager {
                             guard
                         );
                     } else {
-                        await offlineSalesQueue.updateTransactionStatus(env.id, 'synced', undefined, guard);
+                        await offlineSalesQueue.updateTransactionStatus(
+                            env.id,
+                            'failed',
+                            'Server response did not include a result for this offline transaction. It will be retried safely.',
+                            guard
+                        );
                     }
                 }
 
@@ -285,19 +314,89 @@ export class OfflineSyncManager {
         switch (serverStatus) {
             case 'pending':
             case 'server_verified':
+            case 'accepted':
             case 'synced':
+            case 'posted':
                 return 'synced';
             case 'duplicate':
+            case 'replayed':
                 return 'synced';
             case 'rejected':
                 return 'conflict';
             case 'conflict':
+            case 'review_required':
                 return 'conflict';
             case 'accepted_with_warning':
                 return 'accepted_with_warning';
+            case 'retryable_failed':
+                return 'failed';
             default:
                 return 'failed';
         }
+    }
+
+    private async computeBusinessPayloadFingerprint(importPayload: Record<string, any>): Promise<string> {
+        const materialKeys = [
+            'tenant_id',
+            'branch_id',
+            'terminal_id',
+            'sales_machine_profile_id',
+            'terminal_binding_epoch',
+            'offline_transaction_uuid',
+            'offline_sequence_number',
+            'local_sequence',
+            'user_id',
+            'cashier_id',
+            'cashier_shift_id',
+            'drawer_session_id',
+            'items',
+            'client_subtotal',
+            'client_tax_total',
+            'client_total',
+            'payment_method',
+            'payments',
+            'catalog_version_hash',
+            'tax_configuration_version_hash',
+            'payment_methods_version_hash',
+            'terminal_policy_version_hash',
+            'submitted_at',
+            'terminal_timestamp',
+            'timezone',
+        ];
+        const material: Record<string, any> = {};
+
+        for (const key of materialKeys) {
+            if (importPayload[key] !== undefined) {
+                material[key] = importPayload[key];
+            }
+        }
+
+        return this.computeSHA256(JSON.stringify(this.canonicalize(material)));
+    }
+
+    private canonicalize(value: any): any {
+        if (Array.isArray(value)) {
+            return value.map((item) => this.canonicalize(item));
+        }
+
+        if (value && typeof value === 'object') {
+            return Object.keys(value)
+                .sort()
+                .reduce((acc, key) => {
+                    acc[key] = this.canonicalize(value[key]);
+                    return acc;
+                }, {} as Record<string, any>);
+        }
+
+        return value;
+    }
+
+    private async computeSHA256(data: string): Promise<string> {
+        const encoder = new TextEncoder();
+        const dataBuffer = encoder.encode(data);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
     }
 
     public async retryFailed(): Promise<void> {

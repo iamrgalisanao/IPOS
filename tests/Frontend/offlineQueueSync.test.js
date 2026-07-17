@@ -288,7 +288,7 @@ test('Story 28.11 offline queue and sync hardening', async (t) => {
         assert.strictEqual(staleReadiness.reason, 'stale_registration_cache');
     });
 
-    await t.test('valid config allows provisional capture and sync 202 updates local statuses correctly', async () => {
+    await t.test('valid config allows provisional capture and v1 sync updates local statuses correctly', async () => {
         const snapshot = await catalogCache.getConfigSnapshotMetadata();
         const first = await offlineSalesQueue.appendTransaction({
             submitted_at: '2026-05-20T12:00:00.000Z',
@@ -311,14 +311,16 @@ test('Story 28.11 offline queue and sync hardening', async (t) => {
         navigator.onLine = true;
         globalState.status = 'online';
 
-        axios.post = async (url, payload) => {
-            assert.strictEqual(url, '/pos/offline-sync');
-            const submittedSequence = payload.imports[0].offline_sequence_number;
-            assert.ok([first.offline_sequence, second.offline_sequence].includes(submittedSequence));
-            assert.ok(payload.imports[0].items.length > 0);
-            assert.strictEqual(payload.imports[0].config_snapshot_hash, 'snapshot-hash-123');
-            assert.strictEqual(payload.imports[0].layout_version_hash, 'layout-hash-123');
-            assert.strictEqual(payload.imports[0].catalog_version_hash, 'catalog-hash-123');
+		axios.post = async (url, payload) => {
+			assert.strictEqual(url, '/api/v1/pos/offline-sales/sync');
+			const submittedSequence = payload.imports[0].offline_sequence_number;
+			assert.ok([first.offline_sequence, second.offline_sequence].includes(submittedSequence));
+			assert.ok(payload.imports[0].items.length > 0);
+			assert.ok(payload.imports[0].business_payload_fingerprint);
+			assert.strictEqual(payload.imports[0].payload_hash, payload.imports[0].business_payload_fingerprint);
+			assert.strictEqual(payload.imports[0].config_snapshot_hash, 'snapshot-hash-123');
+			assert.strictEqual(payload.imports[0].layout_version_hash, 'layout-hash-123');
+			assert.strictEqual(payload.imports[0].catalog_version_hash, 'catalog-hash-123');
             assert.strictEqual(payload.imports[0].payment_methods_version_hash, 'payment-hash-123');
             assert.strictEqual(payload.imports[0].config_snapshot.config_snapshot_hash, 'snapshot-hash-123');
             assert.ok(payload.imports[0].offline_transaction_uuid);
@@ -330,14 +332,15 @@ test('Story 28.11 offline queue and sync hardening', async (t) => {
             return {
                 status: 202,
                 data: {
-                    imports: [
-                        {
-                            offline_sequence_number: submittedSequence,
-                            status: submittedSequence === first.offline_sequence ? 'pending' : 'duplicate'
-                        },
-                    ],
-                },
-            };
+					imports: [
+						{
+							offline_transaction_uuid: payload.imports[0].offline_transaction_uuid,
+							offline_sequence_number: submittedSequence,
+							status: submittedSequence === first.offline_sequence ? 'accepted' : 'replayed'
+						},
+					],
+				},
+			};
         };
 
         await offlineSyncManager.processQueue();
@@ -353,9 +356,36 @@ test('Story 28.11 offline queue and sync hardening', async (t) => {
         assert.strictEqual(duplicate.status, 'synced');
 
         const summary = await offlineSalesQueue.getStatusSummary();
-        assert.strictEqual(summary.synced, 2);
-        assert.ok(summary.lastSuccessfulSyncAt);
-    });
+		assert.strictEqual(summary.synced, 2);
+		assert.ok(summary.lastSuccessfulSyncAt);
+	});
+
+	await t.test('missing v1 envelope result remains retryable instead of synced', async () => {
+		const snapshot = await catalogCache.getConfigSnapshotMetadata();
+		const record = await offlineSalesQueue.appendTransaction({
+			submitted_at: '2026-05-20T12:00:00.000Z',
+			items: [{ product_id: 'product-1', quantity: 1, unit_price: '125.00' }],
+			client_subtotal: '111.61',
+			client_tax_total: '13.39',
+			client_total: '125.00',
+			...snapshot,
+		}, { subtotal: '111.61', tax: '13.39', total: '125.00' }, { prefix: 'INV-T01-', initialNextValue: 1 });
+
+		navigator.onLine = true;
+		globalState.status = 'online';
+		axios.post = async () => ({
+			status: 200,
+			data: { imports: [] },
+		});
+
+		await offlineSyncManager.processQueue();
+
+		const updated = (await offlineSalesQueue.getAllTransactions()).find((item) => item.id === record.id);
+		assert.strictEqual(updated.status, 'failed');
+		assert.match(updated.error_message, /did not include a result/i);
+		const retryable = await offlineSalesQueue.getQueuedTransactions();
+		assert.strictEqual(retryable.some((item) => item.id === record.id), true);
+	});
 
     await t.test('sync only runs online, 422 moves to review, and network failures stay retryable', async () => {
         const snapshot = await catalogCache.getConfigSnapshotMetadata();
