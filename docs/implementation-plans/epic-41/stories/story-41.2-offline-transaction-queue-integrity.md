@@ -847,6 +847,18 @@ Derivation:
 3. `blocked`: limits, storage, schema, or policy prevent new capture,
 4. `support_required`: review, corruption, uncertain capture, or terminal identity issue exists.
 
+`processing_complete` means no ordinary queue worker may continue processing this record in its current lifecycle. It does not necessarily mean the commercial issue is resolved.
+
+Valid example:
+
+```json
+{
+  "queue_status": "processing_complete",
+  "server_status": "review_required",
+  "resolution_status": "pending_support"
+}
+```
+
 ## 21. Support Export Safeguards
 
 Queue extraction or diagnostics export requires:
@@ -904,6 +916,33 @@ storage_write_failure_count
 capture_uncertain_count
 retry_exhausted_count
 ```
+
+## 24. Implementation Notes
+
+Implementation should preserve these safeguards:
+
+1. use `storage_failed` as a terminal-level diagnostic event when no transaction record exists, or as a record state only when sufficient recovery evidence was durably captured separately,
+2. do not create a fabricated envelope merely to store storage failure,
+3. `retained_full` requires an eligible outcome such as `accepted`, `replayed`, or a formally resolved support outcome whose retention policy permits it,
+4. pending, review-required, capture-uncertain, or cash-disputed records normally remain `full_payload`,
+5. formal support resolution must append explicit events such as `support_resolution_opened`, `support_resolution_approved_posting`, `support_resolution_cash_returned`, and `support_resolution_rejected`,
+6. do not change `server_status` from `rejected` to `accepted` without preserving original outcome and resolution authority,
+7. the terminal-level coordinator identifies eligible records, evaluates ordering and predecessor rules, initiates per-record lease acquisition, and never bypasses record leases,
+8. the coordinator must not hold an IndexedDB transaction while making a network request,
+9. `active_queue_lease` details are support diagnostics; cashier UI should present simpler states such as `Sync active`, `Waiting to retry`, or `Needs support`.
+
+Suggested service boundaries:
+
+| Component | Responsibility |
+| --- | --- |
+| `OfflineQueueRepository` | IndexedDB transactions and indexes |
+| `OfflineCaptureService` | Atomic capture and verification |
+| `QueueTransitionPolicy` | Legal status transitions |
+| `QueueLeaseService` | Lease acquisition and renewal |
+| `QueueRetryPolicy` | Backoff and eligibility |
+| `QueueIntegrityService` | Fingerprints, checksums, startup scan |
+| `QueueRetentionService` | Tombstones, compaction, purge |
+| `QueueDiagnosticsService` | Operator and support projections |
 
 ## Implementation Slices
 
@@ -984,6 +1023,21 @@ Later implementation should include tests for:
 28. support export metadata,
 29. local data-protection masking,
 30. local diagnostic counters.
+
+Priority order:
+
+1. atomic capture rollback,
+2. duplicate local-sequence prevention,
+3. canonical fingerprint stability across reloads,
+4. multi-tab lease race,
+5. expired-worker late response,
+6. server-committed but response-lost retry,
+7. schema migration with unresolved records,
+8. service-worker upgrade with old envelopes,
+9. capture uncertainty after write ambiguity,
+10. compaction without loss of tombstone identity,
+11. cash return event history,
+12. startup integrity scan blocking unsafe capture.
 
 ## Definition of Done
 
