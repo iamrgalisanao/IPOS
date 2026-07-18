@@ -45,6 +45,34 @@ export type OfflineRetentionState =
     | 'compacted'
     | 'purged';
 
+export type OfflineStorageState =
+    | 'storage_available'
+    | 'queue_capacity_warning'
+    | 'queue_capacity_block'
+    | 'storage_unavailable'
+    | 'storage_corrupt';
+
+export type OfflineQueueHealthState =
+    | 'healthy'
+    | 'warning'
+    | 'blocked'
+    | 'support_required';
+
+export type OfflineTerminalRecoveryState =
+    | 'none'
+    | 'possible_storage_loss'
+    | 'orphan_terminal_missing'
+    | 'orphan_terminal_mismatch'
+    | 'orphan_epoch_mismatch'
+    | 'orphan_binding_revoked'
+    | 'orphan_identity_unverifiable';
+
+export type OfflineQueueLeasePurpose =
+    | 'sync'
+    | 'maintenance'
+    | 'migration'
+    | 'compaction';
+
 export interface OfflineQueueLease {
     lease_id: string | null;
     queue_owner_instance_id: string | null;
@@ -53,6 +81,7 @@ export interface OfflineQueueLease {
     lease_heartbeat_at: string | null;
     worker_type: string | null;
     worker_version: string | null;
+    lease_purpose?: OfflineQueueLeasePurpose | null;
 }
 
 export interface OfflineSyncAttemptGuard {
@@ -102,6 +131,19 @@ export interface OfflineTransactionEnvelope {
         subtotal: string; // Decimal string
     };
     error_message?: string;
+}
+
+export interface OfflineQueueHealthSnapshot {
+    terminal_id: string | null;
+    terminal_binding_epoch: string | null;
+    highest_local_sequence: string | null;
+    unresolved_count: number;
+    accepted_tombstone_count: number;
+    queue_schema_version: number;
+    storage_state: OfflineStorageState;
+    queue_health: OfflineQueueHealthState;
+    terminal_recovery_state: OfflineTerminalRecoveryState;
+    reported_at: string;
 }
 
 export interface OfflineQueueSummary {
@@ -155,13 +197,22 @@ export interface OfflineQueueDiagnosticRecord {
 }
 
 export interface OfflineQueueDiagnosticsBundle {
+    export_id?: string;
     generated_at: string;
+    generated_by?: string | null;
+    filter_summary?: Record<string, any>;
+    export_checksum?: string;
+    label?: 'provisional local evidence';
     storage: {
         indexed_db_available: boolean;
         database_name: string;
         database_version: number;
         object_stores: string[];
         persistent_storage_capability?: Record<string, any> | null;
+        storage_state?: OfflineStorageState;
+        queue_health?: OfflineQueueHealthState;
+        terminal_recovery_state?: OfflineTerminalRecoveryState;
+        last_queue_health_heartbeat?: OfflineQueueHealthSnapshot | null;
     };
     summary: OfflineQueueSummary;
     hash_chain_valid: boolean;
@@ -171,14 +222,96 @@ export interface OfflineQueueDiagnosticsBundle {
     records: OfflineQueueDiagnosticRecord[];
 }
 
+export interface OfflineDiagnosticsExportOptions {
+    generatedBy?: string | null;
+    status?: OfflineSyncStatus;
+    offlineTransactionUuid?: string;
+    localSequenceFrom?: string;
+    localSequenceTo?: string;
+    cashExposure?: string;
+    epoch?: string;
+    from?: string;
+    to?: string;
+}
+
 const DB_NAME = 'ipos_pos_offline_queue';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const ENVELOPE_SCHEMA_VERSION = 2;
 const FINGERPRINT_VERSION = 'ipos-offline-envelope-v1';
 const CHECKSUM_VERSION = 'sha-256-canonical-json-v1';
+const TOMBSTONE_CHECKSUM_VERSION = 'sha-256-canonical-json-v1';
 const UNRESOLVED_STATUSES: OfflineSyncStatus[] = ['pending', 'syncing', 'failed', 'conflict', 'accepted_with_warning'];
 const PRUNABLE_STATUSES: OfflineSyncStatus[] = ['synced', 'cancelled'];
+const STORAGE_STATES: OfflineStorageState[] = [
+    'storage_available',
+    'queue_capacity_warning',
+    'queue_capacity_block',
+    'storage_unavailable',
+    'storage_corrupt',
+];
 const listeners = new Set<() => void>();
+
+export function canonicalizeOfflineValue(value: any, keyName: string | null = null): any {
+    if (Array.isArray(value)) {
+        return value.map((item) => canonicalizeOfflineValue(item));
+    }
+
+    if (value && typeof value === 'object') {
+        return Object.keys(value)
+            .sort()
+            .reduce((acc, key) => {
+                acc[key] = canonicalizeOfflineValue(value[key], key);
+                return acc;
+            }, {} as Record<string, any>);
+    }
+
+    if (typeof value === 'string') {
+        const normalized = value.normalize('NFC');
+        if (keyName && /currency/i.test(keyName)) {
+            return normalized.toUpperCase();
+        }
+
+        if (/^-?\d+(\.\d+)?$/.test(normalized)) {
+            return normalized;
+        }
+
+        if (/e/i.test(normalized) && /^-?\d+(\.\d+)?e[+-]?\d+$/i.test(normalized)) {
+            throw new Error(`Scientific notation is not allowed in offline queue canonical payloads (${keyName || 'value'}).`);
+        }
+
+        return normalized;
+    }
+
+    if (typeof value === 'number' && !Number.isFinite(value)) {
+        throw new Error(`Non-finite number is not allowed in offline queue canonical payloads (${keyName || 'value'}).`);
+    }
+
+    return value;
+}
+
+export function canonicalizeOfflineEnvelope(payload: any, version = CHECKSUM_VERSION): string {
+    if (version !== CHECKSUM_VERSION) {
+        throw new Error(`Unsupported offline envelope canonicalization version: ${version}`);
+    }
+
+    const payloadForHash = JSON.parse(JSON.stringify(payload));
+    delete (payloadForHash as Record<string, any>).payload_hash;
+    delete (payloadForHash as Record<string, any>).payload_checksum;
+
+    return JSON.stringify(canonicalizeOfflineValue(payloadForHash));
+}
+
+export function canonicalizeOfflineTombstone(tombstone: any, version = TOMBSTONE_CHECKSUM_VERSION): string {
+    if (version !== TOMBSTONE_CHECKSUM_VERSION) {
+        throw new Error(`Unsupported offline tombstone canonicalization version: ${version}`);
+    }
+
+    const tombstoneForHash = JSON.parse(JSON.stringify(tombstone));
+    delete (tombstoneForHash as Record<string, any>).tombstone_checksum;
+    delete (tombstoneForHash as Record<string, any>).tombstone_checksum_algorithm;
+
+    return JSON.stringify(canonicalizeOfflineValue(tombstoneForHash));
+}
 
 export class OfflineSalesQueueService {
     private db: IDBDatabase | null = null;
@@ -248,6 +381,12 @@ export class OfflineSalesQueueService {
                 if (!db.objectStoreNames.contains('offline_queue_meta')) {
                     db.createObjectStore('offline_queue_meta');
                 }
+                if (!db.objectStoreNames.contains('offline_recovery_events')) {
+                    const store = db.createObjectStore('offline_recovery_events', { keyPath: 'id' });
+                    store.createIndex('event_type', 'event_type', { unique: false });
+                    store.createIndex('offline_transaction_uuid', 'offline_transaction_uuid', { unique: false });
+                    store.createIndex('created_at', 'created_at', { unique: false });
+                }
             };
 
             request.onsuccess = () => {
@@ -270,41 +409,7 @@ export class OfflineSalesQueueService {
     }
 
     private canonicalize(value: any, keyName: string | null = null): any {
-        if (Array.isArray(value)) {
-            return value.map((item) => this.canonicalize(item));
-        }
-
-        if (value && typeof value === 'object') {
-            return Object.keys(value)
-                .sort()
-                .reduce((acc, key) => {
-                    acc[key] = this.canonicalize(value[key], key);
-                    return acc;
-                }, {} as Record<string, any>);
-        }
-
-        if (typeof value === 'string') {
-            const normalized = value.normalize('NFC');
-            if (keyName && /currency/i.test(keyName)) {
-                return normalized.toUpperCase();
-            }
-
-            if (/^-?\d+(\.\d+)?$/.test(normalized)) {
-                return normalized;
-            }
-
-            if (/e/i.test(normalized) && /^-?\d+(\.\d+)?e[+-]?\d+$/i.test(normalized)) {
-                throw new Error(`Scientific notation is not allowed in offline queue canonical payloads (${keyName || 'value'}).`);
-            }
-
-            return normalized;
-        }
-
-        if (typeof value === 'number' && !Number.isFinite(value)) {
-            throw new Error(`Non-finite number is not allowed in offline queue canonical payloads (${keyName || 'value'}).`);
-        }
-
-        return value;
+        return canonicalizeOfflineValue(value, keyName);
     }
 
     public canonicalSerialize(value: any): string {
@@ -330,10 +435,7 @@ export class OfflineSalesQueueService {
     }
 
     private async computePayloadHash(payload: any): Promise<string> {
-        const payloadForHash = this.cloneValue(payload);
-        delete (payloadForHash as Record<string, any>).payload_hash;
-
-        return this.computeSHA256(this.canonicalSerialize(payloadForHash));
+        return this.computeSHA256(canonicalizeOfflineEnvelope(payload, CHECKSUM_VERSION));
     }
 
     private async computeRowHash(previousHash: string | null, payloadHash: string, sequence: string, batchReference: string): Promise<string> {
@@ -372,6 +474,7 @@ export class OfflineSalesQueueService {
             lease_heartbeat_at: null,
             worker_type: null,
             worker_version: null,
+            lease_purpose: null,
         };
     }
 
@@ -380,13 +483,11 @@ export class OfflineSalesQueueService {
     }
 
     private terminalBindingEpochFromPayload(payload: any): string {
-        return String(
-            payload?.terminal_binding_epoch
-            || payload?.activation_epoch
-            || payload?.activated_at
-            || payload?.device_id
-            || 'epoch-unknown'
-        );
+        if (!payload?.terminal_binding_epoch) {
+            throw new Error('Offline capture requires a server-issued terminal binding epoch.');
+        }
+
+        return String(payload.terminal_binding_epoch);
     }
 
     private queueProjection(record: OfflineTransactionEnvelope): Record<string, any> {
@@ -437,6 +538,26 @@ export class OfflineSalesQueueService {
                 event_type: eventType,
                 previous_state: previousState,
                 next_state: this.queueProjection(record),
+                details,
+                created_at: now,
+            });
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    private recordRecoveryEvent(
+        tx: IDBTransaction,
+        eventType: string,
+        details: Record<string, any> = {},
+        offlineTransactionUuid: string | null = null
+    ): Promise<void> {
+        return new Promise((resolve, reject) => {
+            const now = new Date().toISOString();
+            const request = tx.objectStore('offline_recovery_events').add({
+                id: uuidv4(),
+                event_type: eventType,
+                offline_transaction_uuid: offlineTransactionUuid,
                 details,
                 created_at: now,
             });
@@ -589,6 +710,125 @@ export class OfflineSalesQueueService {
             const request = tx.objectStore('offline_tombstones').getAll();
             request.onsuccess = () => resolve((request.result || []).length);
             request.onerror = () => reject(request.error);
+        });
+    }
+
+    private async getHighestLocalSequence(): Promise<string | null> {
+        const records = await this.getAllTransactions();
+        const sequences = records
+            .map((record) => record.local_sequence || record.offline_sequence)
+            .filter(Boolean)
+            .sort();
+
+        return sequences.length > 0 ? sequences[sequences.length - 1] : null;
+    }
+
+    private queueHealthForStorageState(storageState: OfflineStorageState): OfflineQueueHealthState {
+        if (!STORAGE_STATES.includes(storageState)) {
+            throw new Error(`Unsupported offline storage state: ${storageState}`);
+        }
+
+        switch (storageState) {
+            case 'queue_capacity_warning':
+                return 'warning';
+            case 'queue_capacity_block':
+            case 'storage_unavailable':
+                return 'blocked';
+            case 'storage_corrupt':
+                return 'support_required';
+            case 'storage_available':
+            default:
+                return 'healthy';
+        }
+    }
+
+    public async recordQueueHealthHeartbeat(input: {
+        terminal_id?: string | null;
+        terminal_binding_epoch?: string | null;
+        storage_state?: OfflineStorageState;
+        terminal_recovery_state?: OfflineTerminalRecoveryState;
+        reported_at?: string;
+    } = {}): Promise<OfflineQueueHealthSnapshot> {
+        const storageState = input.storage_state || 'storage_available';
+        const snapshot: OfflineQueueHealthSnapshot = {
+            terminal_id: input.terminal_id || null,
+            terminal_binding_epoch: input.terminal_binding_epoch || null,
+            highest_local_sequence: await this.getHighestLocalSequence(),
+            unresolved_count: await this.countUnresolvedTransactions(),
+            accepted_tombstone_count: await this.countTombstones(),
+            queue_schema_version: ENVELOPE_SCHEMA_VERSION,
+            storage_state: storageState,
+            queue_health: this.queueHealthForStorageState(storageState),
+            terminal_recovery_state: input.terminal_recovery_state || 'none',
+            reported_at: input.reported_at || new Date().toISOString(),
+        };
+
+        await this.setQueueMetaValue('last_queue_health_heartbeat', snapshot);
+        this.emitChange();
+
+        return this.freezeDeep(this.cloneValue(snapshot));
+    }
+
+    public async compareQueueHealthAfterReactivation(current: {
+        terminal_id?: string | null;
+        terminal_binding_epoch?: string | null;
+        local_profile_empty?: boolean;
+    } = {}): Promise<OfflineTerminalRecoveryState> {
+        const prior = await this.getQueueMetaValue<OfflineQueueHealthSnapshot>('last_queue_health_heartbeat');
+        if (!prior || !current.local_profile_empty || Number(prior.unresolved_count || 0) === 0) {
+            return 'none';
+        }
+
+        let recoveryState: OfflineTerminalRecoveryState = 'possible_storage_loss';
+
+        if (!current.terminal_id || !current.terminal_binding_epoch) {
+            recoveryState = 'orphan_identity_unverifiable';
+        } else if (prior.terminal_id && current.terminal_id !== prior.terminal_id) {
+            recoveryState = 'orphan_terminal_mismatch';
+        } else if (prior.terminal_binding_epoch && current.terminal_binding_epoch !== prior.terminal_binding_epoch) {
+            recoveryState = 'orphan_epoch_mismatch';
+        }
+
+        await this.setQueueMetaValue('last_queue_health_heartbeat', {
+            ...prior,
+            terminal_recovery_state: recoveryState,
+            queue_health: recoveryState === 'possible_storage_loss' ? 'support_required' : prior.queue_health,
+            reported_at: new Date().toISOString(),
+        });
+
+        return recoveryState;
+    }
+
+    public async recordServerIssuedBinding(binding: {
+        terminal_id: string;
+        terminal_binding_epoch: string | number;
+        binding_issued_at: string;
+        binding_status: string;
+    }): Promise<void> {
+        if (!binding.terminal_id || binding.terminal_binding_epoch === undefined || binding.terminal_binding_epoch === null) {
+            throw new Error('Terminal binding must include server-issued terminal_id and terminal_binding_epoch.');
+        }
+
+        const nextEpoch = String(binding.terminal_binding_epoch);
+        const prior = await this.getQueueMetaValue<Record<string, any>>('server_terminal_binding');
+        if (prior?.terminal_id && prior.terminal_id !== binding.terminal_id && await this.countUnresolvedTransactions() > 0) {
+            throw new Error('Unresolved queue belongs to another terminal binding. Support review is required before rebinding.');
+        }
+
+        if (prior?.terminal_id === binding.terminal_id && prior?.terminal_binding_epoch !== undefined) {
+            const priorNumeric = Number(prior.terminal_binding_epoch);
+            const nextNumeric = Number(nextEpoch);
+            if (Number.isFinite(priorNumeric) && Number.isFinite(nextNumeric) && nextNumeric < priorNumeric) {
+                throw new Error('Client cannot restore an older terminal binding epoch.');
+            }
+        }
+
+        await this.setQueueMetaValue('server_terminal_binding', {
+            terminal_id: binding.terminal_id,
+            terminal_binding_epoch: nextEpoch,
+            binding_issued_at: binding.binding_issued_at,
+            binding_status: binding.binding_status,
+            recorded_at: new Date().toISOString(),
         });
     }
 
@@ -957,7 +1197,8 @@ export class OfflineSalesQueueService {
         ownerInstanceId: string,
         workerType = 'offline-sales-sync',
         workerVersion = 'story-41.2',
-        leaseMs = 45_000
+        leaseMs = 45_000,
+        leasePurpose: OfflineQueueLeasePurpose = 'sync'
     ): Promise<OfflineTransactionEnvelope> {
         const db = await this.initDb();
         const now = new Date();
@@ -999,14 +1240,16 @@ export class OfflineSalesQueueService {
                 const startedAt = now.toISOString();
                 const expiresAt = new Date(now.getTime() + leaseMs).toISOString();
 
-                record.status = 'syncing';
                 record.queue_state = 'leased';
                 record.server_state = record.server_state || 'not_submitted';
                 record.queue_state_revision = nextRevision;
                 record.updated_at = startedAt;
-                record.last_sync_attempt_at = startedAt;
-                record.last_sync_attempt_id = syncAttemptId;
-                record.last_attempt_generation = (record.last_attempt_generation || 0) + 1;
+                if (leasePurpose === 'sync') {
+                    record.status = 'syncing';
+                    record.last_sync_attempt_at = startedAt;
+                    record.last_sync_attempt_id = syncAttemptId;
+                    record.last_attempt_generation = (record.last_attempt_generation || 0) + 1;
+                }
                 record.lease = {
                     lease_id: leaseId,
                     queue_owner_instance_id: ownerInstanceId,
@@ -1015,18 +1258,24 @@ export class OfflineSalesQueueService {
                     lease_heartbeat_at: startedAt,
                     worker_type: workerType,
                     worker_version: workerVersion,
+                    lease_purpose: leasePurpose,
                 };
                 const putReq = store.put(record);
                 putReq.onsuccess = () => {
-                    Promise.all([
+                    const eventWrites = [
                         this.putQueueProjection(tx, record),
-                        this.recordSyncAttemptEvent(tx, record, syncAttemptId, leaseId, record.last_attempt_generation || 1, startedAt),
-                        this.recordStatusEvent(tx, record, 'offline_sync_lease_acquired', previousState, {
+                        this.recordStatusEvent(tx, record, leasePurpose === 'sync' ? 'offline_sync_lease_acquired' : 'offline_maintenance_lease_acquired', previousState, {
                             sync_attempt_id: syncAttemptId,
                             lease_id: leaseId,
+                            lease_purpose: leasePurpose,
                             lease_expires_at: expiresAt,
                         }),
-                    ]).then(() => {
+                    ];
+                    if (leasePurpose === 'sync') {
+                        eventWrites.push(this.recordSyncAttemptEvent(tx, record, syncAttemptId, leaseId, record.last_attempt_generation || 1, startedAt));
+                    }
+
+                    Promise.all(eventWrites).then(() => {
                         this.emitChange();
                         resolve(this.freezeDeep(this.cloneValue(record)));
                     }).catch(reject);
@@ -1034,6 +1283,35 @@ export class OfflineSalesQueueService {
                 putReq.onerror = () => reject(putReq.error);
             };
             getReq.onerror = () => reject(getReq.error);
+        });
+    }
+
+    public async acquireMaintenanceLease(
+        id: string,
+        ownerInstanceId: string,
+        leasePurpose: Exclude<OfflineQueueLeasePurpose, 'sync'>,
+        workerVersion = 'story-41.7',
+        leaseMs = 45_000
+    ): Promise<OfflineTransactionEnvelope> {
+        return this.acquireLease(id, ownerInstanceId, `offline-queue-${leasePurpose}`, workerVersion, leaseMs, leasePurpose);
+    }
+
+    public async recordCaptureUiAcknowledged(
+        offlineTransactionUuid: string,
+        details: { session_id?: string | null; cashier_id?: string | null; acknowledged_at?: string | null } = {}
+    ): Promise<void> {
+        const db = await this.initDb();
+        await new Promise<void>((resolve, reject) => {
+            const tx = db.transaction(['offline_recovery_events'], 'readwrite');
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+            tx.onabort = () => reject(tx.error || new Error('Unable to record offline capture UI acknowledgment.'));
+
+            this.recordRecoveryEvent(tx, 'offline_capture_ui_acknowledged', {
+                session_id: details.session_id || null,
+                cashier_id: details.cashier_id || null,
+                acknowledged_at: details.acknowledged_at || new Date().toISOString(),
+            }, offlineTransactionUuid).catch(reject);
         });
     }
 
@@ -1173,30 +1451,116 @@ export class OfflineSalesQueueService {
         });
     }
 
-    public async getDiagnosticsBundle(): Promise<OfflineQueueDiagnosticsBundle> {
+    private filterDiagnosticsRecords(
+        records: OfflineTransactionEnvelope[],
+        options: OfflineDiagnosticsExportOptions = {}
+    ): OfflineTransactionEnvelope[] {
+        return records.filter((record) => {
+            if (options.status && record.status !== options.status) {
+                return false;
+            }
+            if (options.offlineTransactionUuid && (record.offline_transaction_uuid || record.id) !== options.offlineTransactionUuid) {
+                return false;
+            }
+            if (options.epoch && String(record.terminal_binding_epoch || '') !== String(options.epoch)) {
+                return false;
+            }
+            const sequence = record.local_sequence || record.offline_sequence || '';
+            if (options.localSequenceFrom && sequence < options.localSequenceFrom) {
+                return false;
+            }
+            if (options.localSequenceTo && sequence > options.localSequenceTo) {
+                return false;
+            }
+            const createdAt = Date.parse(record.created_at);
+            if (options.from && Number.isFinite(createdAt) && createdAt < Date.parse(options.from)) {
+                return false;
+            }
+            if (options.to && Number.isFinite(createdAt) && createdAt > Date.parse(options.to)) {
+                return false;
+            }
+            if (options.cashExposure && String(record.payload?.cash_status || record.payload?.cash_exposure || '') !== options.cashExposure) {
+                return false;
+            }
+
+            return true;
+        });
+    }
+
+    private isBoundedDiagnosticsRequest(options: OfflineDiagnosticsExportOptions = {}): boolean {
+        if ((options.from && !Number.isFinite(Date.parse(options.from))) || (options.to && !Number.isFinite(Date.parse(options.to)))) {
+            throw new Error('Support diagnostics export received an invalid date bound.');
+        }
+
+        return Boolean(
+            options.status
+            || options.offlineTransactionUuid
+            || options.localSequenceFrom
+            || options.localSequenceTo
+            || options.cashExposure
+            || options.epoch
+            || (options.from && options.to)
+        );
+    }
+
+    public async getDiagnosticsBundle(options: OfflineDiagnosticsExportOptions = {}): Promise<OfflineQueueDiagnosticsBundle> {
+        if (options.generatedBy && !this.isBoundedDiagnosticsRequest(options)) {
+            throw new Error('Support diagnostics export requires a bounded filter.');
+        }
+
         const db = await this.initDb();
         const records = await this.getAllTransactions();
+        const filteredRecords = this.filterDiagnosticsRecords(records, options);
         const summary = await this.getStatusSummary();
         const hashChainValid = await this.verifyHashChain();
         const persistentStorageCapability = await this.getQueueMetaValue<Record<string, any>>('persistent_storage_capability');
         const tombstoneCount = await this.countTombstones();
-
-        return {
+        const lastQueueHealthHeartbeat = await this.getQueueMetaValue<OfflineQueueHealthSnapshot>('last_queue_health_heartbeat');
+        const bundle: OfflineQueueDiagnosticsBundle = {
+            export_id: options.generatedBy ? uuidv4() : undefined,
             generated_at: new Date().toISOString(),
+            generated_by: options.generatedBy || null,
+            filter_summary: {
+                status: options.status || null,
+                offline_transaction_uuid: options.offlineTransactionUuid || null,
+                local_sequence_from: options.localSequenceFrom || null,
+                local_sequence_to: options.localSequenceTo || null,
+                cash_exposure: options.cashExposure || null,
+                epoch: options.epoch || null,
+                from: options.from || null,
+                to: options.to || null,
+            },
+            label: 'provisional local evidence',
             storage: {
                 indexed_db_available: true,
                 database_name: DB_NAME,
                 database_version: DB_VERSION,
                 object_stores: Array.from(db.objectStoreNames as any),
                 persistent_storage_capability: persistentStorageCapability,
+                storage_state: lastQueueHealthHeartbeat?.storage_state || 'storage_available',
+                queue_health: lastQueueHealthHeartbeat?.queue_health || 'healthy',
+                terminal_recovery_state: lastQueueHealthHeartbeat?.terminal_recovery_state || 'none',
+                last_queue_health_heartbeat: lastQueueHealthHeartbeat,
             },
             summary,
             hash_chain_valid: hashChainValid,
             active_record_count: records.filter((record) => UNRESOLVED_STATUSES.includes(record.status)).length,
             historical_record_count: records.length,
             tombstone_count: tombstoneCount,
-            records: records.map((record) => this.toDiagnosticRecord(record)),
+            records: filteredRecords.map((record) => this.toDiagnosticRecord(record)),
         };
+
+        if (options.generatedBy) {
+            bundle.export_checksum = await this.computeSHA256(this.canonicalSerialize({
+                generated_at: bundle.generated_at,
+                generated_by: bundle.generated_by,
+                filter_summary: bundle.filter_summary,
+                storage: bundle.storage,
+                records: bundle.records,
+            }));
+        }
+
+        return bundle;
     }
 
     public async pruneResolvedTransactions(retentionDays = 7, now = new Date()): Promise<{ pruned: number; retained: number }> {
@@ -1218,40 +1582,104 @@ export class OfflineSalesQueueService {
             return { pruned: 0, retained: records.length };
         }
 
+        const tombstones = await Promise.all(prunable.map(async (record) => {
+            const retainedServerReference = record.payload?.server_sale_uuid
+                || record.payload?.sale_uuid
+                || record.payload?.server_sale_number
+                || record.payload?.sale_number
+                || record.payload?.official_invoice_number
+                || null;
+
+            if (!retainedServerReference) {
+                throw new Error(`Cannot compact ${record.offline_transaction_uuid || record.id} without required server identity.`);
+            }
+
+            const tombstone = {
+                id: record.id,
+                offline_transaction_uuid: record.offline_transaction_uuid || record.id,
+                terminal_id: record.terminal_id || null,
+                terminal_binding_epoch: record.terminal_binding_epoch || null,
+                local_sequence: record.local_sequence || record.offline_sequence,
+                offline_sequence: record.offline_sequence,
+                status: record.status,
+                server_state: record.server_state || this.serverStateForStatus(record.status),
+                resolution_state: record.resolution_state || 'none',
+                payload_hash: record.payload_hash,
+                row_hash: record.row_hash,
+                retained_from: record.created_at,
+                resolved_at: record.last_synced_at || record.updated_at,
+                server_sale_uuid: record.payload?.server_sale_uuid || record.payload?.sale_uuid || null,
+                server_sale_number: record.payload?.server_sale_number || record.payload?.sale_number || null,
+                official_invoice_number: record.payload?.official_invoice_number || null,
+                retained_server_reference: retainedServerReference,
+                tombstoned_at: new Date().toISOString(),
+                schema_version: record.schema_version || ENVELOPE_SCHEMA_VERSION,
+                tombstone_schema_version: 1,
+                tombstone_checksum_algorithm: TOMBSTONE_CHECKSUM_VERSION,
+            } as Record<string, any>;
+
+            return {
+                ...tombstone,
+                tombstone_checksum: await this.computeSHA256(canonicalizeOfflineTombstone(tombstone, TOMBSTONE_CHECKSUM_VERSION)),
+            };
+        }));
+
         await new Promise<void>((resolve, reject) => {
-            const tx = db.transaction(['transactions', 'offline_tombstones'], 'readwrite');
+            const tx = db.transaction(['transactions', 'offline_tombstones', 'offline_recovery_events'], 'readwrite');
             const store = tx.objectStore('transactions');
             const tombstoneStore = tx.objectStore('offline_tombstones');
-            let remaining = prunable.length;
+            const recoveryStore = tx.objectStore('offline_recovery_events');
+            let remaining = tombstones.length;
 
-            prunable.forEach((record) => {
-                const tombstoneRequest = tombstoneStore.put({
-                    id: record.id,
-                    offline_transaction_uuid: record.offline_transaction_uuid || record.id,
-                    terminal_id: record.terminal_id || null,
-                    terminal_binding_epoch: record.terminal_binding_epoch || null,
-                    local_sequence: record.local_sequence || record.offline_sequence,
-                    offline_sequence: record.offline_sequence,
-                    status: record.status,
-                    server_state: record.server_state || this.serverStateForStatus(record.status),
-                    resolution_state: record.resolution_state || 'none',
-                    payload_hash: record.payload_hash,
-                    row_hash: record.row_hash,
-                    retained_from: record.created_at,
-                    resolved_at: record.last_synced_at || record.updated_at,
-                    tombstoned_at: new Date().toISOString(),
-                    schema_version: record.schema_version || ENVELOPE_SCHEMA_VERSION,
-                });
-
+            tombstones.forEach((tombstone) => {
+                const tombstoneRequest = tombstoneStore.put(tombstone);
                 tombstoneRequest.onsuccess = () => {
-                    const request = store.delete(record.id);
-                    request.onsuccess = () => {
-                        remaining -= 1;
-                        if (remaining === 0) {
-                            resolve();
+                    const verifyRequest = tombstoneStore.get(tombstone.id);
+                    verifyRequest.onsuccess = () => {
+                        const verified = verifyRequest.result;
+                        const abortWithVerificationError = (message: string) => {
+                            tx.abort();
+                            console.warn(message);
+                            reject(new Error(`Tombstone verification failed for ${tombstone.offline_transaction_uuid}.`));
+                        };
+                        if (!verified || !verified.retained_server_reference) {
+                            abortWithVerificationError('Tombstone missing required server identity.');
+                            return;
                         }
+
+                        this.computeSHA256(canonicalizeOfflineTombstone(verified, TOMBSTONE_CHECKSUM_VERSION)).then((verifiedChecksum) => {
+                            if (verifiedChecksum !== verified.tombstone_checksum || verifiedChecksum !== tombstone.tombstone_checksum) {
+                                abortWithVerificationError('Tombstone checksum mismatch.');
+                                return;
+                            }
+
+                            const eventRequest = recoveryStore.add({
+                                id: uuidv4(),
+                                event_type: 'offline_payload_compacting',
+                                offline_transaction_uuid: tombstone.offline_transaction_uuid,
+                                details: {
+                                    tombstone_checksum: tombstone.tombstone_checksum,
+                                    tombstone_schema_version: tombstone.tombstone_schema_version,
+                                },
+                                created_at: new Date().toISOString(),
+                            });
+                            eventRequest.onsuccess = () => {
+                                const request = store.delete(tombstone.id);
+                                request.onsuccess = () => {
+                                    remaining -= 1;
+                                    if (remaining === 0) {
+                                        resolve();
+                                    }
+                                };
+                                request.onerror = () => reject(request.error);
+                            };
+                            eventRequest.onerror = () => reject(eventRequest.error);
+                        }).catch((error) => {
+                            tx.abort();
+                            reject(error);
+                        });
                     };
-                    request.onerror = () => reject(request.error);
+                    verifyRequest.onerror = () => reject(verifyRequest.error);
                 };
                 tombstoneRequest.onerror = () => reject(tombstoneRequest.error);
             });

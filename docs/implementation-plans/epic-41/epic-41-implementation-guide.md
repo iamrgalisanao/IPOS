@@ -45,10 +45,10 @@ Reason:
 | 41.1 | Done | - | - |
 | 41.2 | Implemented - Local Verification Complete | - | - |
 | 41.3 | Implemented - Local Verification Complete | - | - |
-| 41.4 | Approved for Implementation | - | - |
-| 41.5 | Ready for Implementation | - | - |
+| 41.4 | Implemented via PR merge path | - | - |
+| 41.5 | Implemented via PR merge path | - | - |
 | 41.6 | Implemented - Local Verification Complete | - | - |
-| 41.7 | Planned | - | - |
+| 41.7 | Implemented - Local Verification Complete | - | - |
 | 41.8 | Planned | - | - |
 
 ## 4. Story Dependencies and Complexity
@@ -376,9 +376,15 @@ Acceptance checks:
 
 ## 12. Story 41.7 Hardware, Storage-Loss, and Terminal Recovery
 
+Status: Implemented - Local Verification Complete
+
+Specification:
+
+`docs/implementation-plans/epic-41/stories/story-41.7-hardware-storage-loss-and-terminal-recovery.md`
+
 Objective:
 
-Validate terminal recovery, printer/drawer boundaries, hardware availability, and support procedures.
+Validate terminal recovery, printer/drawer boundaries, hardware availability, browser storage-loss behavior, service-worker upgrade safety, and support procedures.
 
 Deliverables:
 
@@ -407,6 +413,7 @@ Out of scope:
 1. Claiming hardware readiness without physical devices.
 2. Replacing hardware adapters wholesale.
 3. Fiscal receipt certification.
+4. New sync acceptance rules.
 
 Acceptance checks:
 
@@ -418,6 +425,12 @@ Acceptance checks:
 6. Accepted tombstones support recovery without retaining unnecessary customer/cart data.
 7. Uncertain write or storage-loss states do not create false accepted-sale evidence.
 8. Support recovery preserves original cashier attribution.
+
+Implementation planning notes:
+
+1. Prefer extending `OfflineSalesQueueService` diagnostics and existing hardware adapters over inventing a second offline store.
+2. Recovery work must not weaken Stories 41.3–41.6 sync, review, policy, or consequence contracts.
+3. Hardware-deferred evidence from this story is a required input to Story 41.8 release gate.
 
 ## 13. Story 41.8 Pilot UAT and Release Gate
 

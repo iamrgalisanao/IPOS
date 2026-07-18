@@ -1,4 +1,8 @@
 const CACHE_NAME = 'ipos-terminal-shell-v31-20260711';
+const SHELL_VERSION = 'story-41.7-terminal-recovery-v1';
+const QUEUE_SCHEMA_MIN = 2;
+const QUEUE_SCHEMA_MAX = 3;
+const SYNC_CONTRACT_VERSION = 'story-41.3-offline-sync-v1';
 const VITE_MANIFEST_URL = '/build/manifest.json';
 const POS_SHELL_URL = '/pos/terminal/checkout';
 const POS_LEGACY_SHELL_URL = '/pos';
@@ -64,6 +68,11 @@ self.addEventListener('fetch', (event) => {
         event.respondWith(new Response(JSON.stringify({
             controlled: true,
             cacheName: CACHE_NAME,
+            shellVersion: SHELL_VERSION,
+            queueSchemaMin: QUEUE_SCHEMA_MIN,
+            queueSchemaMax: QUEUE_SCHEMA_MAX,
+            syncContractVersion: SYNC_CONTRACT_VERSION,
+            queueAuthority: false,
         }), {
             status: 200,
             headers: new Headers({ 'Content-Type': 'application/json' })

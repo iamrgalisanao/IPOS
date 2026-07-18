@@ -103,6 +103,7 @@ class CacheBootstrapService
                 'offline_sequence_prefix' => $machineProfile->offline_sequence_prefix,
                 'offline_sequence_next_value' => $machineProfile->offline_sequence_next_value,
                 'offline_sequence_status' => $machineProfile->offline_sequence_status,
+                'terminal_binding_epoch' => $machineProfile->activated_at?->toIso8601String(),
                 'last_offline_sync_at' => $machineProfile->last_offline_sync_at?->toIso8601String(),
             ] : null;
 
@@ -144,6 +145,7 @@ class CacheBootstrapService
                 'tenant_id' => $tenant->id,
                 'branch_id' => $branch->id,
                 'sales_machine_profile_id' => $machineProfile?->id,
+                'terminal_binding_epoch' => $machineProfile?->activated_at?->toIso8601String(),
                 'layout_version_hash' => $layoutHash,
                 'catalog_version_hash' => $catalogHash,
                 'tax_configuration_version_hash' => $taxHash,
