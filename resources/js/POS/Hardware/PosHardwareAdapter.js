@@ -27,4 +27,11 @@ export class PosHardwareAdapter {
     async getPrinterStatus() {
         throw new Error("Not implemented");
     }
+
+    /**
+     * Return support-facing capability evidence without claiming release readiness.
+     */
+    async getHardwareStatus() {
+        throw new Error("Not implemented");
+    }
 }

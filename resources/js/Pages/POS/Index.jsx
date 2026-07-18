@@ -551,6 +551,11 @@ export default function Index({ categories, initial_products, payment_methods, d
         }
 
         const capturedAt = new Date().toISOString();
+        const terminalBindingEpoch = offlineCaptureReadiness.machineProfile?.terminal_binding_epoch || null;
+        if (!terminalBindingEpoch) {
+            throw new Error('Offline capture requires a server-issued terminal binding epoch. Reconnect and reactivate this terminal before continuing.');
+        }
+
         const shiftAuthority = buildShiftAuthoritySnapshot(activeShift, capturedAt);
         const shiftValidation = validateShiftAuthoritySnapshot(shiftAuthority, new Date(capturedAt));
 
@@ -591,6 +596,7 @@ export default function Index({ categories, initial_products, payment_methods, d
             tenant_id,
             branch_id,
             terminal_id: offlineCaptureReadiness.machineProfile?.id || null,
+            terminal_binding_epoch: terminalBindingEpoch,
             device_id: deviceId,
             ...shiftAuthority,
             timecard_id: timecardStatus?.timecard_id || null,
@@ -1529,10 +1535,23 @@ export default function Index({ categories, initial_products, payment_methods, d
         const businessDate = (activeShift?.business_date || new Date().toISOString().split('T')[0]).replace(/[^0-9]/g, '');
         const prefix = `OFF-${currentReadiness.machineProfile.profile_code || 'UNK'}-${businessDate}-`;
 
-        await offlineSalesQueue.appendTransaction(payload, clientTotals, {
+        const offlineEnvelope = await offlineSalesQueue.appendTransaction(payload, clientTotals, {
             prefix,
             initialNextValue: currentReadiness.machineProfile.offline_sequence_next_value,
         });
+        try {
+            await offlineSalesQueue.recordCaptureUiAcknowledged(offlineEnvelope.offline_transaction_uuid || offlineEnvelope.id, {
+                session_id: payload.cashier_shift_id || payload.timecard_id || null,
+                cashier_id: payload.cashier_id || payload.user_id || null,
+            });
+            await offlineSalesQueue.recordQueueHealthHeartbeat({
+                terminal_id: offlineEnvelope.terminal_id || payload.terminal_id || payload.sales_machine_profile_id || null,
+                terminal_binding_epoch: offlineEnvelope.terminal_binding_epoch,
+                storage_state: 'storage_available',
+            });
+        } catch (recoveryEvidenceError) {
+            console.warn('Offline capture was saved, but recovery evidence metadata could not be updated:', recoveryEvidenceError);
+        }
 
         const cashRow = rows.find(r => isCashPayment(payment_methods.find(m => m.id === r.payment_method_id)));
         if (cashRow) {

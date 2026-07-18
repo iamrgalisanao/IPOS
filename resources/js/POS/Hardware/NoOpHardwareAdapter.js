@@ -1,4 +1,4 @@
-import { PosHardwareAdapter } from './PosHardwareAdapter';
+import { PosHardwareAdapter } from './PosHardwareAdapter.js';
 
 /**
  * A safe default adapter that does nothing but logs its intentions.
@@ -7,15 +7,36 @@ import { PosHardwareAdapter } from './PosHardwareAdapter';
 export class NoOpHardwareAdapter extends PosHardwareAdapter {
     async printReceipt(receiptData) {
         console.log('[NoOpHardwareAdapter] printReceipt called. Data:', receiptData);
-        return true;
+        return {
+            status: 'hardware_unavailable',
+            capability: 'unavailable',
+            physically_validated: false,
+            status_source: 'noop_adapter',
+        };
     }
 
     async openCashDrawer() {
         console.log('[NoOpHardwareAdapter] openCashDrawer called.');
-        return true;
+        return {
+            status: 'hardware_unavailable',
+            capability: 'unavailable',
+            physically_validated: false,
+            status_source: 'noop_adapter',
+        };
     }
 
     async getPrinterStatus() {
-        return 'offline'; // Safe default
+        return 'unavailable';
+    }
+
+    async getHardwareStatus() {
+        return {
+            adapter: 'NoOpHardwareAdapter',
+            printerCapability: 'unavailable',
+            drawerCapability: 'unavailable',
+            physicallyValidated: false,
+            statusSource: 'noop_adapter',
+            validationEvidenceId: null,
+        };
     }
 }

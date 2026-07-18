@@ -1,5 +1,5 @@
-import { NoOpHardwareAdapter } from './NoOpHardwareAdapter';
-import { BrowserPrintAdapter } from './BrowserPrintAdapter';
+import { NoOpHardwareAdapter } from './NoOpHardwareAdapter.js';
+import { BrowserPrintAdapter } from './BrowserPrintAdapter.js';
 
 /**
  * Service locator / provider for the POS Hardware Adapter.
