@@ -2,7 +2,7 @@
 
 ## Status
 
-Story Planning Active — Story 41.7 Implemented - Local Verification Complete
+Story Planning Active — Story 41.8 Implemented - Local Verification Complete
 
 Date: 2026-07-18
 
@@ -38,6 +38,12 @@ The goal is not to expand offline capability indiscriminately. The goal is to de
 3. [Epic 41 Terminal Identity Binding Closure](../../validation/epic-41-terminal-identity-binding-closure.md)
 4. [Epic 40 Retrospective](../epic-40/epic-40-retrospective.md)
 5. [Epic 40 Pilot UAT Readiness](../../validation/epic-40-pilot-uat-readiness.md)
+6. [Epic 41 Pilot UAT Readiness](../../validation/epic-41-pilot-uat-readiness.md)
+7. [Epic 41 Scenario Catalog](../../validation/epic-41-scenario-catalog.md)
+8. [Epic 41 Evidence Manifest](../../validation/epic-41-evidence-manifest.md)
+9. [Epic 41 Defect, Observation, Deferral, and Waiver Register](../../validation/epic-41-defect-waiver-register.md)
+10. [Epic 41 Pilot Execution Log](../../validation/epic-41-pilot-execution-log.md)
+11. [Epic 41 Release Decision Record](../../validation/epic-41-release-decision-record.md)
 
 ## Architecture Principles
 

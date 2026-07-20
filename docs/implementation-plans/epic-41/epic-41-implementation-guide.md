@@ -49,7 +49,7 @@ Reason:
 | 41.5 | Implemented via PR merge path | - | - |
 | 41.6 | Implemented - Local Verification Complete | - | - |
 | 41.7 | Implemented - Local Verification Complete | - | - |
-| 41.8 | Planned | - | - |
+| 41.8 | Implemented - Local Verification Complete | - | - |
 
 ## 4. Story Dependencies and Complexity
 
@@ -495,3 +495,14 @@ Acceptance checks:
 15. Offline stock presentation is stale/provisional and not locally deducted.
 16. Status dimensionality is validated with consequence-specific pending states.
 17. Cashier-switch protection preserves original actor evidence.
+
+Implementation output:
+
+1. `docs/validation/epic-41-pilot-uat-readiness.md`
+2. `docs/validation/epic-41-release-decision-record.md`
+3. `docs/validation/epic-41-scenario-catalog.md`
+4. `docs/validation/epic-41-evidence-manifest.md`
+5. `docs/validation/epic-41-defect-waiver-register.md`
+6. `docs/validation/epic-41-pilot-execution-log.md`
+
+Pilot execution and production rollout approval remain pending and are not implied by document completion.
